@@ -46,7 +46,8 @@ export default function App() {
     const fetchTrips = async () => {
       if (auth.user?.email) {
         try {
-          const response = await fetch(`http://localhost:5000/api/trips?email=${encodeURIComponent(auth.user.email)}`);
+          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+          const response = await fetch(`${backendUrl}/api/trips?email=${encodeURIComponent(auth.user.email)}`);
           if (response.ok) {
             const data = await response.json();
             setSavedTrips(data);
@@ -186,7 +187,8 @@ export default function App() {
     };
 
     try {
-      const response = await fetch('http://localhost:5000/api/trips', {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const response = await fetch(`${backendUrl}/api/trips`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -228,7 +230,8 @@ export default function App() {
     // If it's a string ID, call the API
     if (typeof tripIdOrIndex === 'string') {
       try {
-        const response = await fetch(`http://localhost:5000/api/trips/${tripIdOrIndex}`, {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const response = await fetch(`${backendUrl}/api/trips/${tripIdOrIndex}`, {
           method: 'DELETE'
         });
         if (!response.ok) {
