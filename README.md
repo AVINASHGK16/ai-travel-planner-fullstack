@@ -2,7 +2,8 @@
 
 A production-grade, AI-powered travel planning and itinerary customization platform. The application builds comprehensive, interactive itineraries, estimates transit costs, plots live routes globally on an interactive map, fetches live weather conditions, and enables users to modify their schedules on the fly.
 
-🔗 **GitHub Repository:** [AVINASHGK16/ai-travel-planner-fullstack](https://github.com/AVINASHGK16/ai-travel-planner-fullstack)
+🔗 **GitHub Repository:** [AVINASHGK16/ai-travel-planner-fullstack](https://github.com/AVINASHGK16/ai-travel-planner-fullstack)  
+🌐 **Live Demo (Vercel):** [frontend-five-iota-e0g61pg4et.vercel.app](https://frontend-five-iota-e0g61pg4et.vercel.app/)
 
 ---
 
