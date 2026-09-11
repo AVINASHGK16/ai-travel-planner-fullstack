@@ -7,7 +7,7 @@ const router = express.Router();
 
 // Save trip itinerary
 router.post('/', tripsLimiter, authenticateToken, validateBody(saveTripSchema), asyncHandler(async (req, res) => {
-  const savedTrip = await tripService.saveTrip(req.validatedBody, req.user.email);
+  const savedTrip = await tripService.createTrip(req.validatedBody, req.user.email);
   res.status(201).json(savedTrip);
 }));
 
@@ -19,7 +19,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 
 // Delete saved trip
 router.delete('/:id', tripsLimiter, authenticateToken, validateParams(tripIdParamSchema), asyncHandler(async (req, res) => {
-  const result = await tripService.deleteUserTrip(req.validatedParams.id, req.user.email);
+  const result = await tripService.deleteTrip(req.validatedParams.id, req.user.email);
   res.json(result);
 }));
 
