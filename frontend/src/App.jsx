@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Compass, Sparkles, ChevronLeft, Save } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Compass, Sparkles, ChevronLeft, Save, Loader2, AlertTriangle } from 'lucide-react';
 import Navbar from './components/Navbar';
 import HeroSearch from './components/HeroSearch';
 import SmartSuggestions from './components/SmartSuggestions';
@@ -49,6 +49,11 @@ export default function App() {
 
   // Saved Trips History
   const [savedTrips, setSavedTrips] = useState([]);
+
+  // Async operations lifecycle & non-reentrancy states
+  const [savingTrip, setSavingTrip] = useState(false);
+  const [deletingTripId, setDeletingTripId] = useState(null);
+  const searchControllerRef = useRef(null);
 
   // Validate stored auth token on mount
   useEffect(() => {
@@ -182,8 +187,25 @@ export default function App() {
     alert('Settings successfully updated!');
   };
 
+  // View navigation helper that ensures stale loading state cannot survive navigation
+  const handleNavigate = (newView) => {
+    if (loading && searchControllerRef.current) {
+      searchControllerRef.current.abort();
+      searchControllerRef.current = null;
+    }
+    setLoading(false);
+    setView(newView);
+  };
+
   // Perform search and fetch AI travel plans
   const handleSearch = async (params) => {
+    // Abort any existing search in flight
+    if (searchControllerRef.current) {
+      searchControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    searchControllerRef.current = controller;
+
     setSearchParams(params);
     setLoading(true);
     setView('search');
@@ -198,13 +220,21 @@ export default function App() {
     try {
       // Route AI generation through backend proxy (keys stay server-side)
       let responseData = null;
+      let aiErrorNotice = null;
+
       try {
-        responseData = await getAIGeneration(params);
+        responseData = await getAIGeneration(params, controller.signal);
       } catch (aiErr) {
+        if (aiErr.code === 'CANCELLED') {
+          return; // User navigated away or started another search
+        }
+        aiErrorNotice = aiErr.message || 'AI service unavailable';
         console.warn('Backend AI generation unavailable, using local itinerary engine:', aiErr.message);
       }
 
-      if (responseData && responseData.itinerary) {
+      if (controller.signal.aborted) return;
+
+      if (responseData && responseData.itinerary && responseData.isAIGenerated) {
         // Generate baseline mock to guarantee complete fallback structures
         const baselineMock = generateMockData(
           params.from,
@@ -235,12 +265,15 @@ export default function App() {
           budgetDetails: responseData.budgetDetails || baselineMock.budgetDetails,
           roadTripDetails: responseData.roadTripDetails || baselineMock.roadTripDetails,
           weather: responseData.weather || baselineMock.weather,
-          itinerary: Array.isArray(responseData.itinerary) ? responseData.itinerary : baselineMock.itinerary
+          itinerary: Array.isArray(responseData.itinerary) ? responseData.itinerary : baselineMock.itinerary,
+          isAIGenerated: true,
+          generationSource: 'ai',
+          generationNotice: null
         };
 
         setActiveTrip(completeTripData);
       } else {
-        // Run in premium mock mode
+        // Run in curated fallback mode — clearly tagged as deterministic fallback
         const mockData = generateMockData(
           params.from,
           params.to,
@@ -250,11 +283,15 @@ export default function App() {
           params.budget
         );
         
-        // Emulate network latency
-        await new Promise(resolve => setTimeout(resolve, 800));
-        setActiveTrip(mockData);
+        setActiveTrip({
+          ...mockData,
+          isAIGenerated: false,
+          generationSource: 'deterministic_fallback',
+          generationNotice: aiErrorNotice || 'Standard curated itinerary (offline/fallback mode)'
+        });
       }
     } catch (err) {
+      if (controller.signal.aborted) return;
       console.error('Search processing error:', err);
       const fallbackData = generateMockData(
         params.from,
@@ -264,14 +301,23 @@ export default function App() {
         params.travelers,
         params.budget
       );
-      setActiveTrip(fallbackData);
+      setActiveTrip({
+        ...fallbackData,
+        isAIGenerated: false,
+        generationSource: 'deterministic_fallback',
+        generationNotice: err.message || 'Error communicating with AI service'
+      });
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   };
 
-  // Save current active plan to dashboard
+  // Save current active plan to dashboard (non-reentrant)
   const handleSaveActiveTrip = async () => {
+    if (savingTrip) return;
+
     if (!auth.user) {
       alert('Please Sign In first to save your trip itinerary!');
       setAuth(prev => ({ ...prev, modalOpen: true }));
@@ -295,6 +341,7 @@ export default function App() {
       userEmail: auth.user.email
     };
 
+    setSavingTrip(true);
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const response = await fetch(`${backendUrl}/api/trips`, {
@@ -360,63 +407,72 @@ export default function App() {
       localStorage.setItem('savedTrips', JSON.stringify([localSavedTrip, ...(Array.isArray(localTrips) ? localTrips : [])]));
 
       alert('Trip itinerary saved locally (Offline Mode).');
+    } finally {
+      setSavingTrip(false);
     }
   };
 
-  // Delete trip from history
+  // Delete trip from history (non-reentrant)
   const handleDeleteTrip = async (tripIdOrIndex) => {
-    // If it's a string ID, call the API
-    if (typeof tripIdOrIndex === 'string') {
-      try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-        const response = await fetch(`${backendUrl}/api/trips/${tripIdOrIndex}`, {
-          method: 'DELETE',
-          signal: AbortSignal.timeout ? AbortSignal.timeout(7000) : undefined,
-          headers: { 'Authorization': `Bearer ${auth.token}` }
-        });
+    if (deletingTripId !== null) return;
+    setDeletingTripId(tripIdOrIndex);
 
-        if (response.status === 401 || response.status === 403) {
-          alert('Your session has expired. Please sign in again.');
-          handleLogout();
-          setAuth(prev => ({ ...prev, modalOpen: true }));
-          return;
-        }
+    try {
+      // If it's a string ID, call the API
+      if (typeof tripIdOrIndex === 'string') {
+        try {
+          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+          const response = await fetch(`${backendUrl}/api/trips/${tripIdOrIndex}`, {
+            method: 'DELETE',
+            signal: AbortSignal.timeout ? AbortSignal.timeout(7000) : undefined,
+            headers: { 'Authorization': `Bearer ${auth.token}` }
+          });
 
-        if (response.status === 429) {
-          alert('Too many delete requests. Please wait a moment before trying again.');
-          return;
-        }
+          if (response.status === 401 || response.status === 403) {
+            alert('Your session has expired. Please sign in again.');
+            handleLogout();
+            setAuth(prev => ({ ...prev, modalOpen: true }));
+            return;
+          }
 
-        if (!response.ok && response.status !== 404) {
-          throw new Error(`Failed to delete trip from backend: status ${response.status}`);
+          if (response.status === 429) {
+            alert('Too many delete requests. Please wait a moment before trying again.');
+            return;
+          }
+
+          if (!response.ok && response.status !== 404) {
+            throw new Error(`Failed to delete trip from backend: status ${response.status}`);
+          }
+          
+          // Remove from local state
+          setSavedTrips(prev => prev.filter(t => t?._id !== tripIdOrIndex));
+          
+          // Remove from local storage fallback
+          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+          const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripIdOrIndex) : [];
+          localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+        } catch (err) {
+          console.warn('Backend delete failed, performing local removal:', err.message);
+          
+          // If backend was offline, remove from state and local storage fallback
+          setSavedTrips(prev => prev.filter(t => t?._id !== tripIdOrIndex));
+          
+          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+          const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripIdOrIndex) : [];
+          localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
         }
-        
-        // Remove from local state
-        setSavedTrips(prev => prev.filter(t => t?._id !== tripIdOrIndex));
-        
-        // Remove from local storage fallback
-        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripIdOrIndex) : [];
-        localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
-      } catch (err) {
-        console.warn('Backend delete failed, performing local removal:', err.message);
-        
-        // If backend was offline, remove from state and local storage fallback
-        setSavedTrips(prev => prev.filter(t => t?._id !== tripIdOrIndex));
-        
-        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripIdOrIndex) : [];
-        localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+      } else {
+        // Fallback for index
+        const tripToDelete = savedTrips[tripIdOrIndex];
+        setSavedTrips(prev => prev.filter((_, i) => i !== tripIdOrIndex));
+        if (tripToDelete) {
+          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+          const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripToDelete._id) : [];
+          localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+        }
       }
-    } else {
-      // Fallback for index
-      const tripToDelete = savedTrips[tripIdOrIndex];
-      setSavedTrips(prev => prev.filter((_, i) => i !== tripIdOrIndex));
-      if (tripToDelete) {
-        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripToDelete._id) : [];
-        localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
-      }
+    } finally {
+      setDeletingTripId(null);
     }
   };
 
@@ -469,7 +525,7 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
         auth={auth}
         setAuth={setAuth}
-        setView={setView}
+        setView={handleNavigate}
         view={view}
         onLogout={handleLogout}
       />
@@ -508,7 +564,7 @@ export default function App() {
             </div>
             {/* Main search form */}
             <div className="relative z-10 w-full">
-              <HeroSearch onSearch={handleSearch} />
+              <HeroSearch onSearch={handleSearch} loading={loading} />
             </div>
             {/* Powered-by strip */}
             <div className="relative z-10 mt-6 text-center text-xs text-slate-500 flex items-center gap-2">
@@ -537,13 +593,13 @@ export default function App() {
 
         {/* VIEW 3: SEARCH RESULTS PAGE */}
         {view === 'search' && !loading && activeTrip && (
-          <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+          <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
             
             {/* Header / Summary panel */}
             <div className="flex flex-col md:flex-row justify-between md:items-center p-5 rounded-2xl glass border border-white/10 gap-4">
               <div>
                 <button
-                  onClick={() => setView('home')}
+                  onClick={() => handleNavigate('home')}
                   className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-semibold mb-2 group transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
@@ -552,27 +608,61 @@ export default function App() {
                 <h2 className="font-display font-extrabold text-2xl text-white tracking-tight">
                   {(activeTrip.from || 'Origin').split(',')[0]} to {(activeTrip.to || 'Destination').split(',')[0]} Plan
                 </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Departing {activeTrip.date || 'N/A'}{activeTrip.returnDate ? ` • Returning ${activeTrip.returnDate}` : ''} • {activeTrip.travelers || 1} Travelers • Distance: {activeTrip.distance || 'N/A'} km
-                </p>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <p className="text-xs text-slate-400">
+                    Departing {activeTrip.date || 'N/A'}{activeTrip.returnDate ? ` • Returning ${activeTrip.returnDate}` : ''} • {activeTrip.travelers || 1} Travelers • Distance: {activeTrip.distance || 'N/A'} km
+                  </p>
+                  {activeTrip.isAIGenerated ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                      <Sparkles className="w-3 h-3" />
+                      <span>Gemini AI Generated</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30" title={activeTrip.generationNotice || 'Curated standard plan'}>
+                      <Compass className="w-3 h-3" />
+                      <span>Curated Standard Plan (Offline/Fallback)</span>
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Action items */}
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveActiveTrip}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 active:scale-[0.98]"
+                  disabled={savingTrip}
+                  className={`flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 ${
+                    savingTrip ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'
+                  }`}
                 >
-                  <Save className="w-4 h-4" />
-                  <span>Save Plan</span>
+                  {savingTrip ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Save Plan</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
 
-            {/* Smart AI suggestions row */}
+            {/* Informational banner when deterministic fallback was used */}
+            {!activeTrip.isAIGenerated && activeTrip.generationNotice && (
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2.5 shadow-sm">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>Notice: {activeTrip.generationNotice}. Displaying standard curated itinerary for this route.</span>
+              </div>
+            )}
+
+            {/* Smart suggestions row */}
             <SmartSuggestions 
               suggestions={activeTrip.suggestions} 
               onSelectMode={(mode) => setActiveMode(mode)}
+              isAIGenerated={Boolean(activeTrip.isAIGenerated)}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -637,7 +727,8 @@ export default function App() {
               savedTrips={savedTrips}
               onDeleteTrip={handleDeleteTrip}
               onSelectTrip={handleSelectTrip}
-              setView={setView}
+              setView={handleNavigate}
+              deletingTripId={deletingTripId}
             />
             {/* Show Chatbot even on dashboard with last active trip info */}
             {savedTrips?.length > 0 && savedTrips[0] && (

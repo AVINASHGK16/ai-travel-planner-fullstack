@@ -275,9 +275,20 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
 }
 
 // Invoke the backend proxy to get AI-powered itineraries (secure — key stays server-side)
-export async function getAIGeneration(searchParams) {
+export async function getAIGeneration(searchParams, externalSignal) {
   try {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    
+    // Combine external cancellation signal with a strict 20s timeout
+    let effectiveSignal;
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.any && externalSignal) {
+      effectiveSignal = AbortSignal.any([externalSignal, AbortSignal.timeout(20000)]);
+    } else if (externalSignal) {
+      effectiveSignal = externalSignal;
+    } else if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+      effectiveSignal = AbortSignal.timeout(20000);
+    }
+
     const response = await fetch(`${backendUrl}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -290,7 +301,7 @@ export async function getAIGeneration(searchParams) {
         budget: searchParams.budget,
         preferredMode: searchParams.preferredMode
       }),
-      signal: AbortSignal.timeout(20000)
+      signal: effectiveSignal
     });
 
     if (!response.ok) {
@@ -299,22 +310,24 @@ export async function getAIGeneration(searchParams) {
         errData = await response.json();
       } catch {}
 
-      if (response.status === 429) {
-        throw new Error('AI generation rate limit reached. Using standard itinerary generator.');
-      }
-      if (response.status === 503) {
-        throw new Error('AI service not configured on server. Using standard itinerary generator.');
-      }
-      throw new Error(errData.error || `Server returned ${response.status}`);
+      const err = new Error(errData.error || `AI generation failed with status ${response.status}`);
+      err.code = errData.code || (response.status === 429 ? 'AI_QUOTA_EXCEEDED' : 'AI_ERROR');
+      err.status = response.status;
+      throw err;
     }
 
     return await response.json();
   } catch (error) {
-    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-      console.warn('AI generation timed out after 20 seconds, falling back to local generator');
-      throw new Error('AI generation timed out');
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      if (externalSignal?.aborted) {
+        const cancelErr = new Error('Search cancelled by user');
+        cancelErr.code = 'CANCELLED';
+        throw cancelErr;
+      }
+      const timeoutErr = new Error('AI generation timed out after 20 seconds');
+      timeoutErr.code = 'AI_TIMEOUT';
+      throw timeoutErr;
     }
-    console.warn('AI Generation unavailable, using local generator:', error.message);
     throw error;
   }
 }

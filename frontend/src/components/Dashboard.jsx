@@ -1,8 +1,8 @@
 import React from 'react';
 import { jsPDF } from 'jspdf';
-import { Download, Share2, Trash2, Calendar, MapPin, DollarSign, Compass, ArrowRight } from 'lucide-react';
+import { Download, Share2, Trash2, Calendar, MapPin, DollarSign, Compass, ArrowRight, Loader2 } from 'lucide-react';
 
-export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setView }) {
+export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setView, deletingTripId = null }) {
   
   // Download Trip plan as PDF using jsPDF
   const handleDownloadPDF = (e, trip) => {
@@ -223,16 +223,25 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
 
                 {/* Delete */}
                 <button
+                  disabled={deletingTripId === (trip._id || idx)}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (confirm('Delete this saved travel plan?')) {
                       onDeleteTrip(trip._id || idx);
                     }
                   }}
-                  title="Remove Plan"
-                  className="p-2 bg-slate-900 border border-white/5 hover:border-red-500/30 text-slate-400 hover:text-red-400 rounded-lg transition-colors"
+                  title={deletingTripId === (trip._id || idx) ? 'Deleting...' : 'Remove Plan'}
+                  className={`p-2 bg-slate-900 border border-white/5 rounded-lg transition-colors ${
+                    deletingTripId === (trip._id || idx)
+                      ? 'opacity-60 cursor-not-allowed text-red-400'
+                      : 'hover:border-red-500/30 text-slate-400 hover:text-red-400'
+                  }`}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  {deletingTripId === (trip._id || idx) ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
                 </button>
               </div>
 

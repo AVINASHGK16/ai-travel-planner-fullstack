@@ -89,13 +89,17 @@ export default function AuthModal({
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={loading ? undefined : onClose}></div>
 
       {/* Modal Card */}
       <div className="relative z-10 w-full max-w-md mx-4 rounded-2xl glass border border-white/10 p-7 text-white animate-slide-up">
 
         {/* Close */}
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+        <button 
+          onClick={onClose} 
+          disabled={loading}
+          className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           <X className="w-5 h-5" />
         </button>
 
@@ -131,8 +135,9 @@ export default function AuthModal({
                   type="text"
                   placeholder="Your name"
                   value={name}
+                  disabled={loading}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500"
+                  className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500 disabled:opacity-60"
                 />
               </div>
             </div>
@@ -146,9 +151,10 @@ export default function AuthModal({
                 type="email"
                 placeholder="you@example.com"
                 value={email}
+                disabled={loading}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500"
+                className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500 disabled:opacity-60"
               />
             </div>
           </div>
@@ -162,10 +168,11 @@ export default function AuthModal({
                   type="password"
                   placeholder={mode === 'register' ? 'Min 6 characters' : '••••••••'}
                   value={password}
+                  disabled={loading}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={mode === 'register' ? 6 : undefined}
-                  className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500"
+                  className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500 disabled:opacity-60"
                 />
               </div>
             </div>
@@ -192,20 +199,20 @@ export default function AuthModal({
         <div className="flex items-center justify-between text-[11px] text-slate-400 mt-5 pt-4 border-t border-white/5">
           {mode === 'login' ? (
             <>
-              <button onClick={() => { setMode('register'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer">
+              <button disabled={loading} onClick={() => { setMode('register'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 Don't have an account? <span className="text-blue-400 font-semibold">Sign Up</span>
               </button>
-              <button onClick={() => { setMode('forgot'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer">
+              <button disabled={loading} onClick={() => { setMode('forgot'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 Forgot Password?
               </button>
             </>
           ) : mode === 'register' ? (
-            <button onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer">
+            <button disabled={loading} onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
               Already have an account? <span className="text-blue-400 font-semibold">Sign In</span>
             </button>
           ) : (
-            <button onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer">
-              Back to <span className="text-blue-400 font-semibold">Sign In</span>
+            <button disabled={loading} onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+              Remembered your password? <span className="text-blue-400 font-semibold">Sign In</span>
             </button>
           )}
         </div>

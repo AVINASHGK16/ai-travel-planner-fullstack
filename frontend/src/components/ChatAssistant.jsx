@@ -71,6 +71,14 @@ export default function ChatAssistant({ tripData }) {
   const [loading, setLoading] = useState(false);
   
   const chatEndRef = useRef(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -92,14 +100,20 @@ export default function ChatAssistant({ tripData }) {
     try {
       // Call backend AI proxy (Gemini key is kept server-side)
       const reply = await getAIChatResponse(updatedHistory, text, tripData);
-      setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
+      if (isMounted.current) {
+        setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
+      }
     } catch (err) {
       console.warn('Backend AI unavailable, using intelligent local response:', err.message);
       // Fallback local rules engine for chat queries
       const reply = getLocalChatFallback(text, tripData);
-      setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
+      if (isMounted.current) {
+        setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -192,8 +206,11 @@ export default function ChatAssistant({ tripData }) {
             {quickPrompts.map((qp, idx) => (
               <button
                 key={idx}
+                disabled={loading}
                 onClick={() => handleSendMessage(qp.text)}
-                className="px-2.5 py-1.5 bg-slate-900/70 border border-white/5 hover:border-blue-500/30 text-slate-300 rounded-lg text-[10px] font-semibold transition-all hover:text-white"
+                className={`px-2.5 py-1.5 bg-slate-900/70 border border-white/5 rounded-lg text-[10px] font-semibold transition-all ${
+                  loading ? 'opacity-50 cursor-not-allowed text-slate-500' : 'hover:border-blue-500/30 text-slate-300 hover:text-white'
+                }`}
               >
                 {qp.label}
               </button>
@@ -205,10 +222,13 @@ export default function ChatAssistant({ tripData }) {
             <input
               type="text"
               value={inputText}
+              disabled={loading}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Ask travel advice..."
-              className="flex-grow px-3 py-2 bg-slate-950/40 border border-white/10 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs text-white placeholder-slate-500"
+              placeholder={loading ? 'Waiting for assistant...' : 'Ask travel advice...'}
+              className={`flex-grow px-3 py-2 bg-slate-950/40 border border-white/10 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs text-white placeholder-slate-500 ${
+                loading ? 'opacity-60 cursor-not-allowed' : ''
+              }`}
             />
             <button
               onClick={() => handleSendMessage()}

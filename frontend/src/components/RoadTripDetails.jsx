@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Star, HeartPulse, ExternalLink } from 'lucide-react';
+import { Star, HeartPulse, ExternalLink, Loader2 } from 'lucide-react';
 
 // Custom Map center update hook
 function ChangeMapView({ center }) {
@@ -339,6 +339,13 @@ export default function RoadTripDetails({ tripData }) {
             </Marker>
           ))}
         </MapContainer>
+
+        {loadingCoords && (
+          <div className="absolute top-3 right-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-blue-300 font-medium flex items-center gap-1.5 shadow-lg border border-blue-500/20">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+            <span>Resolving map coordinates...</span>
+          </div>
+        )}
 
         <div className="absolute bottom-3 left-3 z-[1000] glass px-3 py-1.5 rounded-lg text-[10px] text-slate-300 font-mono pointer-events-none">
           OpenStreetMap · Leaflet

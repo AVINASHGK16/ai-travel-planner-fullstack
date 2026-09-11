@@ -523,26 +523,93 @@ app.post('/api/generate', aiGenerateLimiter, validateBody(generateTripSchema), a
       body: JSON.stringify({
         contents: [{ parts: [{ text: promptText }] }],
         generationConfig: { responseMimeType: 'application/json' }
-      })
+      }),
+      signal: AbortSignal.timeout(18000)
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API error with status ${response.status}`);
+      if (response.status === 429) {
+        return res.status(429).json({
+          error: 'Gemini AI quota or rate limit exceeded. Please try again later.',
+          code: 'AI_QUOTA_EXCEEDED'
+        });
+      }
+      if (response.status === 503 || response.status === 500) {
+        return res.status(503).json({
+          error: 'Gemini AI service is temporarily overloaded. Please try again later.',
+          code: 'AI_OVERLOADED'
+        });
+      }
+      if (response.status === 400 || response.status === 403) {
+        return res.status(503).json({
+          error: 'Gemini AI service configuration or authentication error on server.',
+          code: 'AI_UNCONFIGURED'
+        });
+      }
+      return res.status(502).json({
+        error: `Gemini AI returned error status ${response.status}.`,
+        code: 'AI_UPSTREAM_ERROR'
+      });
     }
 
     const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) {
-      throw new Error('No text content returned from Gemini AI');
+    const candidate = data?.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+
+    // Check for safety block or non-standard termination
+    if (finishReason && finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
+      return res.status(502).json({
+        error: `Gemini AI generation was halted (${finishReason}).`,
+        code: 'AI_SAFETY_OR_STOP'
+      });
     }
+
+    const rawText = candidate?.content?.parts?.[0]?.text;
+    if (!rawText || !rawText.trim()) {
+      return res.status(502).json({
+        error: 'Gemini AI returned an empty response.',
+        code: 'AI_EMPTY_RESPONSE'
+      });
+    }
+
     let cleaned = rawText.trim();
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
     }
-    res.json(JSON.parse(cleaned));
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.warn('Gemini response failed JSON parsing:', parseErr.message);
+      return res.status(502).json({
+        error: 'Gemini AI returned an invalid JSON response structure.',
+        code: 'AI_MALFORMED_JSON'
+      });
+    }
+
+    // Validate essential schema components
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.itinerary) || parsed.itinerary.length === 0) {
+      return res.status(502).json({
+        error: 'Gemini AI returned an incomplete plan structure (missing itinerary).',
+        code: 'AI_INCOMPLETE_RESPONSE'
+      });
+    }
+
+    // Return confirmed AI-generated response
+    res.json({
+      ...parsed,
+      isAIGenerated: true
+    });
   } catch (error) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      return res.status(504).json({
+        error: 'Gemini AI generation timed out on the server.',
+        code: 'AI_TIMEOUT'
+      });
+    }
     console.error('Express AI generation error:', String(error?.message || error).replace(/key=[^&\s]+/g, 'key=REDACTED'));
-    res.status(500).json({ error: 'Failed to generate travel plan. Please try again later.' });
+    res.status(500).json({ error: 'Failed to generate travel plan. Please try again later.', code: 'SERVER_ERROR' });
   }
 });
 
@@ -599,10 +666,14 @@ Answer the user's question accurately, offering safety tips, restaurant choices,
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents })
+      body: JSON.stringify({ contents }),
+      signal: AbortSignal.timeout(10000)
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        return res.status(429).json({ error: 'AI chat quota or rate limit exceeded.', code: 'AI_QUOTA_EXCEEDED' });
+      }
       throw new Error(`Gemini API error: ${response.status}`);
     }
 
@@ -611,6 +682,9 @@ Answer the user's question accurately, offering safety tips, restaurant choices,
 
     res.json({ reply: reply || "I'm sorry, I couldn't process that. Can you try again?" });
   } catch (error) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      return res.status(504).json({ error: 'AI chat response timed out.', code: 'AI_TIMEOUT' });
+    }
     console.error('Chat AI error:', String(error?.message || error).replace(/key=[^&\s]+/g, 'key=REDACTED'));
     res.status(500).json({ error: 'Failed to process chat message. Please try again later.' });
   }

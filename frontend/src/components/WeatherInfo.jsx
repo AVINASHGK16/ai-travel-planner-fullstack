@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Cloud, Sun, CloudRain, Wind, AlertTriangle, Thermometer } from 'lucide-react';
+import { Cloud, Sun, CloudRain, Wind, AlertTriangle, Thermometer, Loader2 } from 'lucide-react';
 
 export default function WeatherInfo({ weather, destination }) {
   const [liveWeather, setLiveWeather] = useState(weather);
+  const [loadingWeather, setLoadingWeather] = useState(false);
 
   useEffect(() => {
     // Reset to static generated weather first
@@ -16,6 +17,7 @@ export default function WeatherInfo({ weather, destination }) {
 
     const fetchLiveWeather = async () => {
       const city = destination.split(',')[0].trim();
+      setLoadingWeather(true);
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         const url = `${backendUrl}/api/weather?city=${encodeURIComponent(city)}`;
@@ -39,6 +41,9 @@ export default function WeatherInfo({ weather, destination }) {
           console.warn('Weather proxy offline or unconfigured, using static weather:', err.message);
         }
       } finally {
+        if (active) {
+          setLoadingWeather(false);
+        }
         clearTimeout(timeoutId);
       }
     };
@@ -47,6 +52,7 @@ export default function WeatherInfo({ weather, destination }) {
 
     return () => {
       active = false;
+      setLoadingWeather(false);
       clearTimeout(timeoutId);
       controller.abort();
     };
@@ -68,7 +74,16 @@ export default function WeatherInfo({ weather, destination }) {
       <div className="flex justify-between items-start mb-4 pb-3 border-b border-white/5">
         <div>
           <h4 className="font-display font-semibold text-base text-white">Weather Forecast</h4>
-          <p className="text-xs text-slate-400">Conditions at your transit locations</p>
+          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+            {loadingWeather ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+                <span>Updating live weather...</span>
+              </>
+            ) : (
+              <span>Conditions at your transit locations</span>
+            )}
+          </p>
         </div>
         
         {/* Rain Alert flag */}

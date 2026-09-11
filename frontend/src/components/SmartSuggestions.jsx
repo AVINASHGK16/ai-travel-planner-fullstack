@@ -1,7 +1,7 @@
 import React from 'react';
 import { DollarSign, Zap, Armchair, BadgePercent, Leaf, ArrowRight } from 'lucide-react';
 
-export default function SmartSuggestions({ suggestions, onSelectMode }) {
+export default function SmartSuggestions({ suggestions, onSelectMode, isAIGenerated = false }) {
   if (!suggestions) return null;
 
   const cardConfig = {
@@ -45,8 +45,16 @@ export default function SmartSuggestions({ suggestions, onSelectMode }) {
   return (
     <div className="w-full">
       <div className="flex items-center gap-2 mb-4">
-        <span className="p-1 rounded bg-blue-500/10 text-blue-400 text-xs font-bold uppercase">AI</span>
-        <h3 className="font-display font-bold text-lg text-white">Smart Recommendations</h3>
+        <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${
+          isAIGenerated 
+            ? 'bg-purple-500/15 text-purple-400 border border-purple-500/20' 
+            : 'bg-slate-700/40 text-slate-400 border border-slate-700/50'
+        }`}>
+          {isAIGenerated ? 'AI' : 'Standard'}
+        </span>
+        <h3 className="font-display font-bold text-lg text-white">
+          {isAIGenerated ? 'Smart Recommendations' : 'Curated Route Recommendations'}
+        </h3>
       </div>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
