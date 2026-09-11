@@ -56,24 +56,40 @@ export default function App() {
     localStorage.removeItem('geminiKey');
     localStorage.removeItem('openWeatherKey');
 
+    let active = true;
     const validateToken = async () => {
       const token = localStorage.getItem('authToken');
       if (!token) return;
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         const res = await fetch(`${backendUrl}/api/auth/me`, {
+          signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined,
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        if (!active) return;
         if (res.ok) {
-          const data = await res.json();
-          setAuth({ user: data.user, token, modalOpen: false });
-        } else {
+          const data = await res.json().catch(() => null);
+          if (data && data.user) {
+            setAuth({ user: data.user, token, modalOpen: false });
+          } else {
+            const cachedUser = safeJsonParse(localStorage.getItem('user'), null);
+            setAuth({ user: cachedUser, token, modalOpen: false });
+          }
+        } else if (res.status === 401 || res.status === 403) {
+          // Explicit token rejection from server
           localStorage.removeItem('authToken');
           localStorage.removeItem('user');
           setAuth({ user: null, token: null, modalOpen: false });
+        } else {
+          // On 429, 500, or temporary server issues, retain cached user session
+          const cachedUser = safeJsonParse(localStorage.getItem('user'), null);
+          if (cachedUser) {
+            setAuth(prev => ({ ...prev, user: cachedUser }));
+          }
         }
       } catch {
-        // Backend offline — use cached user data if available
+        // Backend offline or request timed out — use cached user data if available
+        if (!active) return;
         const cachedUser = safeJsonParse(localStorage.getItem('user'), null);
         if (cachedUser) {
           setAuth(prev => ({ ...prev, user: cachedUser }));
@@ -81,28 +97,42 @@ export default function App() {
       }
     };
     validateToken();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Load saved trips when user authenticates
   useEffect(() => {
+    let active = true;
     const fetchTrips = async () => {
       if (auth.user && auth.token) {
         try {
           const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
           const response = await fetch(`${backendUrl}/api/trips`, {
+            signal: AbortSignal.timeout ? AbortSignal.timeout(7000) : undefined,
             headers: { 'Authorization': `Bearer ${auth.token}` }
           });
+          if (!active) return;
           if (response.ok) {
-            const data = await response.json();
-            setSavedTrips(Array.isArray(data) ? data : []);
+            const data = await response.json().catch(() => null);
+            if (active) {
+              setSavedTrips(Array.isArray(data) ? data : []);
+            }
           } else if (response.status === 401 || response.status === 403) {
             // Token expired or invalid — clear session cleanly
             handleLogout();
+          } else if (response.status === 429) {
+            console.warn('Trips request rate limited (429). Loading cached trips.');
+            const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+            const userTrips = Array.isArray(localTrips) ? localTrips.filter(t => t?.userEmail === auth.user.email) : [];
+            if (active) setSavedTrips(userTrips);
           } else {
-            throw new Error('Server returned error status');
+            throw new Error(`Server returned error status: ${response.status}`);
           }
         } catch (error) {
-          console.warn('Backend offline, loading trips from localStorage fallback:', error.message);
+          if (!active) return;
+          console.warn('Backend unavailable, loading trips from localStorage fallback:', error.message);
           const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
           const userTrips = Array.isArray(localTrips) ? localTrips.filter(t => t?.userEmail === auth.user.email) : [];
           setSavedTrips(userTrips);
@@ -112,6 +142,9 @@ export default function App() {
       }
     };
     fetchTrips();
+    return () => {
+      active = false;
+    };
   }, [auth.user, auth.token]);
 
   const handleLoginSuccess = ({ user, token }) => {
@@ -132,6 +165,7 @@ export default function App() {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         await fetch(`${backendUrl}/api/auth/logout`, {
           method: 'POST',
+          signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined,
           headers: { 'Authorization': `Bearer ${token}` }
         });
       } catch (err) {
@@ -265,6 +299,7 @@ export default function App() {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const response = await fetch(`${backendUrl}/api/trips`, {
         method: 'POST',
+        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${auth.token}`
@@ -272,21 +307,48 @@ export default function App() {
         body: JSON.stringify(tripToSave)
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to save trip to backend');
+      if (response.ok) {
+        const savedData = await response.json().catch(() => null);
+        const effectiveTrip = savedData || { ...tripToSave, _id: `trip_${Date.now()}` };
+        setSavedTrips(prev => [effectiveTrip, ...prev]);
+        
+        // Also sync to local storage for offline redundancy
+        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+        localStorage.setItem('savedTrips', JSON.stringify([effectiveTrip, ...(Array.isArray(localTrips) ? localTrips : [])]));
+        
+        alert('Trip itinerary successfully saved to your dashboard!');
+        return;
       }
 
-      const savedData = await response.json();
-      setSavedTrips(prev => [savedData, ...prev]);
-      
-      // Also sync to local storage for offline redundancy
-      const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-      localStorage.setItem('savedTrips', JSON.stringify([savedData, ...(Array.isArray(localTrips) ? localTrips : [])]));
-      
-      alert('Trip itinerary successfully saved to your dashboard!');
+      // Handle specific HTTP error status codes gracefully
+      if (response.status === 400) {
+        let errorMsg = 'Invalid trip details. Please check your trip inputs.';
+        try {
+          const errData = await response.json();
+          if (errData?.error) errorMsg = errData.error;
+          else if (errData?.details?.[0]?.message) errorMsg = errData.details[0].message;
+        } catch { /* ignore parsing errors */ }
+        alert(`Could not save trip: ${errorMsg}`);
+        return;
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        alert('Your session has expired. Please sign in again to save your trip.');
+        handleLogout();
+        setAuth(prev => ({ ...prev, modalOpen: true }));
+        return;
+      }
+
+      if (response.status === 429) {
+        alert('Too many save requests. Please wait a moment before trying again.');
+        return;
+      }
+
+      // For 500, 502, 503 or other server errors, fallback to offline local saving
+      throw new Error(`Server returned status ${response.status}`);
     } catch (err) {
-      console.warn('Backend offline, saving trip locally:', err.message);
-      // Generate standard mock id for local tracking
+      console.warn('Backend unavailable, saving trip locally:', err.message);
+      // Generate standard local ID for offline tracking
       const localSavedTrip = {
         ...tripToSave,
         _id: `local_${Date.now()}`,
@@ -309,10 +371,24 @@ export default function App() {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         const response = await fetch(`${backendUrl}/api/trips/${tripIdOrIndex}`, {
           method: 'DELETE',
+          signal: AbortSignal.timeout ? AbortSignal.timeout(7000) : undefined,
           headers: { 'Authorization': `Bearer ${auth.token}` }
         });
-        if (!response.ok) {
-          throw new Error('Failed to delete trip from backend');
+
+        if (response.status === 401 || response.status === 403) {
+          alert('Your session has expired. Please sign in again.');
+          handleLogout();
+          setAuth(prev => ({ ...prev, modalOpen: true }));
+          return;
+        }
+
+        if (response.status === 429) {
+          alert('Too many delete requests. Please wait a moment before trying again.');
+          return;
+        }
+
+        if (!response.ok && response.status !== 404) {
+          throw new Error(`Failed to delete trip from backend: status ${response.status}`);
         }
         
         // Remove from local state
@@ -477,7 +553,7 @@ export default function App() {
                   {(activeTrip.from || 'Origin').split(',')[0]} to {(activeTrip.to || 'Destination').split(',')[0]} Plan
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Departing {activeTrip.date || 'N/A'} • {activeTrip.travelers || 1} Travelers • Distance: {activeTrip.distance || 'N/A'} km
+                  Departing {activeTrip.date || 'N/A'}{activeTrip.returnDate ? ` • Returning ${activeTrip.returnDate}` : ''} • {activeTrip.travelers || 1} Travelers • Distance: {activeTrip.distance || 'N/A'} km
                 </p>
               </div>
 

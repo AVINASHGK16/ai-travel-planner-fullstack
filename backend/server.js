@@ -174,16 +174,28 @@ const loadLocalTrips = () => {
   try {
     const data = fs.readFileSync(LOCAL_DB_PATH, 'utf-8');
     const trips = JSON.parse(data || '[]');
-    // Defensive normalization for legacy persisted records
+    if (!Array.isArray(trips)) return [];
+
+    // Defensive normalization for legacy persisted records without deleting them
     return trips.map(trip => {
+      if (!trip || typeof trip !== 'object') return { _id: Date.now().toString(), date: 'Unknown Date' };
+
       // Fix legacy date typo like 72026-02-02 -> 2026-02-02
       if (typeof trip.date === 'string' && /^7\d{4}-\d{2}-\d{2}$/.test(trip.date)) {
         trip.date = trip.date.slice(1);
+      } else if (!trip.date || typeof trip.date !== 'string') {
+        trip.date = 'Unknown Date';
       }
+
+      // Ensure returnDate is string or null
+      if (trip.returnDate !== undefined && typeof trip.returnDate !== 'string') {
+        trip.returnDate = null;
+      }
+
       return trip;
     });
   } catch (err) {
-    console.error('Error reading local trips file, resetting database:', err);
+    console.error('Error reading local trips file, serving empty fallback:', err.message);
     return [];
   }
 };

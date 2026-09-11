@@ -53,23 +53,32 @@ export default function RoadTripDetails({ tripData }) {
     if (!tripData?.from || !tripData?.to) return;
 
     let active = true;
+    const controller = new AbortController();
 
     const geocode = async () => {
       setLoadingCoords(true);
       try {
         const geocodeAddress = async (query) => {
-          const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
-          const res = await fetch(url, {
-            headers: {
-              'User-Agent': 'AITravelPlanner/1.0'
+          try {
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
+            const res = await fetch(url, {
+              signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : controller.signal,
+              headers: {
+                'User-Agent': 'AITravelPlanner/1.0'
+              }
+            });
+            if (!res.ok) throw new Error('Nominatim request failed');
+            const data = await res.json();
+            if (data && data.length > 0) {
+              return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
             }
-          });
-          if (!res.ok) throw new Error('Nominatim request failed');
-          const data = await res.json();
-          if (data && data.length > 0) {
-            return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+            return null;
+          } catch (fetchErr) {
+            if (fetchErr.name !== 'AbortError') {
+              console.warn(`Geocoding failed for ${query}:`, fetchErr.message);
+            }
+            return null;
           }
-          return null;
         };
 
         const resolvedFrom = await geocodeAddress(tripData.from);
@@ -88,7 +97,9 @@ export default function RoadTripDetails({ tripData }) {
         setToCoords(finalTo);
         setMidCoords(finalMid);
       } catch (err) {
-        console.error('Error geocoding map coordinates:', err);
+        if (err.name !== 'AbortError') {
+          console.error('Error geocoding map coordinates:', err);
+        }
       } finally {
         if (active) {
           setLoadingCoords(false);
@@ -100,6 +111,7 @@ export default function RoadTripDetails({ tripData }) {
 
     return () => {
       active = false;
+      controller.abort();
     };
   }, [tripData?.from, tripData?.to]);
 

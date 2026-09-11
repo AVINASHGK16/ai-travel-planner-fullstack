@@ -58,9 +58,13 @@ export default function HeroSearch({ onSearch }) {
     };
   };
 
+  // Timezone-safe local today string (YYYY-MM-DD)
+  const now = new Date();
+  const todayLocalStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!from || !to || !date) {
+    if (!from.trim() || !to.trim() || !date) {
       alert('Please fill out Starting Location, Destination, and Departure Date.');
       return;
     }
@@ -68,11 +72,15 @@ export default function HeroSearch({ onSearch }) {
       alert('Starting location and Destination must be different.');
       return;
     }
+    if (date < todayLocalStr) {
+      alert('Departure date cannot be in the past.');
+      return;
+    }
     if (returnDate && returnDate < date) {
       alert('Return date cannot be earlier than departure date.');
       return;
     }
-    onSearch({ from, to, date, returnDate, travelers, budget, preferredMode });
+    onSearch({ from: from.trim(), to: to.trim(), date, returnDate, travelers, budget, preferredMode });
   };
 
   return (
@@ -176,8 +184,15 @@ export default function HeroSearch({ onSearch }) {
               <input
                 type="date"
                 required
+                min={todayLocalStr}
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  setDate(newDate);
+                  if (returnDate && newDate > returnDate) {
+                    setReturnDate('');
+                  }
+                }}
                 className="w-full pl-10 pr-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white dark:[color-scheme:dark]"
               />
             </div>
@@ -194,6 +209,7 @@ export default function HeroSearch({ onSearch }) {
               </span>
               <input
                 type="date"
+                min={date || todayLocalStr}
                 value={returnDate}
                 onChange={(e) => setReturnDate(e.target.value)}
                 className="w-full pl-10 pr-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white dark:[color-scheme:dark]"

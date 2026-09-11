@@ -140,7 +140,10 @@ export const saveTripSchema = z.object({
     .trim()
     .optional()
     .nullable()
-    .transform(v => (v === '' ? null : v)),
+    .transform(v => (v === '' ? null : v))
+    .refine(v => v === null || v === undefined || isValidDateString(v), {
+      message: 'Return date must be a valid date in YYYY-MM-DD format'
+    }),
   travelers: z.coerce.number().int().min(1).max(50).optional().default(1),
   budget: z.coerce.number().min(0).max(10000000).optional(),
   distance: z.union([z.number(), z.string()])
@@ -165,6 +168,14 @@ export const saveTripSchema = z.object({
   weather: z.record(z.any()).optional(),
   // Security: userEmail is intentionally ignored/stripped; it is always overridden with req.user.email
   userEmail: z.string().optional()
+}).refine(data => {
+  if (data.returnDate && data.date) {
+    return data.returnDate >= data.date;
+  }
+  return true;
+}, {
+  message: 'Return date cannot be earlier than departure date',
+  path: ['returnDate']
 });
 
 // ─── 4. Trip ID Route Parameter Schema (/api/trips/:id) ─────────

@@ -11,13 +11,16 @@ export default function WeatherInfo({ weather, destination }) {
     if (!destination || typeof destination !== 'string') return;
 
     let active = true;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
     const fetchLiveWeather = async () => {
       const city = destination.split(',')[0].trim();
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         const url = `${backendUrl}/api/weather?city=${encodeURIComponent(city)}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('Weather API request failed');
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) throw new Error(`Weather API returned ${res.status}`);
         const data = await res.json();
         
         if (!active) return;
@@ -32,7 +35,11 @@ export default function WeatherInfo({ weather, destination }) {
           forecast: prev?.forecast || weather?.forecast || []
         }));
       } catch (err) {
-        console.warn('Weather proxy offline or unconfigured, using static weather:', err.message);
+        if (err.name !== 'AbortError') {
+          console.warn('Weather proxy offline or unconfigured, using static weather:', err.message);
+        }
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
 
@@ -40,6 +47,8 @@ export default function WeatherInfo({ weather, destination }) {
 
     return () => {
       active = false;
+      clearTimeout(timeoutId);
+      controller.abort();
     };
   }, [destination, weather]);
 

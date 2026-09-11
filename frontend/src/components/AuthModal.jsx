@@ -28,19 +28,41 @@ export default function AuthModal({
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
       const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
 
-      const body = { email, password };
-      if (mode === 'register') body.name = name;
+      const body = { email: email.trim(), password };
+      if (mode === 'register') body.name = name.trim();
 
       const response = await fetch(`${backendUrl}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8000)
       });
 
-      const data = await response.json();
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = { error: `Server returned ${response.status} ${response.statusText || 'Error'}` };
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Authentication failed.');
+        if (response.status === 429) {
+          throw new Error('Too many authentication attempts. Please wait a few minutes before trying again.');
+        }
+        if (response.status === 409) {
+          throw new Error('An account with this email already exists. Please sign in instead.');
+        }
+        if (response.status === 401) {
+          throw new Error('Invalid email or password.');
+        }
+        if (response.status === 400) {
+          const detailMsg = data.details?.[0]?.message;
+          throw new Error(detailMsg || data.error || 'Please check your inputs and try again.');
+        }
+        if (response.status >= 500) {
+          throw new Error('Server error occurred. Please try again in a few moments.');
+        }
+        throw new Error(data.error || 'Authentication failed. Please try again.');
       }
 
       // Pass both user and token to parent
@@ -52,7 +74,11 @@ export default function AuthModal({
       setName('');
       setError('');
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        setError('Connection timed out. Please check your network and try again.');
+      } else {
+        setError(err.message || 'Something went wrong. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

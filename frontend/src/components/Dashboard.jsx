@@ -39,7 +39,8 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       doc.setFontSize(11);
       doc.text(`Starting Point: ${trip?.from || 'Origin'}`, 20, 72);
       doc.text(`Destination: ${trip?.to || 'Destination'}`, 20, 79);
-      doc.text(`Travel Date: ${trip?.date || 'N/A'}`, 20, 86);
+      const dateDisplay = trip?.returnDate ? `${trip?.date || 'N/A'} to ${trip.returnDate}` : (trip?.date || 'N/A');
+      doc.text(`Travel Dates: ${dateDisplay}`, 20, 86);
       doc.text(`No. of Travelers: ${trip?.travelers || 1}`, 20, 93);
       doc.text(`Approx. Distance: ${trip?.distance || 'N/A'} km`, 20, 100);
       doc.text(`Budget Tier Level: ₹${Number(trip?.budget || 0).toLocaleString()}`, 20, 107);
@@ -177,7 +178,7 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex items-center gap-1.5 text-xs text-blue-400 font-bold bg-blue-500/10 px-2.5 py-1 rounded-lg">
                     <Calendar className="w-3.5 h-3.5" />
-                    <span>{trip.date || 'N/A'}</span>
+                    <span>{trip.date || 'N/A'}{trip.returnDate ? ` → ${trip.returnDate}` : ''}</span>
                   </div>
                   <span className="text-xs font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
                     ₹{trip.budgetDetails?.total ? Number(trip.budgetDetails.total).toLocaleString() : Number(trip.budget || 0).toLocaleString()}

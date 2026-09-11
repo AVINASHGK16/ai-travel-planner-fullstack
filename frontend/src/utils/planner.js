@@ -83,11 +83,71 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
   // Midpoint coordinate for weather & stops
   const midCoords = [(fromCoords[0] + toCoords[0]) / 2, (fromCoords[1] + toCoords[1]) / 2];
 
+  let tripDays = 2;
+  if (date && returnDate) {
+    try {
+      const d1 = new Date(date + 'T00:00:00Z');
+      const d2 = new Date(returnDate + 'T00:00:00Z');
+      const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      if (!isNaN(diff) && diff >= 1 && diff <= 14) {
+        tripDays = diff;
+      }
+    } catch {}
+  }
+
+  const hotelDays = Math.max(1, tripDays - 1);
+  const totalHotelCost = selectedHotelCost * hotelDays;
+  const totalFoodCost = 600 * tripDays * travelersCount;
+
+  // Build day-by-day itinerary matching duration
+  const mockItinerary = [
+    {
+      day: 1,
+      title: 'Departure & Exploration',
+      activities: [
+        { time: '06:00 AM', title: 'Assemble & Depart', desc: `Start from ${from}. Keep basic snacks and water handy.`, cost: 0, icon: 'Navigation' },
+        { time: '09:00 AM', title: 'Breakfast Highway Stop', desc: 'Stop at a high-rated vegetarian food court along the highway.', cost: 150 * travelersCount, icon: 'Utensils' },
+        { time: '01:30 PM', title: 'Mid-way Attractions Visit', desc: 'Visit popular sights or scenic viewpoints on the route.', cost: 50 * travelersCount, icon: 'MapPin' },
+        { time: '02:30 PM', title: 'Lunch Spot', desc: 'Enjoy local regional cuisine specialities.', cost: 250 * travelersCount, icon: 'Coffee' },
+        { time: '06:00 PM', title: `Arrival at ${to}`, desc: 'Check in at the hotel and take a brief rest.', cost: 0, icon: 'Home' },
+        { time: '07:30 PM', title: 'Evening Walk & Local Market', desc: 'Explore the main city square, try street foods, and capture night views.', cost: 200 * travelersCount, icon: 'Camera' }
+      ]
+    }
+  ];
+
+  for (let d = 2; d <= tripDays; d++) {
+    if (d === tripDays && tripDays > 1) {
+      mockItinerary.push({
+        day: d,
+        title: 'Highlights, Souvenirs & Journey Home',
+        activities: [
+          { time: '08:30 AM', title: 'Farewell Breakfast & Checkout', desc: 'Pack luggage and prepare for the return trip.', cost: 0, icon: 'Home' },
+          { time: '10:30 AM', title: 'Local Artisan Bazaar & Gifts', desc: 'Pick up authentic local crafts and souvenirs.', cost: 400, icon: 'ShoppingBag' },
+          { time: '01:30 PM', title: 'Traditional Farewell Meal', desc: 'Enjoy authentic delicacies before heading back.', cost: 350 * travelersCount, icon: 'Utensils' },
+          { time: '04:00 PM', title: `Return Journey toward ${from}`, desc: 'Depart smoothly with memories captured.', cost: 0, icon: 'Navigation' }
+        ]
+      });
+    } else {
+      mockItinerary.push({
+        day: d,
+        title: `Day ${d}: Cultural Sights & Hidden Gems`,
+        activities: [
+          { time: '08:30 AM', title: 'Hotel Breakfast & Planning', desc: 'Get ready for full day sightseeing.', cost: 0, icon: 'Compass' },
+          { time: '09:30 AM', title: 'Prime Historical Landmark Tour', desc: 'Visit the main heritage monuments and attractions.', cost: 100 * travelersCount, icon: 'Eye' },
+          { time: '01:00 PM', title: 'Traditional Lunch Experience', desc: 'Famous authentic regional culinary recommendation.', cost: 350 * travelersCount, icon: 'Utensils' },
+          { time: '04:00 PM', title: 'Excursion & Nature Walk', desc: 'Explore botanical gardens, viewpoints, or lakefront parks.', cost: 100 * travelersCount, icon: 'Compass' },
+          { time: '07:30 PM', title: 'Sunset Gathering & Dinner', desc: 'Relax at a local dining spot with ambient music.', cost: 300 * travelersCount, icon: 'Moon' }
+        ]
+      });
+    }
+  }
+
   return {
     from,
     to,
     date,
     returnDate: returnDate || null,
+    tripDays,
     travelers: travelersCount,
     budget: budgetValue,
     distance,
@@ -167,40 +227,16 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
         desc: 'Saves 88% CO2 emissions compared to driving or flying'
       }
     },
-    itinerary: [
-      {
-        day: 1,
-        title: 'Departure & Exploration',
-        activities: [
-          { time: '06:00 AM', title: 'Assemble & Depart', desc: `Start from ${from}. Keep basic snacks and water handy.`, cost: 0, icon: 'Navigation' },
-          { time: '09:00 AM', title: 'Breakfast Highway Stop', desc: 'Stop at a high-rated vegetarian food court along the highway.', cost: 150 * travelersCount, icon: 'Utensils' },
-          { time: '01:30 PM', title: 'Mid-way Attractions Visit', desc: 'Visit Lepakshi or equivalent historical sight on the way.', cost: 50 * travelersCount, icon: 'MapPin' },
-          { time: '02:30 PM', title: 'Lunch Spot', desc: 'Enjoy local regional cuisine specialities.', cost: 250 * travelersCount, icon: 'Coffee' },
-          { time: '06:00 PM', title: `Arrival at ${to}`, desc: 'Check in at the hotel and take a brief rest.', cost: 0, icon: 'Home' },
-          { time: '07:30 PM', title: 'Evening Walk & Local Market', desc: 'Explore the main city square, try street foods, and capture night views.', cost: 200 * travelersCount, icon: 'Camera' }
-        ]
-      },
-      {
-        day: 2,
-        title: 'Local Sightseeing & Experiences',
-        activities: [
-          { time: '08:30 AM', title: 'Hotel Breakfast & Planning', desc: 'Get ready for full day sightseeing.', cost: 0, icon: 'Compass' },
-          { time: '09:30 AM', title: 'Prime Historical Monument Visit', desc: 'Visit the main historical landmark and take photos.', cost: 100 * travelersCount, icon: 'Eye' },
-          { time: '01:00 PM', title: 'Traditional Lunch Buffet', desc: 'Famous authentic fine dining restaurant recommendation.', cost: 400 * travelersCount, icon: 'Utensils' },
-          { time: '03:30 PM', title: 'Shopping and Local Crafts', desc: 'Visit local artisans and check out handloom products.', cost: 500, icon: 'ShoppingBag' },
-          { time: '07:00 PM', title: 'Dinner Cruise or Lakeside Sunset', desc: 'Watch a beautiful sunset view or enjoy dinner with music.', cost: 350 * travelersCount, icon: 'Moon' }
-        ]
-      }
-    ],
+    itinerary: mockItinerary,
     budgetDetails: {
       tickets: distance > 250 ? flightCost : train3ACost,
       fuel: distance * 7,
-      hotel: selectedHotelCost,
-      food: 1200 * travelersCount,
+      hotel: totalHotelCost,
+      food: totalFoodCost,
       toll: tollCost,
-      parking: 300,
-      misc: 1000,
-      total: (distance > 250 ? flightCost : train3ACost) + (selectedHotelCost) + (1200 * travelersCount) + tollCost + 300 + 1000
+      parking: 300 * hotelDays,
+      misc: 800 * tripDays,
+      total: (distance > 250 ? flightCost : train3ACost) + totalHotelCost + totalFoodCost + tollCost + (300 * hotelDays) + (800 * tripDays)
     },
     roadTripDetails: {
       petrolPumps: ['Indian Oil Highway Outlet', 'Bharat Petroleum Highway Hub', 'Shell Fuel Station Point'],
@@ -253,17 +289,32 @@ export async function getAIGeneration(searchParams) {
         travelers: searchParams.travelers,
         budget: searchParams.budget,
         preferredMode: searchParams.preferredMode
-      })
+      }),
+      signal: AbortSignal.timeout(20000)
     });
 
     if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error || `API error: ${response.status}`);
+      let errData = {};
+      try {
+        errData = await response.json();
+      } catch {}
+
+      if (response.status === 429) {
+        throw new Error('AI generation rate limit reached. Using standard itinerary generator.');
+      }
+      if (response.status === 503) {
+        throw new Error('AI service not configured on server. Using standard itinerary generator.');
+      }
+      throw new Error(errData.error || `Server returned ${response.status}`);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('AI Generation error:', error);
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      console.warn('AI generation timed out after 20 seconds, falling back to local generator');
+      throw new Error('AI generation timed out');
+    }
+    console.warn('AI Generation unavailable, using local generator:', error.message);
     throw error;
   }
 }
@@ -348,22 +399,31 @@ export async function getAIChatResponse(chatHistory, userMessage, tripData) {
           from: tripData.from,
           to: tripData.to,
           date: tripData.date,
+          returnDate: tripData.returnDate,
           travelers: tripData.travelers,
           budget: tripData.budget,
           distance: tripData.distance
         } : null
-      })
+      }),
+      signal: AbortSignal.timeout(12000)
     });
 
     if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
+      let errData = {};
+      try {
+        errData = await response.json();
+      } catch {}
       throw new Error(errData.error || `Chat API error: ${response.status}`);
     }
 
     const data = await response.json();
     return data.reply || "I'm sorry, I couldn't process that. Can you try again?";
   } catch (error) {
-    console.error('Chat AI response error:', error);
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      console.warn('Chat request timed out after 12 seconds');
+    } else {
+      console.warn('Chat AI response error:', error.message);
+    }
     throw error;
   }
 }
