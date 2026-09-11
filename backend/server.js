@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -28,6 +29,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
 
 // ─── Security Configuration ────────────────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-fallback-secret-change-in-production';
@@ -35,21 +37,55 @@ if (!process.env.JWT_SECRET) {
   console.warn('⚠️  WARNING: JWT_SECRET is not set. Using insecure default. Set JWT_SECRET in .env for production.');
 }
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+// Configured frontend origin(s)
+const rawFrontendUrls = process.env.FRONTEND_URL || 'http://localhost:5173';
+const configuredOrigins = rawFrontendUrls
+  .split(',')
+  .map(s => s.trim().replace(/\/$/, ''))
+  .filter(Boolean);
 
-// CORS — restrict to known frontend origin(s)
-const allowedOrigins = FRONTEND_URL.split(',').map(s => s.trim());
-app.use(cors({
+// In development, also permit standard localhost dev origins
+const devOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000', 'http://localhost:5000'];
+const allowedOrigins = isProduction
+  ? configuredOrigins
+  : Array.from(new Set([...configuredOrigins, ...devOrigins]));
+
+// ─── Security Headers (Helmet) ─────────────────────────────────
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https://*.openstreetmap.org", "https://images.unsplash.com"],
+      connectSrc: ["'self'", ...allowedOrigins],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"]
+    }
+  }
+}));
+
+// ─── Controlled CORS Configuration ─────────────────────────────
+const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (curl, mobile apps, server-to-server)
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Requests with no origin (curl, same-origin, server-to-server)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    const normalizedOrigin = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(normalizedOrigin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error('CORS origin not allowed'));
     }
   },
-  credentials: true
-}));
+  credentials: true,
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
 
 // Body parser with size limit to prevent payload attacks
 app.use(express.json({ limit: '250kb' }));
@@ -126,7 +162,15 @@ const loadLocalTrips = () => {
   }
   try {
     const data = fs.readFileSync(LOCAL_DB_PATH, 'utf-8');
-    return JSON.parse(data || '[]');
+    const trips = JSON.parse(data || '[]');
+    // Defensive normalization for legacy persisted records
+    return trips.map(trip => {
+      // Fix legacy date typo like 72026-02-02 -> 2026-02-02
+      if (typeof trip.date === 'string' && /^7\d{4}-\d{2}-\d{2}$/.test(trip.date)) {
+        trip.date = trip.date.slice(1);
+      }
+      return trip;
+    });
   } catch (err) {
     console.error('Error reading local trips file, resetting database:', err);
     return [];
@@ -445,8 +489,8 @@ app.post('/api/generate', aiGenerateLimiter, validateBody(generateTripSchema), a
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     res.json(JSON.parse(rawText.trim()));
   } catch (error) {
-    console.error('Express AI generation error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Express AI generation error:', String(error?.message || error).replace(/key=[^&\s]+/g, 'key=REDACTED'));
+    res.status(500).json({ error: 'Failed to generate travel plan. Please try again later.' });
   }
 });
 
@@ -515,8 +559,8 @@ Answer the user's question accurately, offering safety tips, restaurant choices,
 
     res.json({ reply: reply || "I'm sorry, I couldn't process that. Can you try again?" });
   } catch (error) {
-    console.error('Chat AI error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Chat AI error:', String(error?.message || error).replace(/key=[^&\s]+/g, 'key=REDACTED'));
+    res.status(500).json({ error: 'Failed to process chat message. Please try again later.' });
   }
 });
 
@@ -547,8 +591,8 @@ app.get('/api/weather', weatherLimiter, validateQuery(weatherQuerySchema), async
       rainAlert: data.rain ? 'Possible light showers expected' : 'Clear dry weather forecast'
     });
   } catch (error) {
-    console.error('Weather service error:', error.message);
-    res.status(500).json({ error: 'Failed to retrieve weather data.' });
+    console.error('Weather service error:', String(error?.message || error).replace(/appid=[^&\s]+/g, 'appid=REDACTED'));
+    res.status(500).json({ error: 'Failed to retrieve weather data. Please try again later.' });
   }
 });
 
@@ -577,7 +621,8 @@ app.post('/api/trips', tripsLimiter, authenticateToken, validateBody(saveTripSch
       res.status(201).json(newTrip);
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Save trip error:', error.message || error);
+    res.status(500).json({ error: 'Failed to save trip itinerary. Please try again.' });
   }
 });
 
@@ -594,7 +639,8 @@ app.get('/api/trips', authenticateToken, async (req, res) => {
       res.json(filtered);
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Fetch trips error:', error.message || error);
+    res.status(500).json({ error: 'Failed to retrieve trips. Please try again.' });
   }
 });
 
@@ -632,7 +678,8 @@ app.delete('/api/trips/:id', tripsLimiter, authenticateToken, validateParams(tri
       res.json({ message: 'Trip successfully deleted.' });
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Delete trip error:', error.message || error);
+    res.status(500).json({ error: 'Failed to delete trip. Please try again.' });
   }
 });
 
@@ -657,7 +704,7 @@ app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
     return res.status(400).json({ error: 'Malformed JSON payload.' });
   }
-  if (err.message === 'Not allowed by CORS') {
+  if (err.message === 'CORS origin not allowed' || err.message === 'Not allowed by CORS') {
     return res.status(403).json({ error: 'CORS origin not allowed.' });
   }
   console.error('Unhandled server error:', err.message || err);
