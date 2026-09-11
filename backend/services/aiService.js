@@ -1,6 +1,6 @@
 const sanitize = (str, maxLen = 500) => (typeof str === 'string' ? str.trim().slice(0, maxLen) : '');
 
-export const generateTravelPlan = async ({ from, to, date, returnDate, travelers, budget, preferredMode }) => {
+export const generateTrip = async ({ from, to, date, returnDate, travelers, budget, preferredMode }, user = null) => {
   const keyToUse = process.env.GEMINI_API_KEY;
 
   if (!keyToUse) {
@@ -175,7 +175,9 @@ export const generateTravelPlan = async ({ from, to, date, returnDate, travelers
   }
 };
 
-export const chatWithAssistant = async ({ message, chatHistory, tripContext }) => {
+export const generateTravelPlan = generateTrip;
+
+export const chatWithAssistant = async ({ message, chatHistory, tripContext }, user = null) => {
   const keyToUse = process.env.GEMINI_API_KEY;
 
   if (!keyToUse) {
