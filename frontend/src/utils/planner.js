@@ -399,15 +399,25 @@ export function buildTripAIPrompt(from, to, date, returnDate, travelers, budget,
 }
 
 // Send chat message through backend proxy (secure — key stays server-side)
-export async function getAIChatResponse(chatHistory, userMessage, tripData) {
+export async function getAIChatResponse(chatHistory, userMessage, tripData, externalSignal = null) {
   try {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    
+    // Combine 12s timeout with optional external cancellation signal
+    const timeoutSignal = AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined;
+    let signal = timeoutSignal;
+    if (externalSignal && timeoutSignal && AbortSignal.any) {
+      signal = AbortSignal.any([timeoutSignal, externalSignal]);
+    } else if (externalSignal) {
+      signal = externalSignal;
+    }
+
     const response = await fetch(`${backendUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: userMessage,
-        chatHistory: chatHistory,
+        message: typeof userMessage === 'string' ? userMessage.slice(0, 1000) : '',
+        chatHistory: Array.isArray(chatHistory) ? chatHistory.slice(-20) : [],
         tripContext: tripData ? {
           from: tripData.from,
           to: tripData.to,
@@ -418,7 +428,7 @@ export async function getAIChatResponse(chatHistory, userMessage, tripData) {
           distance: tripData.distance
         } : null
       }),
-      signal: AbortSignal.timeout(12000)
+      signal
     });
 
     if (!response.ok) {
@@ -426,14 +436,20 @@ export async function getAIChatResponse(chatHistory, userMessage, tripData) {
       try {
         errData = await response.json();
       } catch {}
-      throw new Error(errData.error || `Chat API error: ${response.status}`);
+      const err = new Error(errData.error || `Chat API error: ${response.status}`);
+      err.status = response.status;
+      err.code = errData.code;
+      throw err;
     }
 
     const data = await response.json();
-    return data.reply || "I'm sorry, I couldn't process that. Can you try again?";
+    if (data && typeof data.reply === 'string' && data.reply.trim()) {
+      return data.reply.trim();
+    }
+    return "I'm sorry, I couldn't process that response. Can you try asking in a different way?";
   } catch (error) {
     if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-      console.warn('Chat request timed out after 12 seconds');
+      console.warn('Chat request timed out or was cancelled');
     } else {
       console.warn('Chat AI response error:', error.message);
     }

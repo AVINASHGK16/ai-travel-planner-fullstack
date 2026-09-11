@@ -14,15 +14,68 @@ import AuthModal from './components/AuthModal';
 import SettingsPanel from './components/SettingsPanel';
 import { generateMockData, getAIGeneration } from './utils/planner';
 
-// Safe JSON parser to prevent uncaught SyntaxError crashes on corrupted localStorage
-const safeJsonParse = (str, fallback) => {
-  if (!str) return fallback;
-  try {
-    return JSON.parse(str);
-  } catch {
-    return fallback;
+// Robust LocalStorage Wrapper with quota error handling, safe parsing, and schema validation
+export const storage = {
+  get(key, fallback = null) {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return fallback;
+      const item = window.localStorage.getItem(key);
+      return item !== null ? item : fallback;
+    } catch (e) {
+      console.warn(`Storage read error for key "${key}":`, e?.message || e);
+      return fallback;
+    }
+  },
+  getJSON(key, fallback = null, validator = null) {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return fallback;
+      const raw = window.localStorage.getItem(key);
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      if (validator && !validator(parsed)) {
+        console.warn(`Storage data validation failed for key "${key}". Using fallback.`);
+        return fallback;
+      }
+      return parsed;
+    } catch (e) {
+      console.warn(`Storage JSON parse error for key "${key}":`, e?.message || e);
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return false;
+      window.localStorage.setItem(key, String(value));
+      return true;
+    } catch (e) {
+      console.warn(`Storage set failed for key "${key}" (Quota exceeded or restricted):`, e?.message || e);
+      return false;
+    }
+  },
+  setJSON(key, value) {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return false;
+      window.localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (e) {
+      console.warn(`Storage setJSON failed for key "${key}" (Quota exceeded or restricted):`, e?.message || e);
+      return false;
+    }
+  },
+  remove(key) {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) return false;
+      window.localStorage.removeItem(key);
+      return true;
+    } catch (e) {
+      console.warn(`Storage remove failed for key "${key}":`, e?.message || e);
+      return false;
+    }
   }
 };
+
+const isValidUser = (u) => u && typeof u === 'object' && typeof u.email === 'string' && u.email.includes('@');
+const isValidTripsArray = (arr) => Array.isArray(arr);
 
 export default function App() {
   const [theme, setTheme] = useState('dark');
@@ -36,19 +89,19 @@ export default function App() {
   
   // Settings state (client-only configuration)
   const [settings, setSettings] = useState({
-    googleMapsKey: localStorage.getItem('googleMapsKey') || ''
+    googleMapsKey: storage.get('googleMapsKey', '')
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Authentication State
   const [auth, setAuth] = useState({
-    user: null,
-    token: localStorage.getItem('authToken') || null,
+    user: storage.getJSON('user', null, isValidUser),
+    token: storage.get('authToken', null),
     modalOpen: false
   });
 
   // Saved Trips History
-  const [savedTrips, setSavedTrips] = useState([]);
+  const [savedTrips, setSavedTrips] = useState(() => storage.getJSON('savedTrips', [], isValidTripsArray));
 
   // Async operations lifecycle & non-reentrancy states
   const [savingTrip, setSavingTrip] = useState(false);
@@ -59,12 +112,12 @@ export default function App() {
   // Validate stored auth token on mount
   useEffect(() => {
     // Purge any legacy API keys from browser localStorage for security
-    localStorage.removeItem('geminiKey');
-    localStorage.removeItem('openWeatherKey');
+    storage.remove('geminiKey');
+    storage.remove('openWeatherKey');
 
     let active = true;
     const validateToken = async () => {
-      const token = localStorage.getItem('authToken');
+      const token = storage.get('authToken', null);
       if (!token) return;
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
@@ -75,20 +128,21 @@ export default function App() {
         if (!active) return;
         if (res.ok) {
           const data = await res.json().catch(() => null);
-          if (data && data.user) {
+          if (data && isValidUser(data.user)) {
             setAuth({ user: data.user, token, modalOpen: false });
+            storage.setJSON('user', data.user);
           } else {
-            const cachedUser = safeJsonParse(localStorage.getItem('user'), null);
+            const cachedUser = storage.getJSON('user', null, isValidUser);
             setAuth({ user: cachedUser, token, modalOpen: false });
           }
         } else if (res.status === 401 || res.status === 403) {
           // Explicit token rejection from server
-          localStorage.removeItem('authToken');
-          localStorage.removeItem('user');
+          storage.remove('authToken');
+          storage.remove('user');
           setAuth({ user: null, token: null, modalOpen: false });
         } else {
           // On 429, 500, or temporary server issues, retain cached user session
-          const cachedUser = safeJsonParse(localStorage.getItem('user'), null);
+          const cachedUser = storage.getJSON('user', null, isValidUser);
           if (cachedUser) {
             setAuth(prev => ({ ...prev, user: cachedUser }));
           }
@@ -96,7 +150,7 @@ export default function App() {
       } catch {
         // Backend offline or request timed out — use cached user data if available
         if (!active) return;
-        const cachedUser = safeJsonParse(localStorage.getItem('user'), null);
+        const cachedUser = storage.getJSON('user', null, isValidUser);
         if (cachedUser) {
           setAuth(prev => ({ ...prev, user: cachedUser }));
         }
@@ -127,7 +181,7 @@ export default function App() {
             const serverTrips = Array.isArray(data) ? data : [];
             
             // Preserve any local offline trips created by this user
-            const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+            const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
             const offlineOnlyTrips = Array.isArray(localTrips)
               ? localTrips.filter(t => t?.userEmail === auth.user.email && String(t?._id).startsWith('local_'))
               : [];
@@ -139,14 +193,14 @@ export default function App() {
 
             if (active) {
               setSavedTrips(mergedTrips);
-              localStorage.setItem('savedTrips', JSON.stringify(mergedTrips));
+              storage.setJSON('savedTrips', mergedTrips);
             }
           } else if (response.status === 401 || response.status === 403) {
             // Token expired or invalid — clear session cleanly
             handleLogout();
           } else if (response.status === 429) {
             console.warn('Trips request rate limited (429). Loading cached trips.');
-            const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+            const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
             const userTrips = Array.isArray(localTrips) ? localTrips.filter(t => t?.userEmail === auth.user.email) : [];
             if (active) setSavedTrips(userTrips);
           } else {
@@ -155,7 +209,7 @@ export default function App() {
         } catch (error) {
           if (!active) return;
           console.warn('Backend unavailable, loading trips from localStorage fallback:', error.message);
-          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+          const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
           const userTrips = Array.isArray(localTrips) ? localTrips.filter(t => t?.userEmail === auth.user.email) : [];
           setSavedTrips(userTrips);
         } finally {
@@ -174,15 +228,15 @@ export default function App() {
 
   const handleLoginSuccess = ({ user, token }) => {
     setAuth({ user, token, modalOpen: false });
-    localStorage.setItem('authToken', token);
-    localStorage.setItem('user', JSON.stringify(user));
+    storage.set('authToken', token);
+    storage.setJSON('user', user);
   };
 
   const handleLogout = async () => {
     const token = auth.token;
     setAuth({ user: null, token: null, modalOpen: false });
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
+    storage.remove('authToken');
+    storage.remove('user');
     setSavedTrips([]);
 
     if (token) {
@@ -201,9 +255,9 @@ export default function App() {
 
   const handleSaveSettings = (newSettings) => {
     setSettings({ googleMapsKey: newSettings.googleMapsKey || '' });
-    localStorage.setItem('googleMapsKey', newSettings.googleMapsKey || '');
-    localStorage.removeItem('geminiKey');
-    localStorage.removeItem('openWeatherKey');
+    storage.set('googleMapsKey', newSettings.googleMapsKey || '');
+    storage.remove('geminiKey');
+    storage.remove('openWeatherKey');
     alert('Settings successfully updated!');
   };
 
@@ -385,8 +439,8 @@ export default function App() {
         setSavedTrips(prev => [effectiveTrip, ...prev]);
         
         // Also sync to local storage for offline redundancy
-        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-        localStorage.setItem('savedTrips', JSON.stringify([effectiveTrip, ...(Array.isArray(localTrips) ? localTrips : [])]));
+        const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
+        storage.setJSON('savedTrips', [effectiveTrip, ...localTrips]);
         
         alert('Trip itinerary successfully saved to your dashboard!');
         return;
@@ -428,8 +482,8 @@ export default function App() {
       };
       setSavedTrips(prev => [localSavedTrip, ...prev]);
 
-      const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-      localStorage.setItem('savedTrips', JSON.stringify([localSavedTrip, ...(Array.isArray(localTrips) ? localTrips : [])]));
+      const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
+      storage.setJSON('savedTrips', [localSavedTrip, ...localTrips]);
 
       alert('Trip itinerary saved locally (Offline Mode).');
     } finally {
@@ -456,9 +510,9 @@ export default function App() {
       // Local offline trip: only exists in client storage
       if (typeof targetId === 'string' && targetId.startsWith('local_')) {
         setSavedTrips(prev => prev.filter(t => t?._id !== targetId));
-        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== targetId) : [];
-        localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+        const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
+        const filteredLocal = localTrips.filter(t => t?._id !== targetId);
+        storage.setJSON('savedTrips', filteredLocal);
         return;
       }
 
@@ -486,9 +540,9 @@ export default function App() {
         if (response.status === 404) {
           // Trip was already deleted or not found on server — clean up local state
           setSavedTrips(prev => prev.filter(t => t?._id !== targetId));
-          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-          const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== targetId) : [];
-          localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+          const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
+          const filteredLocal = localTrips.filter(t => t?._id !== targetId);
+          storage.setJSON('savedTrips', filteredLocal);
           return;
         }
 
@@ -504,9 +558,9 @@ export default function App() {
         
         // Deletion confirmed by server (200/204) — remove from local state and storage
         setSavedTrips(prev => prev.filter(t => t?._id !== targetId));
-        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== targetId) : [];
-        localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+        const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
+        const filteredLocal = localTrips.filter(t => t?._id !== targetId);
+        storage.setJSON('savedTrips', filteredLocal);
       } catch (err) {
         console.warn('Network error while deleting trip:', err.message);
         // Network drop or timeout — DO NOT delete locally; keep trip visible

@@ -2,9 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Compass, Sparkles, Smile } from 'lucide-react';
 import { getAIChatResponse } from '../utils/planner';
 
-// Safe markdown-bold renderer — prevents XSS from dangerouslySetInnerHTML
-const renderMessageText = (text) => {
-  if (!text) return null;
+// Safe markdown-bold renderer — strictly prevents XSS without dangerouslySetInnerHTML
+export const renderMessageText = (text) => {
+  if (typeof text !== 'string' || !text) return null;
   const parts = text.split(/(\*\*.*?\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
@@ -12,9 +12,11 @@ const renderMessageText = (text) => {
     }
     return part;
   });
-};// Local fallback rules engine when backend AI is offline or key is unconfigured
-const getLocalChatFallback = (text, tripData) => {
-  const lower = text.toLowerCase();
+};
+
+// Local fallback rules engine when backend AI is offline or key is unconfigured
+export const getLocalChatFallback = (text, tripData) => {
+  const lower = typeof text === 'string' ? text.toLowerCase() : '';
   const from = tripData?.from || 'Origin';
   const to = tripData?.to || 'Destination';
   
@@ -25,21 +27,21 @@ const getLocalChatFallback = (text, tripData) => {
 - 💊 **First Aid**: Basic painkillers, motion sickness pills (if driving), band-aids.
 - 📂 **Documents**: Printed tickets, ID proof, booking vouchers, vehicle papers.
 - 🧴 **Toiletries**: Sunscreen (SPF 50+ is recommended as daytime temp is ${tripData?.weather?.temp || '30°C'}), moisturizer, hand sanitizer.`;
+  } else if (lower.includes('safety') || lower.includes('safe') || lower.includes('score') || lower.includes('danger')) {
+    return `🛡️ **Safety Assessment for this Route: 8.5/10 (High)**
+- **Day Driving**: Highly safe. Road surface is excellent, and traffic moves smoothly.
+- **Night Driving**: Moderate safety. We recommend completing the journey by 9:00 PM due to active heavy truck freight traffic.
+- **Support**: Mechanics and trauma hubs are situated every 50-80 km on NH 44.`;
   } else if (lower.includes('route') || lower.includes('scenic') || lower.includes('fastest') || lower.includes('highway')) {
     return `Based on the route data between **${from}** and **${to}**:
 - 🛣️ **Fastest Route**: via national highway (NH 44). Drive takes around ${tripData?.options?.own?.time || '8.5 hours'}, covering ${tripData?.distance || '570'} km. Excellent 4-lane condition.
 - 🌳 **Scenic Route**: Diverges at the midway point into state routes, offering beautiful hill vistas but adds about 40 km and 1.5 hours to travel duration.
 - 🪙 **Tolls**: Total toll charges estimated around ₹${tripData?.options?.own?.routes?.[0]?.tolls || '700'}.`;
-  } else if (lower.includes('restaurant') || lower.includes('eat') || lower.includes('food') || lower.includes('cuisine')) {
+  } else if (lower.includes('restaurant') || lower.includes('eat') || lower.includes('food') || lower.includes('cuisine') || lower.includes('dine')) {
     return `Here are popular dining spots near the route to **${to}**:
 1. **Saravana Bhavan** - Rating: 4.6⭐. Outstanding traditional South Indian vegetarian breakfast and meals.
 2. **Grand Highway Plaza** - Rating: 4.4⭐. Multi-cuisine buffet, ideal for quick family dining.
 3. **Highway Grill** - Rating: 4.2⭐. Famous for tandoori and North Indian clay oven dishes.`;
-  } else if (lower.includes('safety') || lower.includes('safe') || lower.includes('score')) {
-    return `🛡️ **Safety Assessment for this Route: 8.5/10 (High)**
-- **Day Driving**: Highly safe. Road surface is excellent, and traffic moves smoothly.
-- **Night Driving**: Moderate safety. We recommend completing the journey by 9:00 PM due to active heavy truck freight traffic.
-- **Support**: Mechanics and trauma hubs are situated every 50-80 km on NH 44.`;
   } else if (lower.includes('weather') || lower.includes('temperature') || lower.includes('rain')) {
     return `🌦️ **Weather Briefing**:
 - Current temperature at ${to} is **${tripData?.weather?.temp || '32°C'}** with **${tripData?.weather?.condition || 'Sunny'}** conditions.
@@ -72,11 +74,15 @@ export default function ChatAssistant({ tripData }) {
   
   const chatEndRef = useRef(null);
   const isMounted = useRef(true);
+  const abortControllerRef = useRef(null);
 
   useEffect(() => {
     isMounted.current = true;
     return () => {
       isMounted.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
   }, []);
 
@@ -87,31 +93,52 @@ export default function ChatAssistant({ tripData }) {
   }, [messages, isOpen]);
 
   const handleSendMessage = async (textToSend) => {
-    const text = textToSend || inputText;
-    if (!text || !text.trim() || loading) return;
+    const rawText = textToSend !== undefined ? textToSend : inputText;
+    if (typeof rawText !== 'string') return;
+    const text = rawText.trim();
+    if (!text || loading) return;
+
+    // Bound message length to 1000 characters matching backend validator
+    const boundedText = text.slice(0, 1000);
 
     // Add user message
-    const userMsg = { sender: 'user', text };
+    const userMsg = { sender: 'user', text: boundedText };
     const updatedHistory = [...messages, userMsg];
     setMessages(updatedHistory);
     setInputText('');
     setLoading(true);
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       // Call backend AI proxy (Gemini key is kept server-side)
-      const reply = await getAIChatResponse(updatedHistory, text, tripData);
-      if (isMounted.current) {
+      const reply = await getAIChatResponse(updatedHistory, boundedText, tripData, controller.signal);
+      if (isMounted.current && !controller.signal.aborted) {
         setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
       }
     } catch (err) {
+      if (controller.signal.aborted) return;
       console.warn('Backend AI unavailable, using intelligent local response:', err.message);
+
+      let fallbackPrefix = '';
+      if (err.status === 429 || err.code === 'AI_QUOTA_EXCEEDED') {
+        fallbackPrefix = '⚠️ Live AI assistant is currently rate-limited due to high traffic.\nHere is quick route intelligence for your question:\n\n';
+      } else if (err.status === 504 || err.name === 'TimeoutError') {
+        fallbackPrefix = '⏱️ Live AI response timed out.\nHere is estimated guidance for your question:\n\n';
+      }
+
       // Fallback local rules engine for chat queries
-      const reply = getLocalChatFallback(text, tripData);
+      const localReply = getLocalChatFallback(boundedText, tripData);
+      const finalReply = fallbackPrefix ? `${fallbackPrefix}${localReply}` : localReply;
       if (isMounted.current) {
-        setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
+        setMessages(prev => [...prev, { sender: 'assistant', text: finalReply }]);
       }
     } finally {
-      if (isMounted.current) {
+      if (isMounted.current && !controller.signal.aborted) {
         setLoading(false);
       }
     }
@@ -222,6 +249,7 @@ export default function ChatAssistant({ tripData }) {
             <input
               type="text"
               value={inputText}
+              maxLength={1000}
               disabled={loading}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyPress}
