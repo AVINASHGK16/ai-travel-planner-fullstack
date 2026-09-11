@@ -14,6 +14,8 @@ import AuthModal from './components/AuthModal';
 import SettingsPanel from './components/SettingsPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { generateMockData, getAIGeneration } from './utils/planner';
+import { getCurrentUser, logout as apiLogout } from './services/authService';
+import { fetchTrips as apiFetchTrips, saveTrip as apiSaveTrip, deleteTrip as apiDeleteTrip } from './services/tripService';
 
 // Robust LocalStorage Wrapper with quota error handling, safe parsing, and schema validation
 export const storage = {
@@ -121,17 +123,12 @@ export default function App() {
       const token = storage.get('authToken', null);
       if (!token) return;
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-        const res = await fetch(`${backendUrl}/api/auth/me`, {
-          signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined,
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const res = await getCurrentUser(token);
         if (!active) return;
         if (res.ok) {
-          const data = await res.json().catch(() => null);
-          if (data && isValidUser(data.user)) {
-            setAuth({ user: data.user, token, modalOpen: false });
-            storage.setJSON('user', data.user);
+          if (res.user && isValidUser(res.user)) {
+            setAuth({ user: res.user, token, modalOpen: false });
+            storage.setJSON('user', res.user);
           } else {
             const cachedUser = storage.getJSON('user', null, isValidUser);
             setAuth({ user: cachedUser, token, modalOpen: false });
@@ -167,26 +164,16 @@ export default function App() {
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const timeoutSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
-      ? AbortSignal.timeout(7000)
-      : undefined;
-    const fetchSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function' && timeoutSignal)
-      ? AbortSignal.any([controller.signal, timeoutSignal])
-      : controller.signal;
 
     const fetchTrips = async () => {
       if (auth.user && auth.token) {
         setLoadingTrips(true);
         try {
-          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-          const response = await fetch(`${backendUrl}/api/trips`, {
-            signal: fetchSignal,
-            headers: { 'Authorization': `Bearer ${auth.token}` }
-          });
+          const response = await apiFetchTrips(auth.token, controller.signal);
           if (!active) return;
 
           if (response.ok) {
-            const data = await response.json().catch(() => null);
+            const data = response.data;
             const serverTrips = Array.isArray(data) ? data : [];
             
             // Preserve any local offline trips created by this user
@@ -253,12 +240,7 @@ export default function App() {
 
     if (token) {
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-        await fetch(`${backendUrl}/api/auth/logout`, {
-          method: 'POST',
-          signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined,
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        await apiLogout(token);
       } catch (err) {
         // Local logout completed even if network drops
       }
@@ -444,19 +426,10 @@ export default function App() {
 
     setSavingTrip(true);
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const response = await fetch(`${backendUrl}/api/trips`, {
-        method: 'POST',
-        signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${auth.token}`
-        },
-        body: JSON.stringify(tripToSave)
-      });
+      const response = await apiSaveTrip(tripToSave, auth.token);
 
       if (response.ok) {
-        const savedData = await response.json().catch(() => null);
+        const savedData = response.data;
         const effectiveTrip = savedData || { ...tripToSave, _id: `trip_${Date.now()}` };
         setSavedTrips(prev => [effectiveTrip, ...prev]);
         
@@ -471,11 +444,8 @@ export default function App() {
       // Handle specific HTTP error status codes gracefully
       if (response.status === 400) {
         let errorMsg = 'Invalid trip details. Please check your trip inputs.';
-        try {
-          const errData = await response.json();
-          if (errData?.error) errorMsg = errData.error;
-          else if (errData?.details?.[0]?.message) errorMsg = errData.details[0].message;
-        } catch { /* ignore parsing errors */ }
+        if (response.data?.error) errorMsg = response.data.error;
+        else if (response.data?.details?.[0]?.message) errorMsg = response.data.details[0].message;
         alert(`Could not save trip: ${errorMsg}`);
         return;
       }
@@ -540,12 +510,7 @@ export default function App() {
 
       // Backend trip: requires authenticated server confirmation
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-        const response = await fetch(`${backendUrl}/api/trips/${targetId}`, {
-          method: 'DELETE',
-          signal: AbortSignal.timeout ? AbortSignal.timeout(7000) : undefined,
-          headers: { 'Authorization': `Bearer ${auth.token}` }
-        });
+        const response = await apiDeleteTrip(targetId, auth.token);
 
         if (response.status === 401 || response.status === 403) {
           alert('Your session has expired. Please sign in again.');
@@ -569,11 +534,7 @@ export default function App() {
         }
 
         if (!response.ok) {
-          let errorDetail = '';
-          try {
-            const errJson = await response.json();
-            if (errJson?.error) errorDetail = `: ${errJson.error}`;
-          } catch { /* ignore parsing errors */ }
+          const errorDetail = response.data?.error ? `: ${response.data.error}` : '';
           alert(`Failed to delete trip from server${errorDetail}. Please try again.`);
           return; // Trip remains visible on server error
         }

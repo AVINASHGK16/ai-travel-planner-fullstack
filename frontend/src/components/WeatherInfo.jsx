@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Cloud, Sun, CloudRain, Wind, AlertTriangle, Thermometer, Loader2 } from 'lucide-react';
+import { fetchWeather } from '../services/weatherService';
 
 export default function WeatherInfo({ weather, destination }) {
   const [liveWeather, setLiveWeather] = useState(weather);
@@ -18,24 +19,13 @@ export default function WeatherInfo({ weather, destination }) {
 
     let active = true;
     const controller = new AbortController();
-    const timeoutSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
-      ? AbortSignal.timeout(6000)
-      : undefined;
-    const fetchSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function' && timeoutSignal)
-      ? AbortSignal.any([controller.signal, timeoutSignal])
-      : controller.signal;
 
     const fetchLiveWeather = async () => {
       setLoadingWeather(true);
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-        const url = `${backendUrl}/api/weather?city=${encodeURIComponent(targetCity)}`;
-        const res = await fetch(url, { signal: fetchSignal });
+        const res = await fetchWeather(targetCity, controller.signal);
         
         if (!res.ok) {
-          let errData = {};
-          try { errData = await res.json(); } catch {}
-          
           if (res.status === 404) {
             throw new Error(`Weather station not found for "${targetCity}".`);
           }
@@ -45,10 +35,10 @@ export default function WeatherInfo({ weather, destination }) {
           if (res.status === 503) {
             throw new Error('Live weather service is not configured on the server.');
           }
-          throw new Error(errData.error || 'Live weather service is temporarily unavailable.');
+          throw new Error(res.data?.error || 'Live weather service is temporarily unavailable.');
         }
 
-        const data = await res.json();
+        const data = res.data;
         if (!data || typeof data.temp !== 'string' || !data.temp.trim()) {
           throw new Error('Weather service returned incomplete information.');
         }

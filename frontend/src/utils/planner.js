@@ -1,4 +1,5 @@
 // AI Travel Planner Utility for Data Generation and API Integration
+import { generateTripPlan, sendChatMessage } from '../services/aiService.js';
 
 // Local coordinates database for drawing beautiful Leaflet routes
 export const cityCoordinates = {
@@ -274,63 +275,11 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
   };
 }
 
-// Invoke the backend proxy to get AI-powered itineraries (secure — key stays server-side)
+// Invoke the backend proxy to get AI-powered itineraries (delegated to aiService)
 export async function getAIGeneration(searchParams, externalSignal) {
-  try {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    
-    // Combine external cancellation signal with a strict 20s timeout
-    let effectiveSignal;
-    if (typeof AbortSignal !== 'undefined' && AbortSignal.any && externalSignal) {
-      effectiveSignal = AbortSignal.any([externalSignal, AbortSignal.timeout(20000)]);
-    } else if (externalSignal) {
-      effectiveSignal = externalSignal;
-    } else if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
-      effectiveSignal = AbortSignal.timeout(20000);
-    }
-
-    const response = await fetch(`${backendUrl}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: searchParams.from,
-        to: searchParams.to,
-        date: searchParams.date,
-        returnDate: searchParams.returnDate,
-        travelers: searchParams.travelers,
-        budget: searchParams.budget,
-        preferredMode: searchParams.preferredMode
-      }),
-      signal: effectiveSignal
-    });
-
-    if (!response.ok) {
-      let errData = {};
-      try {
-        errData = await response.json();
-      } catch {}
-
-      const err = new Error(errData.error || `AI generation failed with status ${response.status}`);
-      err.code = errData.code || (response.status === 429 ? 'AI_QUOTA_EXCEEDED' : 'AI_ERROR');
-      err.status = response.status;
-      throw err;
-    }
-
-    return await response.json();
-  } catch (error) {
-    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      if (externalSignal?.aborted) {
-        const cancelErr = new Error('Search cancelled by user');
-        cancelErr.code = 'CANCELLED';
-        throw cancelErr;
-      }
-      const timeoutErr = new Error('AI generation timed out after 20 seconds');
-      timeoutErr.code = 'AI_TIMEOUT';
-      throw timeoutErr;
-    }
-    throw error;
-  }
+  return generateTripPlan(searchParams, externalSignal);
 }
+
 
 // Generate the customized query for travel planning
 export function buildTripAIPrompt(from, to, date, returnDate, travelers, budget, mode) {
@@ -398,61 +347,7 @@ export function buildTripAIPrompt(from, to, date, returnDate, travelers, budget,
   `;
 }
 
-// Send chat message through backend proxy (secure — key stays server-side)
+// Send chat message through backend proxy (delegated to aiService)
 export async function getAIChatResponse(chatHistory, userMessage, tripData, externalSignal = null) {
-  try {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    
-    // Combine 12s timeout with optional external cancellation signal
-    const timeoutSignal = AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined;
-    let signal = timeoutSignal;
-    if (externalSignal && timeoutSignal && AbortSignal.any) {
-      signal = AbortSignal.any([timeoutSignal, externalSignal]);
-    } else if (externalSignal) {
-      signal = externalSignal;
-    }
-
-    const response = await fetch(`${backendUrl}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: typeof userMessage === 'string' ? userMessage.slice(0, 1000) : '',
-        chatHistory: Array.isArray(chatHistory) ? chatHistory.slice(-20) : [],
-        tripContext: tripData ? {
-          from: tripData.from,
-          to: tripData.to,
-          date: tripData.date,
-          returnDate: tripData.returnDate,
-          travelers: tripData.travelers,
-          budget: tripData.budget,
-          distance: tripData.distance
-        } : null
-      }),
-      signal
-    });
-
-    if (!response.ok) {
-      let errData = {};
-      try {
-        errData = await response.json();
-      } catch {}
-      const err = new Error(errData.error || `Chat API error: ${response.status}`);
-      err.status = response.status;
-      err.code = errData.code;
-      throw err;
-    }
-
-    const data = await response.json();
-    if (data && typeof data.reply === 'string' && data.reply.trim()) {
-      return data.reply.trim();
-    }
-    return "I'm sorry, I couldn't process that response. Can you try asking in a different way?";
-  } catch (error) {
-    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-      console.warn('Chat request timed out or was cancelled');
-    } else {
-      console.warn('Chat AI response error:', error.message);
-    }
-    throw error;
-  }
+  return sendChatMessage({ message: userMessage, chatHistory, tripContext: tripData }, externalSignal);
 }
