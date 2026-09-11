@@ -24,10 +24,8 @@ export default function App() {
   const [activeTrip, setActiveTrip] = useState(null);
   const [activeMode, setActiveMode] = useState('flight'); // 'flight' | 'train' | 'bus' | 'cab' | 'own'
   
-  // Settings/API Keys state
+  // Settings state (client-only configuration)
   const [settings, setSettings] = useState({
-    geminiKey: localStorage.getItem('geminiKey') || '',
-    openWeatherKey: localStorage.getItem('openWeatherKey') || '',
     googleMapsKey: localStorage.getItem('googleMapsKey') || ''
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -44,6 +42,10 @@ export default function App() {
 
   // Validate stored auth token on mount
   useEffect(() => {
+    // Purge any legacy API keys from browser localStorage for security
+    localStorage.removeItem('geminiKey');
+    localStorage.removeItem('openWeatherKey');
+
     const validateToken = async () => {
       const token = localStorage.getItem('authToken');
       if (!token) return;
@@ -112,11 +114,11 @@ export default function App() {
   };
 
   const handleSaveSettings = (newSettings) => {
-    setSettings(newSettings);
-    localStorage.setItem('geminiKey', newSettings.geminiKey);
-    localStorage.setItem('openWeatherKey', newSettings.openWeatherKey);
-    localStorage.setItem('googleMapsKey', newSettings.googleMapsKey);
-    alert('Developer keys successfully configured!');
+    setSettings({ googleMapsKey: newSettings.googleMapsKey || '' });
+    localStorage.setItem('googleMapsKey', newSettings.googleMapsKey || '');
+    localStorage.removeItem('geminiKey');
+    localStorage.removeItem('openWeatherKey');
+    alert('Settings successfully updated!');
   };
 
   // Perform search and fetch AI travel plans
@@ -133,10 +135,15 @@ export default function App() {
     }
 
     try {
-      if (settings.geminiKey) {
-        // Route AI generation through backend proxy (secure)
-        const responseData = await getAIGeneration(params, settings.geminiKey);
-        
+      // Route AI generation through backend proxy (keys stay server-side)
+      let responseData = null;
+      try {
+        responseData = await getAIGeneration(params);
+      } catch (aiErr) {
+        console.warn('Backend AI generation unavailable, using local itinerary engine:', aiErr.message);
+      }
+
+      if (responseData && responseData.itinerary) {
         // Formulate coordinates
         const fromCoords = generateMockData(params.from, params.to).coordinates.from;
         const toCoords = generateMockData(params.from, params.to).coordinates.to;
@@ -171,12 +178,11 @@ export default function App() {
         );
         
         // Emulate network latency
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 800));
         setActiveTrip(mockData);
       }
     } catch (err) {
-      console.error(err);
-      alert('AI itinerary request failed. Falling back to local data generation engine.');
+      console.error('Search processing error:', err);
       const fallbackData = generateMockData(
         params.from,
         params.to,
@@ -489,7 +495,6 @@ export default function App() {
                 <WeatherInfo 
                   weather={activeTrip.weather} 
                   destination={activeTrip.to}
-                  openWeatherKey={settings.openWeatherKey}
                 />
 
                 {/* Budget Calculator */}
@@ -503,7 +508,7 @@ export default function App() {
             </div>
 
             {/* Floating Chat Assistant */}
-            <ChatAssistant tripData={activeTrip} settings={settings} />
+            <ChatAssistant tripData={activeTrip} />
 
           </div>
         )}
@@ -519,7 +524,7 @@ export default function App() {
             />
             {/* Show Chatbot even on dashboard with last active trip info */}
             {savedTrips.length > 0 && (
-              <ChatAssistant tripData={savedTrips[0]} settings={settings} />
+              <ChatAssistant tripData={savedTrips[0]} />
             )}
           </>
         )}

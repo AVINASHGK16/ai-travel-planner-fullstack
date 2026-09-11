@@ -7,13 +7,11 @@ export default function SettingsPanel({
   settings,
   onSaveSettings
 }) {
-  const [geminiKey, setGeminiKey] = useState(settings.geminiKey || '');
-  const [openWeatherKey, setOpenWeatherKey] = useState(settings.openWeatherKey || '');
   const [googleMapsKey, setGoogleMapsKey] = useState(settings.googleMapsKey || '');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSaveSettings({ geminiKey, openWeatherKey, googleMapsKey });
+    onSaveSettings({ googleMapsKey });
     onClose();
   };
 
@@ -38,51 +36,33 @@ export default function SettingsPanel({
         </div>
 
         {/* Security Notice Callout */}
-        <div className="mt-4 p-3.5 bg-blue-500/10 border border-blue-500/30 rounded-xl flex items-start gap-3">
-          <ShieldAlert className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-blue-200/90 leading-normal">
-            <span className="font-semibold block text-blue-400 mb-0.5">Secure Backend Proxy</span>
-            Keys configured here are saved locally and proxied securely through your backend server — never exposed directly to client-side network calls. Alternatively, keys can be set in the backend <code className="bg-black/30 px-1 py-0.5 rounded text-blue-300">.env</code> file.
+        <div className="mt-4 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-3">
+          <ShieldAlert className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="text-xs text-emerald-200/90 leading-normal">
+            <span className="font-semibold block text-emerald-400 mb-0.5">Zero-Exposure Server Architecture</span>
+            Production API keys (<code className="bg-black/30 px-1 py-0.5 rounded text-emerald-300">GEMINI_API_KEY</code> and <code className="bg-black/30 px-1 py-0.5 rounded text-emerald-300">WEATHER_API_KEY</code>) are securely managed on the backend server. They are never entered, stored, or exposed in your browser.
+          </div>
+        </div>
+
+        {/* Server Service Badges */}
+        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+          <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <div>
+              <p className="font-medium text-white">Gemini AI</p>
+              <p className="text-[10px] text-slate-400">Server-side proxy</p>
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 flex items-center gap-2.5">
+            <CloudSun className="w-4 h-4 text-blue-400" />
+            <div>
+              <p className="font-medium text-white">OpenWeather</p>
+              <p className="text-[10px] text-slate-400">Server-side proxy</p>
+            </div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-          
-          {/* Gemini API Key */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              Gemini API Key (Generative AI)
-            </label>
-            <input
-              type="password"
-              value={geminiKey}
-              onChange={(e) => setGeminiKey(e.target.value)}
-              placeholder="AI itinerary and chat generator key..."
-              className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-slate-500"
-            />
-            <p className="text-[10px] text-slate-400 mt-1">
-              Optional if GEMINI_API_KEY is configured on the backend server. Leave blank for simulated mode.
-            </p>
-          </div>
-
-          {/* OpenWeather Key */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5 flex items-center gap-2">
-              <CloudSun className="w-4 h-4 text-blue-400" />
-              OpenWeather API Key
-            </label>
-            <input
-              type="password"
-              value={openWeatherKey}
-              onChange={(e) => setOpenWeatherKey(e.target.value)}
-              placeholder="Managed securely on server (WEATHER_API_KEY)..."
-              className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-slate-500"
-            />
-            <p className="text-[10px] text-slate-400 mt-1">
-              Managed securely on the backend server via WEATHER_API_KEY.
-            </p>
-          </div>
 
           {/* Google Maps Key */}
           <div>

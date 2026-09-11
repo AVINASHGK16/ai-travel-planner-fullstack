@@ -317,19 +317,19 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
 
 // 1. Generate travel plan
 app.post('/api/generate', aiLimiter, async (req, res) => {
-  const { from, to, date, returnDate, travelers, budget, preferredMode, geminiKey } = req.body;
+  const { from, to, date, returnDate, travelers, budget, preferredMode } = req.body;
 
   // Input validation
   if (!from || !to || !date) {
     return res.status(400).json({ error: 'Origin, destination, and date are required.' });
   }
 
-  // Use server env var first, fall back to client-provided key
-  const keyToUse = process.env.GEMINI_API_KEY || geminiKey;
+  // Security: API key is exclusively read from server environment
+  const keyToUse = process.env.GEMINI_API_KEY;
 
   if (!keyToUse) {
-    return res.status(400).json({
-      error: 'Gemini API Key is not configured. Set GEMINI_API_KEY in server environment or provide one in settings.'
+    return res.status(503).json({
+      error: 'Gemini AI service is not configured on the server. Please set GEMINI_API_KEY in server environment.'
     });
   }
 
@@ -428,12 +428,13 @@ app.post('/api/generate', aiLimiter, async (req, res) => {
 
 // 2. Chat with AI assistant (proxied — key stays server-side)
 app.post('/api/chat', aiLimiter, async (req, res) => {
-  const { message, chatHistory, tripContext, geminiKey } = req.body;
+  const { message, chatHistory, tripContext } = req.body;
 
-  const keyToUse = process.env.GEMINI_API_KEY || geminiKey;
+  // Security: API key is exclusively read from server environment
+  const keyToUse = process.env.GEMINI_API_KEY;
 
   if (!keyToUse) {
-    return res.status(400).json({ error: 'Gemini API Key is not configured.' });
+    return res.status(503).json({ error: 'Gemini AI service is not configured on the server.' });
   }
 
   if (!message || typeof message !== 'string' || !message.trim()) {
@@ -505,7 +506,7 @@ app.get('/api/weather', async (req, res) => {
   const apiKey = process.env.WEATHER_API_KEY;
 
   if (!apiKey) {
-    return res.status(400).json({ error: 'OpenWeather API Key is not configured on the server.' });
+    return res.status(503).json({ error: 'OpenWeather API Key is not configured on the server.' });
   }
 
   if (!city || typeof city !== 'string' || !city.trim()) {
@@ -530,7 +531,8 @@ app.get('/api/weather', async (req, res) => {
       rainAlert: data.rain ? 'Possible light showers expected' : 'Clear dry weather forecast'
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Weather service error:', error.message);
+    res.status(500).json({ error: 'Failed to retrieve weather data.' });
   }
 });
 

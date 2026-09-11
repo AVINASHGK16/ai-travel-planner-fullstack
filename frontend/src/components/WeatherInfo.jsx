@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Cloud, Sun, CloudRain, Wind, AlertTriangle, Thermometer } from 'lucide-react';
 
-export default function WeatherInfo({ weather, destination, openWeatherKey }) {
+export default function WeatherInfo({ weather, destination }) {
   const [liveWeather, setLiveWeather] = useState(weather);
 
   useEffect(() => {

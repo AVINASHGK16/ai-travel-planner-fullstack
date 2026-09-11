@@ -239,7 +239,7 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
 }
 
 // Invoke the backend proxy to get AI-powered itineraries (secure — key stays server-side)
-export async function getAIGeneration(searchParams, geminiKey) {
+export async function getAIGeneration(searchParams) {
   try {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const response = await fetch(`${backendUrl}/api/generate`, {
@@ -252,8 +252,7 @@ export async function getAIGeneration(searchParams, geminiKey) {
         returnDate: searchParams.returnDate,
         travelers: searchParams.travelers,
         budget: searchParams.budget,
-        preferredMode: searchParams.preferredMode,
-        geminiKey: geminiKey || undefined
+        preferredMode: searchParams.preferredMode
       })
     });
 
@@ -336,7 +335,7 @@ export function buildTripAIPrompt(from, to, date, returnDate, travelers, budget,
 }
 
 // Send chat message through backend proxy (secure — key stays server-side)
-export async function getAIChatResponse(chatHistory, userMessage, tripData, geminiKey) {
+export async function getAIChatResponse(chatHistory, userMessage, tripData) {
   try {
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
     const response = await fetch(`${backendUrl}/api/chat`, {
@@ -352,8 +351,7 @@ export async function getAIChatResponse(chatHistory, userMessage, tripData, gemi
           travelers: tripData.travelers,
           budget: tripData.budget,
           distance: tripData.distance
-        } : null,
-        geminiKey: geminiKey || undefined
+        } : null
       })
     });
 

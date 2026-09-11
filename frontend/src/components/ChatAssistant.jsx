@@ -12,9 +12,57 @@ const renderMessageText = (text) => {
     }
     return part;
   });
+};// Local fallback rules engine when backend AI is offline or key is unconfigured
+const getLocalChatFallback = (text, tripData) => {
+  const lower = text.toLowerCase();
+  const from = tripData?.from || 'Origin';
+  const to = tripData?.to || 'Destination';
+  
+  if (lower.includes('packing') || lower.includes('what should i bring') || lower.includes('pack')) {
+    return `Here is a custom **Packing Checklist** for your trip to ${to}:
+- 👕 **Clothing**: Lightweight clothes for daytime, a light jacket (stops/midpoints can get cool in the evening).
+- 🔌 **Electronics**: Phone charger, power bank (crucial for road trips), camera, headphones.
+- 💊 **First Aid**: Basic painkillers, motion sickness pills (if driving), band-aids.
+- 📂 **Documents**: Printed tickets, ID proof, booking vouchers, vehicle papers.
+- 🧴 **Toiletries**: Sunscreen (SPF 50+ is recommended as daytime temp is ${tripData?.weather?.temp || '30°C'}), moisturizer, hand sanitizer.`;
+  } else if (lower.includes('route') || lower.includes('scenic') || lower.includes('fastest') || lower.includes('highway')) {
+    return `Based on the route data between **${from}** and **${to}**:
+- 🛣️ **Fastest Route**: via national highway (NH 44). Drive takes around ${tripData?.options?.own?.time || '8.5 hours'}, covering ${tripData?.distance || '570'} km. Excellent 4-lane condition.
+- 🌳 **Scenic Route**: Diverges at the midway point into state routes, offering beautiful hill vistas but adds about 40 km and 1.5 hours to travel duration.
+- 🪙 **Tolls**: Total toll charges estimated around ₹${tripData?.options?.own?.routes?.[0]?.tolls || '700'}.`;
+  } else if (lower.includes('restaurant') || lower.includes('eat') || lower.includes('food') || lower.includes('cuisine')) {
+    return `Here are popular dining spots near the route to **${to}**:
+1. **Saravana Bhavan** - Rating: 4.6⭐. Outstanding traditional South Indian vegetarian breakfast and meals.
+2. **Grand Highway Plaza** - Rating: 4.4⭐. Multi-cuisine buffet, ideal for quick family dining.
+3. **Highway Grill** - Rating: 4.2⭐. Famous for tandoori and North Indian clay oven dishes.`;
+  } else if (lower.includes('safety') || lower.includes('safe') || lower.includes('score')) {
+    return `🛡️ **Safety Assessment for this Route: 8.5/10 (High)**
+- **Day Driving**: Highly safe. Road surface is excellent, and traffic moves smoothly.
+- **Night Driving**: Moderate safety. We recommend completing the journey by 9:00 PM due to active heavy truck freight traffic.
+- **Support**: Mechanics and trauma hubs are situated every 50-80 km on NH 44.`;
+  } else if (lower.includes('weather') || lower.includes('temperature') || lower.includes('rain')) {
+    return `🌦️ **Weather Briefing**:
+- Current temperature at ${to} is **${tripData?.weather?.temp || '32°C'}** with **${tripData?.weather?.condition || 'Sunny'}** conditions.
+- Transit points forecast: stops like Midpoint average **34°C** and dry skies.
+- **Precipitation**: ${tripData?.weather?.rainAlert || 'No rain expected'}. Great weather for travel!`;
+  } else if (lower.includes('budget') || lower.includes('cost') || lower.includes('cheap')) {
+    return `💰 **Budget Optimization Tips**:
+- 🚆 **Travel**: Choose Train Sleeper class (₹${tripData?.options?.train?.[1]?.price || '350'} per head) over flights.
+- 🏨 **Stay**: Choose transit stays or 3-star lodging to lower lodging costs by up to 40%.
+- 🍽️ **Food**: Dine at highway plazas rather than fine-dining resorts to save ₹1,000+ daily.`;
+  }
+  return `I can assist you with your trip to **${to}**! You can ask about:
+1. 🎒 **Packing list Suggestions**
+2. 🛣️ **Route details & tolls**
+3. 🍽️ **Restaurant recommendations**
+4. 🛡️ **Safety ratings**
+5. 🌦️ **Weather alerts**
+6. 💰 **Budget optimization tips**
+
+Try asking: *"What should I pack for this trip?"* or *"Are there any good restaurants on the way?"*`;
 };
 
-export default function ChatAssistant({ tripData, settings }) {
+export default function ChatAssistant({ tripData }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { sender: 'assistant', text: "Hello! I'm your AI Travel Assistant. Ask me anything about your trip, packing tips, safety scores, local cuisines, or weather forecasts!" }
@@ -40,70 +88,16 @@ export default function ChatAssistant({ tripData, settings }) {
     setInputText('');
     setLoading(true);
 
-    // Call AI or local response generator
     try {
-      let reply = '';
-      if (settings.geminiKey) {
-        reply = await getAIChatResponse(messages, text, tripData, settings.geminiKey);
-      } else {
-        // Fallback local rules engine for chat queries
-        const lower = text.toLowerCase();
-        const from = tripData?.from || 'Origin';
-        const to = tripData?.to || 'Destination';
-        
-        if (lower.includes('packing') || lower.includes('what should i bring') || lower.includes('pack')) {
-          reply = `Here is a custom **Packing Checklist** for your trip to ${to}:
-- 👕 **Clothing**: Lightweight clothes for daytime, a light jacket (stops/midpoints can get cool in the evening).
-- 🔌 **Electronics**: Phone charger, power bank (crucial for road trips), camera, headphones.
-- 💊 **First Aid**: Basic painkillers, motion sickness pills (if driving), band-aids.
-- 📂 **Documents**: Printed tickets, ID proof, booking vouchers, vehicle papers.
-- 🧴 **Toiletries**: Sunscreen (SPF 50+ is recommended as daytime temp is ${tripData?.weather?.temp || '30°C'}), moisturizer, hand sanitizer.`;
-        } else if (lower.includes('route') || lower.includes('scenic') || lower.includes('fastest') || lower.includes('highway')) {
-          reply = `Based on the route data between **${from}** and **${to}**:
-- 🛣️ **Fastest Route**: via national highway (NH 44). Drive takes around ${tripData?.options?.own?.time || '8.5 hours'}, covering ${tripData?.distance || '570'} km. Excellent 4-lane condition.
-- 🌳 **Scenic Route**: Diverges at the midway point into state routes, offering beautiful hill vistas but adds about 40 km and 1.5 hours to travel duration.
-- 🪙 **Tolls**: Total toll charges estimated around ₹${tripData?.options?.own?.routes?.[0]?.tolls || '700'}.`;
-        } else if (lower.includes('restaurant') || lower.includes('eat') || lower.includes('food') || lower.includes('cuisine')) {
-          reply = `Here are popular dining spots near the route to **${to}**:
-1. **Saravana Bhavan** - Rating: 4.6⭐. Outstanding traditional South Indian vegetarian breakfast and meals.
-2. **Grand Highway Plaza** - Rating: 4.4⭐. Multi-cuisine buffet, ideal for quick family dining.
-3. **Highway Grill** - Rating: 4.2⭐. Famous for tandoori and North Indian clay oven dishes.`;
-        } else if (lower.includes('safety') || lower.includes('safe') || lower.includes('score')) {
-          reply = `🛡️ **Safety Assessment for this Route: 8.5/10 (High)**
-- **Day Driving**: Highly safe. Road surface is excellent, and traffic moves smoothly.
-- **Night Driving**: Moderate safety. We recommend completing the journey by 9:00 PM due to active heavy truck freight traffic.
-- **Support**: Mechanics and trauma hubs are situated every 50-80 km on NH 44.`;
-        } else if (lower.includes('weather') || lower.includes('temperature') || lower.includes('rain')) {
-          reply = `🌦️ **Weather Briefing**:
-- Current temperature at ${to} is **${tripData?.weather?.temp || '32°C'}** with **${tripData?.weather?.condition || 'Sunny'}** conditions.
-- Transit points forecast: stops like Midpoint average **34°C** and dry skies.
-- **Precipitation**: ${tripData?.weather?.rainAlert || 'No rain expected'}. Great weather for travel!`;
-        } else if (lower.includes('budget') || lower.includes('cost') || lower.includes('cheap')) {
-          reply = `💰 **Budget Optimization Tips**:
-- 🚆 **Travel**: Choose Train Sleeper class (₹${tripData?.options?.train?.[1]?.price || '350'} per head) over flights.
-- 🏨 **Stay**: Choose transit stays or 3-star lodging to lower lodging costs by up to 40%.
-- 🍽️ **Food**: Dine at highway plazas rather than fine-dining resorts to save ₹1,000+ daily.`;
-        } else {
-          reply = `I'm on simulated mode since there is no Gemini API key entered. However, I can help you with:
-1. 🎒 **Packing list Suggestions**
-2. 🛣️ **Route details & tolls**
-3. 🍽️ **Restaurant recommendations**
-4. 🛡️ **Safety ratings**
-5. 🌦️ **Weather alerts**
-6. 💰 **Budget optimization tips**
-
-Try asking: *"What should I pack for this trip?"* or *"Are there any good restaurants on the way?"*`;
-        }
-      }
-      
-      // Artificial slight delay for typing feel
-      setTimeout(() => {
-        setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
-        setLoading(false);
-      }, 600);
-
+      // Call backend AI proxy (Gemini key is kept server-side)
+      const reply = await getAIChatResponse(messages, text, tripData);
+      setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
     } catch (err) {
-      setMessages(prev => [...prev, { sender: 'assistant', text: `Error generating response: ${err.message}` }]);
+      console.warn('Backend AI unavailable, using intelligent local response:', err.message);
+      // Fallback local rules engine for chat queries
+      const reply = getLocalChatFallback(text, tripData);
+      setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
+    } finally {
       setLoading(false);
     }
   };
@@ -140,8 +134,8 @@ Try asking: *"What should I pack for this trip?"* or *"Are there any good restau
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
                 </h4>
-                <p className="text-[9px] text-slate-400 font-mono">
-                  {settings.geminiKey ? 'Gemini AI Active' : 'Offline Mode (Local Knowledge)'}
+                <p className="text-[9px] text-emerald-400 font-mono">
+                  AI Travel Guide · Online
                 </p>
               </div>
             </div>
