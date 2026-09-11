@@ -11,9 +11,19 @@ export default function TravelOptions({
   children // This will be RoadTripDetails component if Own Vehicle is selected
 }) {
   
-  // Format city for URL parameters
+  // Safe currency / price formatter that handles numbers, strings, and missing values
+  const formatPrice = (p) => {
+    if (typeof p === 'number' && !Number.isNaN(p)) return `₹${p.toLocaleString()}`;
+    if (typeof p === 'string' && p.trim()) {
+      return p.trim().startsWith('₹') ? p.trim() : `₹${p.trim()}`;
+    }
+    return 'N/A';
+  };
+
+  // Format city for URL parameters safely
   const getSearchCity = (name) => {
-    return encodeURIComponent(name?.split(',')[0]?.trim() || '');
+    if (typeof name !== 'string') return '';
+    return encodeURIComponent(name.split(',')[0]?.trim() || '');
   };
 
   const getRedBusUrl = () => {
@@ -38,7 +48,7 @@ export default function TravelOptions({
   };
 
   const renderBusTab = () => {
-    const busList = options?.bus || [];
+    const busList = (options?.bus || []).filter(b => b && typeof b === 'object');
     if (busList.length === 0) return <div className="text-center py-8 text-slate-400">No buses available for this route.</div>;
 
     return (
@@ -48,24 +58,24 @@ export default function TravelOptions({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Bus className="w-5 h-5 text-blue-400" />
-                <h4 className="font-display font-semibold text-base text-white">{bus.name}</h4>
+                <h4 className="font-display font-semibold text-base text-white">{bus.name || 'Bus Service'}</h4>
               </div>
               <div className="flex items-center gap-4 text-xs text-slate-400">
                 <span className="flex items-center gap-1 font-mono text-slate-300">
                   <Clock className="w-3.5 h-3.5" />
-                  {bus.depart} → {bus.arrive} ({bus.duration})
+                  {bus.depart || '--'} → {bus.arrive || '--'} ({bus.duration || 'N/A'})
                 </span>
-                <span className="bg-slate-800 px-2 py-0.5 rounded font-mono">{bus.seats} seats left</span>
+                <span className="bg-slate-800 px-2 py-0.5 rounded font-mono">{bus.seats ?? 0} seats left</span>
                 <span className="flex items-center gap-0.5 text-yellow-400">
                   <Star className="w-3.5 h-3.5 fill-current" />
-                  {bus.rating}
+                  {bus.rating ?? 4.0}
                 </span>
               </div>
             </div>
             <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-none pt-3 md:pt-0 border-white/5">
               <div className="text-right">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Price per ticket</span>
-                <span className="text-lg font-bold text-emerald-400 font-mono">₹{bus.price.toLocaleString()}</span>
+                <span className="text-lg font-bold text-emerald-400 font-mono">{formatPrice(bus.price)}</span>
               </div>
               <a
                 href={getRedBusUrl()}
@@ -84,7 +94,7 @@ export default function TravelOptions({
   };
 
   const renderFlightTab = () => {
-    const flightList = options?.flight || [];
+    const flightList = (options?.flight || []).filter(f => f && typeof f === 'object');
     if (flightList.length === 0) {
       return (
         <div className="p-6 rounded-xl border border-white/5 bg-slate-900/20 text-center text-slate-400 flex flex-col items-center gap-2">
@@ -101,24 +111,26 @@ export default function TravelOptions({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Plane className="w-5 h-5 text-indigo-400" />
-                <h4 className="font-display font-semibold text-base text-white">{flight.airline}</h4>
+                <h4 className="font-display font-semibold text-base text-white">{flight.airline || 'Airline Service'}</h4>
               </div>
               <div className="flex items-center gap-4 text-xs text-slate-400">
                 <span className="flex items-center gap-1 font-mono text-slate-300">
                   <Clock className="w-3.5 h-3.5" />
-                  {flight.depart} → {flight.arrive} ({flight.duration})
+                  {flight.depart || '--'} → {flight.arrive || '--'} ({flight.duration || 'N/A'})
                 </span>
-                <span className="bg-slate-800 px-2 py-0.5 rounded font-mono">{flight.stops === 0 ? 'Non-stop' : `${flight.stops} stop`}</span>
+                <span className="bg-slate-800 px-2 py-0.5 rounded font-mono">
+                  {flight.stops === 0 ? 'Non-stop' : (flight.stops ? `${flight.stops} stop` : 'Direct')}
+                </span>
                 <span className="flex items-center gap-0.5 text-yellow-400">
                   <Star className="w-3.5 h-3.5 fill-current" />
-                  {flight.rating}
+                  {flight.rating ?? 4.2}
                 </span>
               </div>
             </div>
             <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-none pt-3 md:pt-0 border-white/5">
               <div className="text-right">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Price per ticket</span>
-                <span className="text-lg font-bold text-emerald-400 font-mono">₹{flight.price.toLocaleString()}</span>
+                <span className="text-lg font-bold text-emerald-400 font-mono">{formatPrice(flight.price)}</span>
               </div>
               <a
                 href={getGoibiboUrl()}
@@ -137,7 +149,7 @@ export default function TravelOptions({
   };
 
   const renderTrainTab = () => {
-    const trainList = options?.train || [];
+    const trainList = (options?.train || []).filter(t => t && typeof t === 'object');
     if (trainList.length === 0) return <div className="text-center py-8 text-slate-400">No trains available for this route.</div>;
 
     return (
@@ -147,21 +159,21 @@ export default function TravelOptions({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Train className="w-5 h-5 text-purple-400" />
-                <h4 className="font-display font-semibold text-base text-white">{train.name} <span className="font-mono text-xs text-slate-400">#{train.number}</span></h4>
+                <h4 className="font-display font-semibold text-base text-white">{train.name || 'Express Train'} <span className="font-mono text-xs text-slate-400">{train.number ? `#${train.number}` : ''}</span></h4>
               </div>
               <div className="flex items-center gap-4 text-xs text-slate-400">
                 <span className="flex items-center gap-1 font-mono text-slate-300">
                   <Clock className="w-3.5 h-3.5" />
-                  {train.depart} → {train.arrive} ({train.duration})
+                  {train.depart || '--'} → {train.arrive || '--'} ({train.duration || 'N/A'})
                 </span>
-                <span className="bg-purple-900/30 text-purple-300 border border-purple-500/15 px-2 py-0.5 rounded font-bold font-mono">{train.tier}</span>
-                <span className="bg-emerald-950/30 text-emerald-300 border border-emerald-500/15 px-2 py-0.5 rounded font-mono">Available: {train.avail}</span>
+                <span className="bg-purple-900/30 text-purple-300 border border-purple-500/15 px-2 py-0.5 rounded font-bold font-mono">{train.tier || 'SL'}</span>
+                <span className="bg-emerald-950/30 text-emerald-300 border border-emerald-500/15 px-2 py-0.5 rounded font-mono">Available: {train.avail || 'Available'}</span>
               </div>
             </div>
             <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-none pt-3 md:pt-0 border-white/5">
               <div className="text-right">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Ticket Price</span>
-                <span className="text-lg font-bold text-emerald-400 font-mono">₹{train.price.toLocaleString()}</span>
+                <span className="text-lg font-bold text-emerald-400 font-mono">{formatPrice(train.price)}</span>
               </div>
               <a
                 href={getConfirmTktUrl(train.number)}
@@ -180,7 +192,7 @@ export default function TravelOptions({
   };
 
   const renderCabTab = () => {
-    const cabList = options?.cab || [];
+    const cabList = (options?.cab || []).filter(c => c && typeof c === 'object');
     if (cabList.length === 0) return <div className="text-center py-8 text-slate-400">No cabs available for this route.</div>;
 
     return (
@@ -190,24 +202,24 @@ export default function TravelOptions({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Car className="w-5 h-5 text-emerald-400" />
-                <h4 className="font-display font-semibold text-base text-white">{cab.name}</h4>
+                <h4 className="font-display font-semibold text-base text-white">{cab.name || 'Cab Service'}</h4>
               </div>
               <div className="flex items-center gap-4 text-xs text-slate-400">
                 <span className="flex items-center gap-1 font-mono text-slate-300">
                   <Clock className="w-3.5 h-3.5" />
-                  Estimated duration: {cab.time}
+                  Estimated duration: {cab.time || 'N/A'}
                 </span>
-                <span className="bg-slate-800 px-2 py-0.5 rounded font-mono">{cab.type}</span>
-                <span className="text-slate-400 font-mono">Distance: {cab.distance}</span>
+                <span className="bg-slate-800 px-2 py-0.5 rounded font-mono">{cab.type || 'Sedan'}</span>
+                <span className="text-slate-400 font-mono">Distance: {cab.distance || 'N/A'}</span>
               </div>
             </div>
             <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-none pt-3 md:pt-0 border-white/5">
               <div className="text-right">
                 <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Estimated Fare</span>
-                <span className="text-lg font-bold text-emerald-400 font-mono">₹{cab.price.toLocaleString()}</span>
+                <span className="text-lg font-bold text-emerald-400 font-mono">{formatPrice(cab.price)}</span>
               </div>
               <a
-                href={getCabUrl(cab.name.includes('Uber') ? 'Uber' : 'Ola')}
+                href={getCabUrl(typeof cab.name === 'string' && cab.name.includes('Uber') ? 'Uber' : 'Ola')}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-emerald-500/10 flex items-center gap-1.5 active:scale-[0.98]"

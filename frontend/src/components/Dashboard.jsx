@@ -81,19 +81,19 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       doc.setFontSize(12);
       let yOffset = 40;
       
-      if (trip?.itinerary && trip.itinerary.length > 0) {
-        trip.itinerary.forEach((dayPlan) => {
+      if (Array.isArray(trip?.itinerary) && trip.itinerary.length > 0) {
+        trip.itinerary.filter(Boolean).forEach((dayPlan) => {
           if (yOffset > 250) {
             doc.addPage();
             yOffset = 30;
           }
           doc.setFont('Helvetica', 'bold');
-          doc.text(`DAY ${dayPlan.day} - ${dayPlan.title || 'Plan'}`, 20, yOffset);
+          doc.text(`DAY ${dayPlan.day ?? 1} - ${dayPlan.title || 'Plan'}`, 20, yOffset);
           yOffset += 8;
           
           doc.setFont('Helvetica', 'normal');
           doc.setFontSize(10);
-          (dayPlan.activities || []).forEach((act) => {
+          (dayPlan.activities || []).filter(act => act && typeof act === 'object').forEach((act) => {
             if (yOffset > 270) {
               doc.addPage();
               yOffset = 30;
@@ -109,8 +109,8 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       }
       
       // Save
-      const fromCity = (trip?.from || 'Origin').split(',')[0].trim().replace(/[^\w\s-]/g, '');
-      const toCity = (trip?.to || 'Destination').split(',')[0].trim().replace(/[^\w\s-]/g, '');
+      const fromCity = (typeof trip?.from === 'string' ? trip.from : 'Origin').split(',')[0].trim().replace(/[^\w\s-]/g, '');
+      const toCity = (typeof trip?.to === 'string' ? trip.to : 'Destination').split(',')[0].trim().replace(/[^\w\s-]/g, '');
       doc.save(`Trip_${fromCity || 'Origin'}_to_${toCity || 'Destination'}.pdf`);
       
     } catch (err) {
@@ -122,7 +122,10 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
   // Share or copy link
   const handleShareTrip = (e, trip) => {
     e.stopPropagation();
-    const shareText = `Check out my travel plan from ${trip.from} to ${trip.to} on ${trip.date}! Planned using AI Travel Planner.`;
+    const shareFrom = typeof trip?.from === 'string' ? trip.from : 'Origin';
+    const shareTo = typeof trip?.to === 'string' ? trip.to : 'Destination';
+    const shareDate = trip?.date || 'upcoming date';
+    const shareText = `Check out my travel plan from ${shareFrom} to ${shareTo} on ${shareDate}! Planned using AI Travel Planner.`;
     
     if (navigator.clipboard) {
       navigator.clipboard.writeText(shareText);
@@ -177,39 +180,45 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       ) : (
         /* History Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {(savedTrips || []).map((trip, idx) => (
-            <div
-              key={trip._id || idx}
-              onClick={() => onSelectTrip(trip)}
-              className="group rounded-2xl glass border border-white/10 overflow-hidden hover:border-white/25 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-xl flex flex-col justify-between"
-            >
-              
-              {/* Card Body */}
-              <div className="p-5 space-y-4">
-                {/* Header Row */}
-                <div className="flex justify-between items-start gap-2">
-                  <div className="flex items-center gap-1.5 text-xs text-blue-400 font-bold bg-blue-500/10 px-2.5 py-1 rounded-lg">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>{trip.date || 'N/A'}{trip.returnDate ? ` → ${trip.returnDate}` : ''}</span>
-                  </div>
-                  <span className="text-xs font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
-                    ₹{trip.budgetDetails?.total ? Number(trip.budgetDetails.total).toLocaleString() : Number(trip.budget || 0).toLocaleString()}
-                  </span>
-                </div>
+          {(savedTrips || []).filter(Boolean).map((trip, idx) => {
+            const fromCity = typeof trip.from === 'string' ? trip.from.split(',')[0] : 'Origin';
+            const toCity = typeof trip.to === 'string' ? trip.to.split(',')[0] : 'Destination';
+            const totalCost = trip.budgetDetails?.total ? Number(trip.budgetDetails.total) : Number(trip.budget || 0);
+            const safeTotalStr = !Number.isNaN(totalCost) ? totalCost.toLocaleString() : '0';
 
-                {/* Cities */}
-                <div>
-                  <h4 className="font-display font-bold text-lg text-white group-hover:text-blue-400 transition-colors flex items-center gap-2">
-                    <span className="truncate max-w-[100px]">{(trip.from || 'Origin').split(',')[0]}</span>
-                    <ArrowRight className="w-4 h-4 text-slate-500" />
-                    <span className="truncate max-w-[100px]">{(trip.to || 'Destination').split(',')[0]}</span>
-                  </h4>
-                  <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                    <span>Distance: {trip.distance || 'N/A'} km • {trip.travelers || 1} travelers</span>
-                  </p>
+            return (
+              <div
+                key={trip._id || idx}
+                onClick={() => onSelectTrip(trip)}
+                className="group rounded-2xl glass border border-white/10 overflow-hidden hover:border-white/25 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-xl flex flex-col justify-between"
+              >
+                
+                {/* Card Body */}
+                <div className="p-5 space-y-4">
+                  {/* Header Row */}
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex items-center gap-1.5 text-xs text-blue-400 font-bold bg-blue-500/10 px-2.5 py-1 rounded-lg">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>{trip.date || 'N/A'}{trip.returnDate ? ` → ${trip.returnDate}` : ''}</span>
+                    </div>
+                    <span className="text-xs font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
+                      ₹{safeTotalStr}
+                    </span>
+                  </div>
+
+                  {/* Cities */}
+                  <div>
+                    <h4 className="font-display font-bold text-lg text-white group-hover:text-blue-400 transition-colors flex items-center gap-2">
+                      <span className="truncate max-w-[100px]">{fromCity}</span>
+                      <ArrowRight className="w-4 h-4 text-slate-500" />
+                      <span className="truncate max-w-[100px]">{toCity}</span>
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span>Distance: {trip.distance || 'N/A'} km • {trip.travelers || 1} travelers</span>
+                    </p>
+                  </div>
                 </div>
-              </div>
 
               {/* Action Buttons Footer */}
               <div className="p-4 bg-slate-950/20 border-t border-white/10 flex items-center justify-between gap-2">
@@ -257,8 +266,9 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
                 </button>
               </div>
 
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 

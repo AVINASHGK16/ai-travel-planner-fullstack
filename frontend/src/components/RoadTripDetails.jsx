@@ -151,8 +151,15 @@ export default function RoadTripDetails({ tripData }) {
 
           try {
             const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query.trim())}`;
+            const timeoutSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
+              ? AbortSignal.timeout(6000)
+              : undefined;
+            const fetchSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function' && timeoutSignal)
+              ? AbortSignal.any([controller.signal, timeoutSignal])
+              : controller.signal;
+
             const res = await fetch(url, {
-              signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : controller.signal,
+              signal: fetchSignal,
               headers: {
                 'User-Agent': 'AITravelPlanner/1.0'
               }
@@ -248,13 +255,14 @@ export default function RoadTripDetails({ tripData }) {
     // Petrol stations
     if (selectedLayer === 'all' || selectedLayer === 'fuel') {
       roadDetails.petrolPumps?.forEach((pump, idx) => {
+        const pumpName = typeof pump === 'string' ? pump : (pump?.name || 'Fuel Station');
         const ratio = (idx + 1) / ((roadDetails.petrolPumps.length || 1) + 1);
         pins.push({
           position: [
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 13) % 7) - 3) * 0.02,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 17) % 5) - 2) * 0.02
           ],
-          label: `${pump} (Petrol Pump)`, iconHtml: '⛽', color: '#f59e0b'
+          label: `${pumpName} (Petrol Pump)`, iconHtml: '⛽', color: '#f59e0b'
         });
       });
     }
@@ -262,68 +270,70 @@ export default function RoadTripDetails({ tripData }) {
     // EV Stations
     if (selectedLayer === 'all' || selectedLayer === 'ev') {
       roadDetails.evStations?.forEach((ev, idx) => {
+        const evName = typeof ev === 'string' ? ev : (ev?.name || 'EV Station');
         const ratio = (idx + 0.5) / ((roadDetails.evStations.length || 1) + 1);
         pins.push({
           position: [
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 11) % 6) - 3) * 0.02,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 19) % 4) - 2) * 0.02
           ],
-          label: `${ev} (EV Station)`, iconHtml: '⚡', color: '#10b981'
+          label: `${evName} (EV Station)`, iconHtml: '⚡', color: '#10b981'
         });
       });
     }
 
     // Restaurants
     if (selectedLayer === 'all' || selectedLayer === 'restaurants') {
-      roadDetails.restaurants?.forEach((rest, idx) => {
+      (roadDetails.restaurants || []).filter(r => r && typeof r === 'object').forEach((rest, idx) => {
         const ratio = (idx + 0.3) / ((roadDetails.restaurants.length || 1) + 1);
         pins.push({
           position: [
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 7) % 9) - 4) * 0.025,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 3) % 7) - 3) * 0.025
           ],
-          label: `${rest.name} (${rest.cuisine})`, iconHtml: '🍽️', color: '#ea580c'
+          label: `${rest.name || 'Dine Spot'} (${rest.cuisine || 'Local Cuisine'})`, iconHtml: '🍽️', color: '#ea580c'
         });
       });
     }
 
     // Attractions
     if (selectedLayer === 'all' || selectedLayer === 'attractions') {
-      roadDetails.attractions?.forEach((att, idx) => {
+      (roadDetails.attractions || []).filter(a => a && typeof a === 'object').forEach((att, idx) => {
         const ratio = (idx + 0.7) / ((roadDetails.attractions.length || 1) + 1);
         pins.push({
           position: [
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 5) % 11) - 5) * 0.03,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 13) % 9) - 4) * 0.03
           ],
-          label: `${att.name} ★ ${att.rating}`, iconHtml: '🎡', color: '#8b5cf6'
+          label: `${att.name || 'Attraction'} ★ ${att.rating ?? 4.0}`, iconHtml: '🎡', color: '#8b5cf6'
         });
       });
     }
 
     // Hotels
     if (selectedLayer === 'all' || selectedLayer === 'hotels') {
-      roadDetails.hotels?.forEach((hotel, idx) => {
+      (roadDetails.hotels || []).filter(h => h && typeof h === 'object').forEach((hotel, idx) => {
         const ratio = (idx + 0.85) / ((roadDetails.hotels.length || 1) + 1);
+        const hotelPrice = typeof hotel.price === 'number' ? `₹${hotel.price.toLocaleString()}` : (hotel.price ? `₹${hotel.price}` : 'N/A');
         pins.push({
           position: [
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 2) % 5) - 2) * 0.015,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 8) % 3) - 1) * 0.015
           ],
-          label: `${hotel.name} — ₹${hotel.price}`, iconHtml: '🏨', color: '#db2777'
+          label: `${hotel.name || 'Hotel'} — ${hotelPrice}`, iconHtml: '🏨', color: '#db2777'
         });
       });
     }
 
     // Emergency services
     if (selectedLayer === 'all' || selectedLayer === 'emergencies') {
-      roadDetails.emergencies?.hospitals?.forEach((hosp, idx) => {
+      roadDetails.emergencies?.hospitals?.filter(Boolean).forEach((hosp, idx) => {
         pins.push({
           position: [midCoords[0] + (idx * 0.04 - 0.02), midCoords[1] + (idx * 0.05 - 0.02)],
           label: `${hosp} (Hospital)`, iconHtml: '🏥', color: '#dc2626'
         });
       });
-      roadDetails.emergencies?.police?.forEach((pol, idx) => {
+      roadDetails.emergencies?.police?.filter(Boolean).forEach((pol, idx) => {
         pins.push({
           position: [toCoords[0] - 0.1 + idx * 0.05, toCoords[1] - 0.08 + idx * 0.03],
           label: `${pol} (Police)`, iconHtml: '👮', color: '#1e3a8a'
@@ -375,7 +385,7 @@ export default function RoadTripDetails({ tripData }) {
         <div className="space-y-3">
           <h4 className="font-display font-semibold text-sm text-slate-200">Select Route</h4>
           <div className="space-y-2">
-            {own.routes?.map((route, idx) => (
+            {own.routes?.filter(r => r && typeof r === 'object').map((route, idx) => (
               <div
                 key={idx}
                 onClick={() => setActiveRoute(idx)}
@@ -386,13 +396,13 @@ export default function RoadTripDetails({ tripData }) {
                 }`}
               >
                 <div className="flex justify-between items-center mb-1">
-                  <span className="font-semibold text-sm">{route.name}</span>
-                  <span className="text-xs font-mono text-blue-400 font-bold">{route.distance}</span>
+                  <span className="font-semibold text-sm">{route.name || `Route ${idx + 1}`}</span>
+                  <span className="text-xs font-mono text-blue-400 font-bold">{route.distance || 'N/A'}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
-                  <span>Drive: {route.time}</span>
-                  <span>Tolls: ₹{route.tolls}</span>
-                  <span className="bg-slate-800 px-2 py-0.5 rounded text-[10px]">{route.roadCondition}</span>
+                  <span>Drive: {route.time || 'N/A'}</span>
+                  <span>Tolls: {typeof route.tolls === 'number' ? `₹${route.tolls}` : (route.tolls ? (String(route.tolls).startsWith('₹') ? route.tolls : `₹${route.tolls}`) : '₹0')}</span>
+                  <span className="bg-slate-800 px-2 py-0.5 rounded text-[10px]">{route.roadCondition || 'Standard'}</span>
                 </div>
               </div>
             ))}
@@ -500,23 +510,23 @@ export default function RoadTripDetails({ tripData }) {
               🍽️ Dine Spots Along Route
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {roadDetails.restaurants.map((rest, idx) => (
+              {(roadDetails.restaurants || []).filter(r => r && typeof r === 'object').map((rest, idx) => (
                 <div key={idx} className="p-4 rounded-xl border border-white/15 bg-slate-900/30 hover:border-orange-500/20 transition-all flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-start gap-2 mb-1.5">
-                      <h5 className="font-semibold text-white text-sm">{rest.name}</h5>
+                      <h5 className="font-semibold text-white text-sm">{rest.name || 'Dine Spot'}</h5>
                       <span className="flex items-center gap-0.5 text-xs text-yellow-400 shrink-0 font-bold font-mono">
                         <Star className="w-3.5 h-3.5 fill-current" />
-                        {rest.rating}
+                        {rest.rating ?? 4.0}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400">Cuisine: {rest.cuisine}</p>
-                    <p className="text-[10px] text-slate-500 mt-1 font-mono">{rest.openingHours}</p>
+                    <p className="text-xs text-slate-400">Cuisine: {rest.cuisine || 'Local Cuisine'}</p>
+                    <p className="text-[10px] text-slate-500 mt-1 font-mono">{rest.openingHours || 'Open Daily'}</p>
                   </div>
                   <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/5 text-[11px] text-slate-400">
-                    <span className="font-mono">{rest.distance}</span>
+                    <span className="font-mono">{rest.distance || 'En route'}</span>
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rest.name)}`}
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rest.name || 'Restaurant')}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-orange-400 hover:text-orange-300 font-semibold flex items-center gap-1"
@@ -537,12 +547,12 @@ export default function RoadTripDetails({ tripData }) {
               🎡 Sightseeing Attractions
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {roadDetails.attractions.map((att, idx) => (
+              {(roadDetails.attractions || []).filter(a => a && typeof a === 'object').map((att, idx) => (
                 <div key={idx} className="rounded-xl border border-white/15 bg-slate-900/30 overflow-hidden hover:border-purple-500/20 transition-all flex flex-col sm:flex-row">
                   {att.image && (
                     <img
                       src={att.image}
-                      alt={att.name}
+                      alt={att.name || 'Attraction'}
                       className="w-full sm:w-40 h-36 object-cover bg-slate-800 shrink-0"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
@@ -550,16 +560,16 @@ export default function RoadTripDetails({ tripData }) {
                   <div className="p-4 flex flex-col justify-between flex-grow">
                     <div>
                       <div className="flex justify-between items-start gap-2 mb-1">
-                        <h5 className="font-semibold text-white text-sm">{att.name}</h5>
+                        <h5 className="font-semibold text-white text-sm">{att.name || 'Attraction'}</h5>
                         <span className="flex items-center gap-0.5 text-xs text-yellow-400 shrink-0 font-bold font-mono">
-                          <Star className="w-3.5 h-3.5 fill-current" /> {att.rating}
+                          <Star className="w-3.5 h-3.5 fill-current" /> {att.rating ?? 4.2}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 leading-normal line-clamp-2">{att.description}</p>
+                      <p className="text-xs text-slate-400 leading-normal line-clamp-2">{att.description || 'Popular sightseeing spot along the route.'}</p>
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 mt-3 pt-2.5 border-t border-white/5 font-mono">
-                      <span>Dist: {att.distance}</span>
-                      <span>Visit: {att.visitTime}</span>
+                      <span>Dist: {att.distance || 'En route'}</span>
+                      <span>Visit: {att.visitTime || '1-2 hrs'}</span>
                     </div>
                   </div>
                 </div>
@@ -575,12 +585,12 @@ export default function RoadTripDetails({ tripData }) {
               🏨 Hotels &amp; Stays
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {roadDetails.hotels.map((hotel, idx) => (
+              {(roadDetails.hotels || []).filter(h => h && typeof h === 'object').map((hotel, idx) => (
                 <div key={idx} className="rounded-xl border border-white/15 bg-slate-900/30 overflow-hidden hover:border-pink-500/20 transition-all flex flex-col sm:flex-row">
                   {hotel.image && (
                     <img
                       src={hotel.image}
-                      alt={hotel.name}
+                      alt={hotel.name || 'Hotel'}
                       className="w-full sm:w-40 h-40 object-cover bg-slate-800 shrink-0"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
@@ -588,13 +598,13 @@ export default function RoadTripDetails({ tripData }) {
                   <div className="p-4 flex flex-col justify-between flex-grow">
                     <div>
                       <div className="flex justify-between items-start gap-2 mb-1">
-                        <h5 className="font-semibold text-white text-sm">{hotel.name}</h5>
+                        <h5 className="font-semibold text-white text-sm">{hotel.name || 'Hotel'}</h5>
                         <span className="flex items-center gap-0.5 text-xs text-yellow-400 shrink-0 font-bold font-mono">
-                          <Star className="w-3.5 h-3.5 fill-current" /> {hotel.rating}
+                          <Star className="w-3.5 h-3.5 fill-current" /> {hotel.rating ?? 4.0}
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        {hotel.amenities?.map((amenity, amIdx) => (
+                        {(hotel.amenities || []).map((amenity, amIdx) => (
                           <span key={amIdx} className="bg-slate-800 text-[10px] text-slate-300 px-2 py-0.5 rounded border border-white/5">
                             {amenity}
                           </span>
@@ -604,7 +614,11 @@ export default function RoadTripDetails({ tripData }) {
                     <div className="flex items-center justify-between text-xs mt-4 pt-2.5 border-t border-white/5">
                       <div className="font-mono">
                         <span className="text-[10px] text-slate-500 block">Per Night</span>
-                        <span className="text-sm font-bold text-emerald-400">₹{hotel.price?.toLocaleString()}</span>
+                        <span className="text-sm font-bold text-emerald-400">
+                          {typeof hotel.price === 'number' && !Number.isNaN(hotel.price)
+                            ? `₹${hotel.price.toLocaleString()}`
+                            : (hotel.price ? (String(hotel.price).startsWith('₹') ? hotel.price : `₹${hotel.price}`) : 'N/A')}
+                        </span>
                       </div>
                       <a
                         href="https://www.booking.com/"

@@ -106,10 +106,10 @@ export default function BudgetCalculator({ budgetDetails, travelers, onOptimize 
           <div className="text-center py-2.5">
             <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold block">Total Estimated Cost</span>
             <span className="text-3xl font-extrabold text-white font-mono block my-1">
-              ₹{activeDetails.total.toLocaleString()}
+              ₹{(Number(activeDetails.total) || 0).toLocaleString()}
             </span>
             <span className="text-[10px] text-slate-400 font-mono">
-              ~ USD ${(Math.round(activeDetails.total / 80))} total
+              ~ USD ${Math.round((Number(activeDetails.total) || 0) / 80)} total
             </span>
           </div>
 
@@ -127,7 +127,7 @@ export default function BudgetCalculator({ budgetDetails, travelers, onOptimize 
                 </p>
                 <div className="text-xs text-emerald-400 font-semibold flex items-center gap-1 mt-1 font-mono">
                   <TrendingDown className="w-3.5 h-3.5" />
-                  Saved ₹{savings.toLocaleString()}!
+                  Saved ₹{(Number(savings) || 0).toLocaleString()}!
                 </div>
               </div>
             ) : (

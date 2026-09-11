@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Cloud, Sun, CloudRain, Wind, AlertTriangle, Thermometer, Loader2 } from 'lucide-react';
 
 export default function WeatherInfo({ weather, destination }) {
@@ -6,31 +6,38 @@ export default function WeatherInfo({ weather, destination }) {
   const [loadingWeather, setLoadingWeather] = useState(false);
   const [weatherError, setWeatherError] = useState(null);
 
+  const targetCity = typeof destination === 'string' ? destination.split(',')[0].trim() : '';
+  const initialWeatherRef = useRef(weather);
+
   useEffect(() => {
-    // Reset to static generated weather first
-    setLiveWeather(weather);
+    // Reset to static generated weather when city changes
+    setLiveWeather(weather || initialWeatherRef.current);
     setWeatherError(null);
 
-    if (!destination || typeof destination !== 'string') return;
+    if (!targetCity) return;
 
     let active = true;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
+      ? AbortSignal.timeout(6000)
+      : undefined;
+    const fetchSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function' && timeoutSignal)
+      ? AbortSignal.any([controller.signal, timeoutSignal])
+      : controller.signal;
 
     const fetchLiveWeather = async () => {
-      const city = destination.split(',')[0].trim();
       setLoadingWeather(true);
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-        const url = `${backendUrl}/api/weather?city=${encodeURIComponent(city)}`;
-        const res = await fetch(url, { signal: controller.signal });
+        const url = `${backendUrl}/api/weather?city=${encodeURIComponent(targetCity)}`;
+        const res = await fetch(url, { signal: fetchSignal });
         
         if (!res.ok) {
           let errData = {};
           try { errData = await res.json(); } catch {}
           
           if (res.status === 404) {
-            throw new Error(`Weather station not found for "${city}".`);
+            throw new Error(`Weather station not found for "${targetCity}".`);
           }
           if (res.status === 429) {
             throw new Error('Weather update rate limit reached. Please check back later.');
@@ -56,7 +63,9 @@ export default function WeatherInfo({ weather, destination }) {
           windSpeed: data.windSpeed || 'N/A',
           rainAlert: data.rainAlert || 'No alerts',
           // Retain generated transit stop forecast
-          forecast: prev?.forecast || weather?.forecast || []
+          forecast: (Array.isArray(prev?.forecast) && prev.forecast.length > 0)
+            ? prev.forecast
+            : (Array.isArray(weather?.forecast) ? weather.forecast : [])
         }));
       } catch (err) {
         if (!active) return;
@@ -69,7 +78,6 @@ export default function WeatherInfo({ weather, destination }) {
         if (active) {
           setLoadingWeather(false);
         }
-        clearTimeout(timeoutId);
       }
     };
 
@@ -78,10 +86,9 @@ export default function WeatherInfo({ weather, destination }) {
     return () => {
       active = false;
       setLoadingWeather(false);
-      clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [destination, weather]);
+  }, [targetCity]);
 
   const hasValidWeather = liveWeather && typeof liveWeather.temp === 'string' && liveWeather.temp.trim() !== '';
 
@@ -140,7 +147,7 @@ export default function WeatherInfo({ weather, destination }) {
           <div className="bg-slate-800/60 border border-white/10 text-slate-400 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase">
             <span>Offline</span>
           </div>
-        ) : liveWeather.rainAlert && !liveWeather.rainAlert.includes('0%') && !liveWeather.rainAlert.toLowerCase().includes('no') ? (
+        ) : typeof liveWeather.rainAlert === 'string' && !/\b0%/.test(liveWeather.rainAlert) && !/\bno\b/i.test(liveWeather.rainAlert) ? (
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase animate-pulse">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>Rain Alert</span>
@@ -183,12 +190,12 @@ export default function WeatherInfo({ weather, destination }) {
           <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-bold mb-2">Transit Waypoints weather</span>
           
           <div className="space-y-2 font-mono text-xs">
-            {(liveWeather.forecast || []).map((stop, idx) => (
+            {(liveWeather.forecast || []).filter(s => s && typeof s === 'object').map((stop, idx) => (
               <div key={idx} className="flex items-center justify-between p-2 rounded bg-slate-900/40 border border-white/5">
-                <span className="text-slate-300 truncate max-w-[120px] font-sans">{stop.stop}</span>
+                <span className="text-slate-300 truncate max-w-[120px] font-sans">{stop.stop || `Stop ${idx + 1}`}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-500 text-[10px] font-sans">{stop.condition}</span>
-                  <span className="font-bold text-white shrink-0">{stop.temp}</span>
+                  <span className="text-slate-500 text-[10px] font-sans">{stop.condition || 'Clear'}</span>
+                  <span className="font-bold text-white shrink-0">{stop.temp || '--'}</span>
                 </div>
               </div>
             ))}

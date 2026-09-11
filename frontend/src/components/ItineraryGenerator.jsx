@@ -121,26 +121,27 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
 
       {/* Accordion List */}
       <div className="space-y-3">
-        {itinerary.map((dayPlan) => {
-          const isExpanded = expandedDay === dayPlan.day;
-          const isAddingForDay = editingActivity && editingActivity.day === dayPlan.day && editingActivity.actIdx === -1;
+        {itinerary.filter(Boolean).map((dayPlan, dayIdx) => {
+          const dayNumber = dayPlan.day ?? (dayIdx + 1);
+          const isExpanded = expandedDay === dayNumber;
+          const isAddingForDay = editingActivity && editingActivity.day === dayNumber && editingActivity.actIdx === -1;
           
           return (
             <div 
-              key={dayPlan.day} 
+              key={dayNumber} 
               className="rounded-xl border border-white/10 overflow-hidden bg-slate-900/15"
             >
               
               {/* Day Header Trigger */}
               <div
-                onClick={() => toggleDay(dayPlan.day)}
+                onClick={() => toggleDay(dayNumber)}
                 className="p-4 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-between"
               >
                 <div className="flex items-center gap-3">
                   <span className="font-display font-extrabold text-sm text-blue-400 bg-blue-500/10 px-3 py-1 rounded-lg">
-                    DAY {dayPlan.day}
+                    DAY {dayNumber}
                   </span>
-                  <h5 className="font-semibold text-sm text-white">{dayPlan.title}</h5>
+                  <h5 className="font-semibold text-sm text-white">{dayPlan.title || `Day ${dayNumber} Activities`}</h5>
                 </div>
                 <div className="text-slate-400">
                   {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -155,8 +156,13 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                   <div className="absolute left-8 top-6 bottom-16 w-0.5 bg-slate-800 pointer-events-none"></div>
 
                   <div className="space-y-6 relative">
-                    {(dayPlan.activities || []).map((activity, actIdx) => {
-                      const isEditingCurrent = editingActivity && editingActivity.day === dayPlan.day && editingActivity.actIdx === actIdx;
+                    {(dayPlan.activities || []).map((rawActivity, actIdx) => {
+                      const activity = typeof rawActivity === 'string'
+                        ? { title: rawActivity, time: '10:00 AM', desc: '', cost: 0, icon: 'Compass' }
+                        : rawActivity;
+                      if (!activity || typeof activity !== 'object') return null;
+
+                      const isEditingCurrent = editingActivity && editingActivity.day === dayNumber && editingActivity.actIdx === actIdx;
                       const ActivityIcon = iconMap[activity.icon] || Compass;
 
                       if (isEditingCurrent) {
@@ -251,7 +257,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                   <Clock className="w-3 h-3 text-slate-600" />
                                   {activity.time}
                                 </span>
-                                {Number(activity.cost) > 0 && (
+                                {!Number.isNaN(Number(activity.cost)) && Number(activity.cost) > 0 && (
                                   <span className="text-emerald-400 font-bold">
                                     ₹{Number(activity.cost).toLocaleString()}
                                   </span>
@@ -264,14 +270,14 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                           {/* Hover action items (Pencil / Trash) */}
                           <div className="opacity-0 group-hover:opacity-100 flex gap-1.5 shrink-0 transition-opacity ml-2">
                             <button
-                              onClick={() => handleStartEdit(dayPlan.day, actIdx, activity)}
+                              onClick={() => handleStartEdit(dayNumber, actIdx, activity)}
                               className="p-1 bg-white/5 border border-white/10 hover:border-blue-500/30 text-slate-400 hover:text-blue-400 rounded transition-colors cursor-pointer"
                               title="Edit Activity"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => handleDeleteActivity(dayPlan.day, actIdx)}
+                              onClick={() => handleDeleteActivity(dayNumber, actIdx)}
                               className="p-1 bg-white/5 border border-white/10 hover:border-red-500/30 text-slate-400 hover:text-red-400 rounded transition-colors cursor-pointer"
                               title="Delete Activity"
                             >
@@ -352,7 +358,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                               Cancel
                             </button>
                             <button 
-                              onClick={() => handleSaveActivity(dayPlan.day)} 
+                              onClick={() => handleSaveActivity(dayNumber)} 
                               className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded-lg text-[11px] font-semibold text-white transition-colors"
                             >
                               Add
@@ -366,7 +372,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                   {/* Add Activity Button */}
                   {!isAddingForDay && (
                     <button
-                      onClick={() => handleStartAdd(dayPlan.day)}
+                      onClick={() => handleStartAdd(dayNumber)}
                       className="flex items-center gap-1 px-3 py-1.5 mt-2 rounded-lg text-[10px] font-bold text-blue-400 hover:text-blue-300 border border-blue-500/20 hover:border-blue-500/40 bg-blue-500/5 hover:bg-blue-500/10 cursor-pointer self-start transition-all ml-12"
                     >
                       <Plus className="w-3.5 h-3.5" />

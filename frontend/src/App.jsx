@@ -165,13 +165,21 @@ export default function App() {
   // Load saved trips when user authenticates
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const timeoutSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
+      ? AbortSignal.timeout(7000)
+      : undefined;
+    const fetchSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function' && timeoutSignal)
+      ? AbortSignal.any([controller.signal, timeoutSignal])
+      : controller.signal;
+
     const fetchTrips = async () => {
       if (auth.user && auth.token) {
         setLoadingTrips(true);
         try {
           const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
           const response = await fetch(`${backendUrl}/api/trips`, {
-            signal: AbortSignal.timeout ? AbortSignal.timeout(7000) : undefined,
+            signal: fetchSignal,
             headers: { 'Authorization': `Bearer ${auth.token}` }
           });
           if (!active) return;
@@ -208,7 +216,9 @@ export default function App() {
           }
         } catch (error) {
           if (!active) return;
-          console.warn('Backend unavailable, loading trips from localStorage fallback:', error.message);
+          if (error.name !== 'AbortError') {
+            console.warn('Backend unavailable, loading trips from localStorage fallback:', error.message);
+          }
           const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
           const userTrips = Array.isArray(localTrips) ? localTrips.filter(t => t?.userEmail === auth.user.email) : [];
           setSavedTrips(userTrips);
@@ -223,6 +233,7 @@ export default function App() {
     fetchTrips();
     return () => {
       active = false;
+      controller.abort();
     };
   }, [auth.user, auth.token]);
 
@@ -577,6 +588,13 @@ export default function App() {
       alert('Selected trip data is unavailable.');
       return;
     }
+    // Abort any active in-flight trip search so delayed search responses do not overwrite selected trip
+    if (searchControllerRef.current) {
+      searchControllerRef.current.abort();
+      searchControllerRef.current = null;
+    }
+    setLoading(false);
+
     // Defensive normalization to ensure all child components render smoothly
     const normalizedTrip = {
       ...trip,
@@ -724,7 +742,7 @@ export default function App() {
                   <span>Back to search</span>
                 </button>
                 <h2 className="font-display font-extrabold text-2xl text-white tracking-tight">
-                  {(activeTrip.from || 'Origin').split(',')[0]} to {(activeTrip.to || 'Destination').split(',')[0]} Plan
+                  {(typeof activeTrip.from === 'string' ? activeTrip.from.split(',')[0] : 'Origin')} to {(typeof activeTrip.to === 'string' ? activeTrip.to.split(',')[0] : 'Destination')} Plan
                 </h2>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   <p className="text-xs text-slate-400">

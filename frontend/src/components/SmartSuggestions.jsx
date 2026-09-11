@@ -2,7 +2,7 @@ import React from 'react';
 import { DollarSign, Zap, Armchair, BadgePercent, Leaf, ArrowRight } from 'lucide-react';
 
 export default function SmartSuggestions({ suggestions, onSelectMode, isAIGenerated = false }) {
-  if (!suggestions) return null;
+  if (!suggestions || typeof suggestions !== 'object') return null;
 
   const cardConfig = {
     cheapest: {
@@ -58,41 +58,46 @@ export default function SmartSuggestions({ suggestions, onSelectMode, isAIGenera
       </div>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {Object.entries(suggestions).map(([key, item]) => {
-          const config = cardConfig[key] || cardConfig.value;
-          const IconComponent = config.icon;
+        {Object.entries(suggestions)
+          .filter(([key, item]) => item && typeof item === 'object')
+          .map(([key, item]) => {
+            const config = cardConfig[key] || cardConfig.value;
+            const IconComponent = config.icon;
+            const priceText = typeof item.price === 'number' && !Number.isNaN(item.price)
+              ? `₹${item.price.toLocaleString()}`
+              : (item.price ? (String(item.price).startsWith('₹') ? item.price : `₹${item.price}`) : 'N/A');
 
-          return (
-            <div
-              key={key}
-              onClick={() => onSelectMode(config.actionKey)}
-              className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col justify-between group shadow-sm ${config.color} ${config.glow}`}
-            >
-              <div>
-                {/* Header Row */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="p-2 rounded-lg bg-white/5 group-hover:scale-110 transition-transform">
-                    <IconComponent className="w-5 h-5" />
+            return (
+              <div
+                key={key}
+                onClick={() => onSelectMode(config.actionKey)}
+                className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer flex flex-col justify-between group shadow-sm ${config.color} ${config.glow}`}
+              >
+                <div>
+                  {/* Header Row */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="p-2 rounded-lg bg-white/5 group-hover:scale-110 transition-transform">
+                      <IconComponent className="w-5 h-5" />
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${config.tag}`}>
+                      {item.badge || 'Recommended'}
+                    </span>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${config.tag}`}>
-                    {item.badge}
-                  </span>
+
+                  {/* Title */}
+                  <h4 className="font-display font-semibold text-sm text-slate-300">{item.title || 'Route Option'}</h4>
+                  <p className="text-xs font-bold text-white font-mono mt-1">{priceText}</p>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">{item.desc || ''}</p>
                 </div>
 
-                {/* Title */}
-                <h4 className="font-display font-semibold text-sm text-slate-300">{item.title}</h4>
-                <p className="text-xs font-bold text-white font-mono mt-1">₹{item.price?.toLocaleString() || 'N/A'}</p>
-                <p className="text-xs text-slate-400 mt-2 leading-relaxed">{item.desc}</p>
+                {/* Action Link */}
+                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300 mt-4 group-hover:text-white transition-colors self-end">
+                  <span>Select</span>
+                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                </div>
               </div>
-
-              {/* Action Link */}
-              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300 mt-4 group-hover:text-white transition-colors self-end">
-                <span>Select</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
       </div>
     </div>
   );
