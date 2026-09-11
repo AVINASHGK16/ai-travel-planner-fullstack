@@ -166,6 +166,10 @@ export const saveTripSchema = z.object({
   budgetDetails: z.record(z.any()).optional(),
   roadTripDetails: z.record(z.any()).optional(),
   weather: z.record(z.any()).optional(),
+  tripDays: z.coerce.number().int().min(1).max(30).optional(),
+  isAIGenerated: z.boolean().optional(),
+  generationSource: z.string().max(50).optional(),
+  generationNotice: z.string().max(500).optional().nullable(),
   // Security: userEmail is intentionally ignored/stripped; it is always overridden with req.user.email
   userEmail: z.string().optional()
 }).refine(data => {

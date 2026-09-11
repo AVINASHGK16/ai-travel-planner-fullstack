@@ -53,20 +53,31 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
     setFormIcon('Compass');
   };
 
+  const handleInputKeyDown = (e, day) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveActivity(day);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setEditingActivity(null);
+    }
+  };
+
   const handleSaveActivity = (day) => {
     if (!formTitle.trim()) {
       alert('Activity title is required.');
       return;
     }
 
-    const newItinerary = itinerary.map(dayPlan => {
-      if (dayPlan.day !== day) return dayPlan;
+    const newItinerary = itinerary.map((dayPlan, dayIdx) => {
+      const planDay = dayPlan.day ?? (dayIdx + 1);
+      if (planDay !== day) return dayPlan;
 
       let newActivities;
       const updatedActivity = {
-        time: formTime,
-        title: formTitle,
-        desc: formDesc,
+        time: formTime || '10:00 AM',
+        title: formTitle.trim(),
+        desc: formDesc.trim(),
         cost: parseFloat(formCost) || 0,
         icon: formIcon
       };
@@ -95,8 +106,9 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
 
   const handleDeleteActivity = (day, actIdx) => {
     if (confirm('Delete this activity from your itinerary?')) {
-      const newItinerary = itinerary.map(dayPlan => {
-        if (dayPlan.day !== day) return dayPlan;
+      const newItinerary = itinerary.map((dayPlan, dayIdx) => {
+        const planDay = dayPlan.day ?? (dayIdx + 1);
+        if (planDay !== day) return dayPlan;
         return {
           ...dayPlan,
           activities: (dayPlan.activities || []).filter((_, idx) => idx !== actIdx)
@@ -175,6 +187,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                   <input 
                                     type="text" 
                                     value={formTime}
+                                    onKeyDown={(e) => handleInputKeyDown(e, dayNumber)}
                                     onChange={(e) => setFormTime(e.target.value)}
                                     className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white" 
                                   />
@@ -184,6 +197,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                   <input 
                                     type="number" 
                                     value={formCost}
+                                    onKeyDown={(e) => handleInputKeyDown(e, dayNumber)}
                                     onChange={(e) => setFormCost(e.target.value)}
                                     className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white" 
                                   />
@@ -194,6 +208,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                 <input 
                                   type="text" 
                                   value={formTitle}
+                                  onKeyDown={(e) => handleInputKeyDown(e, dayNumber)}
                                   onChange={(e) => setFormTitle(e.target.value)}
                                   className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white font-medium" 
                                 />
@@ -202,6 +217,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                 <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Description</label>
                                 <textarea 
                                   value={formDesc}
+                                  onKeyDown={(e) => { if (e.key === 'Escape') setEditingActivity(null); }}
                                   onChange={(e) => setFormDesc(e.target.value)}
                                   rows={2}
                                   className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white leading-relaxed" 
@@ -222,14 +238,16 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                 </div>
                                 <div className="flex gap-2 self-end">
                                   <button 
+                                    type="button"
                                     onClick={() => setEditingActivity(null)} 
-                                    className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] font-semibold text-slate-300 transition-colors"
+                                    className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] font-semibold text-slate-300 transition-colors cursor-pointer"
                                   >
                                     Cancel
                                   </button>
                                   <button 
-                                    onClick={() => handleSaveActivity(dayPlan.day)} 
-                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded-lg text-[11px] font-semibold text-white transition-colors"
+                                    type="button"
+                                    onClick={() => handleSaveActivity(dayNumber)} 
+                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded-lg text-[11px] font-semibold text-white transition-colors cursor-pointer"
                                   >
                                     Save
                                   </button>
@@ -270,6 +288,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                           {/* Hover action items (Pencil / Trash) */}
                           <div className="opacity-0 group-hover:opacity-100 flex gap-1.5 shrink-0 transition-opacity ml-2">
                             <button
+                              type="button"
                               onClick={() => handleStartEdit(dayNumber, actIdx, activity)}
                               className="p-1 bg-white/5 border border-white/10 hover:border-blue-500/30 text-slate-400 hover:text-blue-400 rounded transition-colors cursor-pointer"
                               title="Edit Activity"
@@ -277,6 +296,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleDeleteActivity(dayNumber, actIdx)}
                               className="p-1 bg-white/5 border border-white/10 hover:border-red-500/30 text-slate-400 hover:text-red-400 rounded transition-colors cursor-pointer"
                               title="Delete Activity"
@@ -301,6 +321,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                             <input 
                               type="text" 
                               value={formTime}
+                              onKeyDown={(e) => handleInputKeyDown(e, dayNumber)}
                               onChange={(e) => setFormTime(e.target.value)}
                               placeholder="e.g. 10:00 AM"
                               className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white" 
@@ -311,6 +332,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                             <input 
                               type="number" 
                               value={formCost}
+                              onKeyDown={(e) => handleInputKeyDown(e, dayNumber)}
                               onChange={(e) => setFormCost(e.target.value)}
                               placeholder="0"
                               className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white" 
@@ -322,6 +344,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                           <input 
                             type="text" 
                             value={formTitle}
+                            onKeyDown={(e) => handleInputKeyDown(e, dayNumber)}
                             onChange={(e) => setFormTitle(e.target.value)}
                             placeholder="e.g. Visit Museum"
                             className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white font-medium" 
@@ -331,6 +354,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                           <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Description</label>
                           <textarea 
                             value={formDesc}
+                            onKeyDown={(e) => { if (e.key === 'Escape') setEditingActivity(null); }}
                             onChange={(e) => setFormDesc(e.target.value)}
                             placeholder="Describe the activity..."
                             rows={2}
@@ -352,14 +376,16 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                           </div>
                           <div className="flex gap-2 self-end">
                             <button 
+                              type="button"
                               onClick={() => setEditingActivity(null)} 
-                              className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] font-semibold text-slate-300 transition-colors"
+                              className="px-3 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] font-semibold text-slate-300 transition-colors cursor-pointer"
                             >
                               Cancel
                             </button>
                             <button 
+                              type="button"
                               onClick={() => handleSaveActivity(dayNumber)} 
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded-lg text-[11px] font-semibold text-white transition-colors"
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded-lg text-[11px] font-semibold text-white transition-colors cursor-pointer"
                             >
                               Add
                             </button>
@@ -372,6 +398,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                   {/* Add Activity Button */}
                   {!isAddingForDay && (
                     <button
+                      type="button"
                       onClick={() => handleStartAdd(dayNumber)}
                       className="flex items-center gap-1 px-3 py-1.5 mt-2 rounded-lg text-[10px] font-bold text-blue-400 hover:text-blue-300 border border-blue-500/20 hover:border-blue-500/40 bg-blue-500/5 hover:bg-blue-500/10 cursor-pointer self-start transition-all ml-12"
                     >

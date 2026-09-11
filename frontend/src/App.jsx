@@ -12,6 +12,7 @@ import ChatAssistant from './components/ChatAssistant';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
 import SettingsPanel from './components/SettingsPanel';
+import ErrorBoundary from './components/ErrorBoundary';
 import { generateMockData, getAIGeneration } from './utils/planner';
 
 // Robust LocalStorage Wrapper with quota error handling, safe parsing, and schema validation
@@ -334,6 +335,15 @@ export default function App() {
         const toCoords = baselineMock.coordinates.to;
         const midCoords = [(fromCoords[0] + toCoords[0]) / 2, (fromCoords[1] + toCoords[1]) / 2];
 
+        // Map AI suggestions if returned at root level (cheapest, fastest, etc.)
+        const aiSuggestions = (responseData.cheapest || responseData.fastest || responseData.comfort || responseData.value || responseData.eco) ? {
+          cheapest: responseData.cheapest ? { ...responseData.cheapest, desc: responseData.cheapest.desc || responseData.cheapest.description } : baselineMock.suggestions?.cheapest,
+          fastest: responseData.fastest ? { ...responseData.fastest, desc: responseData.fastest.desc || responseData.fastest.description } : baselineMock.suggestions?.fastest,
+          comfort: responseData.comfort ? { ...responseData.comfort, desc: responseData.comfort.desc || responseData.comfort.description } : baselineMock.suggestions?.comfort,
+          value: responseData.value ? { ...responseData.value, desc: responseData.value.desc || responseData.value.description } : baselineMock.suggestions?.value,
+          eco: responseData.eco ? { ...responseData.eco, desc: responseData.eco.desc || responseData.eco.description } : baselineMock.suggestions?.eco,
+        } : null;
+
         const completeTripData = {
           ...baselineMock,
           ...responseData,
@@ -341,12 +351,13 @@ export default function App() {
           to: params.to,
           date: params.date,
           returnDate: params.returnDate || null,
+          tripDays: baselineMock.tripDays || 1,
           travelers: parseInt(params.travelers) || 1,
           budget: parseFloat(params.budget) || 2500,
           distance: baselineMock.distance,
           coordinates: responseData.coordinates || { from: fromCoords, to: toCoords, mid: midCoords },
           options: responseData.options || baselineMock.options,
-          suggestions: responseData.suggestions || baselineMock.suggestions,
+          suggestions: responseData.suggestions || aiSuggestions || baselineMock.suggestions,
           budgetDetails: responseData.budgetDetails || baselineMock.budgetDetails,
           roadTripDetails: responseData.roadTripDetails || baselineMock.roadTripDetails,
           weather: responseData.weather || baselineMock.weather,
@@ -513,16 +524,16 @@ export default function App() {
       if (typeof tripIdOrIndex === 'number') {
         const tripObj = savedTrips[tripIdOrIndex];
         if (!tripObj) return;
-        targetId = tripObj._id;
+        targetId = tripObj._id || tripObj.id;
       }
 
       if (!targetId) return;
 
       // Local offline trip: only exists in client storage
       if (typeof targetId === 'string' && targetId.startsWith('local_')) {
-        setSavedTrips(prev => prev.filter(t => t?._id !== targetId));
+        setSavedTrips(prev => prev.filter(t => (t?._id || t?.id) !== targetId));
         const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
-        const filteredLocal = localTrips.filter(t => t?._id !== targetId);
+        const filteredLocal = localTrips.filter(t => (t?._id || t?.id) !== targetId);
         storage.setJSON('savedTrips', filteredLocal);
         return;
       }
@@ -550,9 +561,9 @@ export default function App() {
 
         if (response.status === 404) {
           // Trip was already deleted or not found on server — clean up local state
-          setSavedTrips(prev => prev.filter(t => t?._id !== targetId));
+          setSavedTrips(prev => prev.filter(t => (t?._id || t?.id) !== targetId));
           const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
-          const filteredLocal = localTrips.filter(t => t?._id !== targetId);
+          const filteredLocal = localTrips.filter(t => (t?._id || t?.id) !== targetId);
           storage.setJSON('savedTrips', filteredLocal);
           return;
         }
@@ -568,9 +579,9 @@ export default function App() {
         }
         
         // Deletion confirmed by server (200/204) — remove from local state and storage
-        setSavedTrips(prev => prev.filter(t => t?._id !== targetId));
+        setSavedTrips(prev => prev.filter(t => (t?._id || t?.id) !== targetId));
         const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
-        const filteredLocal = localTrips.filter(t => t?._id !== targetId);
+        const filteredLocal = localTrips.filter(t => (t?._id || t?.id) !== targetId);
         storage.setJSON('savedTrips', filteredLocal);
       } catch (err) {
         console.warn('Network error while deleting trip:', err.message);
@@ -729,136 +740,140 @@ export default function App() {
 
         {/* VIEW 3: SEARCH RESULTS PAGE */}
         {view === 'search' && !loading && activeTrip && (
-          <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-            
-            {/* Header / Summary panel */}
-            <div className="flex flex-col md:flex-row justify-between md:items-center p-5 rounded-2xl glass border border-white/10 gap-4">
-              <div>
-                <button
-                  onClick={() => handleNavigate('home')}
-                  className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-semibold mb-2 group transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-                  <span>Back to search</span>
-                </button>
-                <h2 className="font-display font-extrabold text-2xl text-white tracking-tight">
-                  {(typeof activeTrip.from === 'string' ? activeTrip.from.split(',')[0] : 'Origin')} to {(typeof activeTrip.to === 'string' ? activeTrip.to.split(',')[0] : 'Destination')} Plan
-                </h2>
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <p className="text-xs text-slate-400">
-                    Departing {activeTrip.date || 'N/A'}{activeTrip.returnDate ? ` • Returning ${activeTrip.returnDate}` : ''} • {activeTrip.travelers || 1} Travelers • Distance: {activeTrip.distance || 'N/A'} km
-                  </p>
-                  {activeTrip.isAIGenerated ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                      <Sparkles className="w-3 h-3" />
-                      <span>Gemini AI Generated</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30" title={activeTrip.generationNotice || 'Curated standard plan'}>
-                      <Compass className="w-3 h-3" />
-                      <span>Curated Standard Plan (Offline/Fallback)</span>
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Action items */}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSaveActiveTrip}
-                  disabled={savingTrip}
-                  className={`flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 ${
-                    savingTrip ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'
-                  }`}
-                >
-                  {savingTrip ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      <span>Save Plan</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Informational banner when deterministic fallback was used */}
-            {!activeTrip.isAIGenerated && activeTrip.generationNotice && (
-              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2.5 shadow-sm">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-                <span>Notice: {activeTrip.generationNotice}. Displaying standard curated itinerary for this route.</span>
-              </div>
-            )}
-
-            {/* Smart suggestions row */}
-            <SmartSuggestions 
-              suggestions={activeTrip.suggestions} 
-              onSelectMode={(mode) => setActiveMode(mode)}
-              isAIGenerated={Boolean(activeTrip.isAIGenerated)}
-            />
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <ErrorBoundary fallbackTitle="Travel Plan Error" onReset={() => handleNavigate('home')}>
+            <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
               
-              {/* Transport options grid (Left 8 cols) */}
-              <div className="lg:col-span-8 space-y-8">
-                
-                {/* Core booking tabs */}
-                <div className="p-6 rounded-2xl glass border border-white/10">
-                  <h3 className="font-display font-bold text-lg text-white mb-4">Compare & Book Transports</h3>
-                  <TravelOptions
-                    from={activeTrip.from}
-                    to={activeTrip.to}
-                    date={activeTrip.date}
-                    options={activeTrip.options}
-                    activeMode={activeMode}
-                    setActiveMode={setActiveMode}
+              {/* Header / Summary panel */}
+              <div className="flex flex-col md:flex-row justify-between md:items-center p-5 rounded-2xl glass border border-white/10 gap-4">
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('home')}
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-semibold mb-2 group transition-colors cursor-pointer"
                   >
-                    <RoadTripDetails tripData={activeTrip} />
-                  </TravelOptions>
+                    <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+                    <span>Back to search</span>
+                  </button>
+                  <h2 className="font-display font-extrabold text-2xl text-white tracking-tight">
+                    {(typeof activeTrip.from === 'string' ? activeTrip.from.split(',')[0] : 'Origin')} to {(typeof activeTrip.to === 'string' ? activeTrip.to.split(',')[0] : 'Destination')} Plan
+                  </h2>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <p className="text-xs text-slate-400">
+                      Departing {activeTrip.date || 'N/A'}{activeTrip.returnDate ? ` • Returning ${activeTrip.returnDate}` : ''} • {activeTrip.travelers || 1} Travelers • Distance: {activeTrip.distance || 'N/A'} km
+                    </p>
+                    {activeTrip.isAIGenerated ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                        <Sparkles className="w-3 h-3" />
+                        <span>Gemini AI Generated</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30" title={activeTrip.generationNotice || 'Curated standard plan'}>
+                        <Compass className="w-3 h-3" />
+                        <span>Curated Standard Plan (Offline/Fallback)</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Day-by-day Itinerary */}
-                <div className="p-6 rounded-2xl glass border border-white/10">
-                  <ItineraryGenerator 
-                    itinerary={activeTrip.itinerary} 
-                    onChangeItinerary={handleChangeItinerary}
-                  />
+                {/* Action items */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveActiveTrip}
+                    disabled={savingTrip}
+                    className={`flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 ${
+                      savingTrip ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'
+                    }`}
+                  >
+                    {savingTrip ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Save Plan</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-
               </div>
 
-              {/* Weather, Budget details (Right 4 cols) */}
-              <div className="lg:col-span-4 space-y-8">
+              {/* Informational banner when deterministic fallback was used */}
+              {!activeTrip.isAIGenerated && activeTrip.generationNotice && (
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2.5 shadow-sm">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>Notice: {activeTrip.generationNotice}. Displaying standard curated itinerary for this route.</span>
+                </div>
+              )}
+
+              {/* Smart suggestions row */}
+              <SmartSuggestions 
+                suggestions={activeTrip.suggestions} 
+                onSelectMode={(mode) => setActiveMode(mode)}
+                isAIGenerated={Boolean(activeTrip.isAIGenerated)}
+              />
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 
-                {/* Weather widget */}
-                <WeatherInfo 
-                  weather={activeTrip.weather} 
-                  destination={activeTrip.to}
-                />
+                {/* Transport options grid (Left 8 cols) */}
+                <div className="lg:col-span-8 space-y-8">
+                  
+                  {/* Core booking tabs */}
+                  <div className="p-6 rounded-2xl glass border border-white/10">
+                    <h3 className="font-display font-bold text-lg text-white mb-4">Compare & Book Transports</h3>
+                    <TravelOptions
+                      from={activeTrip.from}
+                      to={activeTrip.to}
+                      date={activeTrip.date}
+                      options={activeTrip.options}
+                      activeMode={activeMode}
+                      setActiveMode={setActiveMode}
+                    >
+                      <RoadTripDetails tripData={activeTrip} />
+                    </TravelOptions>
+                  </div>
 
-                {/* Budget Calculator */}
-                <BudgetCalculator 
-                  budgetDetails={activeTrip.budgetDetails} 
-                  travelers={activeTrip.travelers}
-                />
+                  {/* Day-by-day Itinerary */}
+                  <div className="p-6 rounded-2xl glass border border-white/10">
+                    <ItineraryGenerator 
+                      itinerary={activeTrip.itinerary} 
+                      onChangeItinerary={handleChangeItinerary}
+                    />
+                  </div>
+
+                </div>
+
+                {/* Weather, Budget details (Right 4 cols) */}
+                <div className="lg:col-span-4 space-y-8">
+                  
+                  {/* Weather widget */}
+                  <WeatherInfo 
+                    weather={activeTrip.weather} 
+                    destination={activeTrip.to}
+                  />
+
+                  {/* Budget Calculator */}
+                  <BudgetCalculator 
+                    budgetDetails={activeTrip.budgetDetails} 
+                    travelers={activeTrip.travelers}
+                  />
+
+                </div>
 
               </div>
+
+              {/* Floating Chat Assistant */}
+              <ChatAssistant tripData={activeTrip} />
 
             </div>
-
-            {/* Floating Chat Assistant */}
-            <ChatAssistant tripData={activeTrip} />
-
-          </div>
+          </ErrorBoundary>
         )}
 
         {/* VIEW 4: USER DASHBOARD SAVED TRIPS */}
         {view === 'dashboard' && (
-          <>
+          <ErrorBoundary fallbackTitle="Dashboard Error" onReset={() => handleNavigate('home')}>
             <Dashboard
               savedTrips={savedTrips}
               onDeleteTrip={handleDeleteTrip}
@@ -871,7 +886,7 @@ export default function App() {
             {savedTrips?.length > 0 && savedTrips[0] && (
               <ChatAssistant tripData={savedTrips[0]} />
             )}
-          </>
+          </ErrorBoundary>
         )}
 
       </main>

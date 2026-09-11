@@ -192,6 +192,11 @@ const loadLocalTrips = () => {
         trip.returnDate = null;
       }
 
+      // Ensure boolean/fallback fields for AI tracking
+      if (trip.isAIGenerated !== undefined) {
+        trip.isAIGenerated = Boolean(trip.isAIGenerated);
+      }
+
       return trip;
     });
   } catch (err) {
@@ -269,7 +274,11 @@ const TripSchema = new mongoose.Schema({
   itinerary: mongoose.Schema.Types.Mixed,
   budgetDetails: mongoose.Schema.Types.Mixed,
   roadTripDetails: mongoose.Schema.Types.Mixed,
-  weather: mongoose.Schema.Types.Mixed
+  weather: mongoose.Schema.Types.Mixed,
+  tripDays: Number,
+  isAIGenerated: Boolean,
+  generationSource: String,
+  generationNotice: String
 }, { timestamps: true });
 
 const Trip = mongoose.models.Trip || mongoose.model('Trip', TripSchema);
@@ -333,7 +342,7 @@ app.post('/api/auth/register', authLimiter, validateBody(authRegisterSchema), as
 
       res.status(201).json({
         token,
-        user: { id: user._id.toString(), name: user.name, email: user.email }
+        user: { id: user._id.toString(), _id: user._id.toString(), name: user.name, email: user.email }
       });
     } else {
       // JSON fallback
@@ -361,7 +370,7 @@ app.post('/api/auth/register', authLimiter, validateBody(authRegisterSchema), as
 
       res.status(201).json({
         token,
-        user: { id: newUser._id, name: newUser.name, email: newUser.email }
+        user: { id: newUser._id, _id: newUser._id, name: newUser.name, email: newUser.email }
       });
     }
   } catch (err) {
@@ -394,15 +403,16 @@ app.post('/api/auth/login', authLimiter, validateBody(authLoginSchema), async (r
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
+    const userIdStr = (user._id || user.id).toString();
     const token = jwt.sign(
-      { id: (user._id || user.id).toString(), email: user.email, name: user.name },
+      { id: userIdStr, email: user.email, name: user.name },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
     res.json({
       token,
-      user: { id: (user._id || user.id).toString(), name: user.name, email: user.email }
+      user: { id: userIdStr, _id: userIdStr, name: user.name, email: user.email }
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -413,7 +423,7 @@ app.post('/api/auth/login', authLimiter, validateBody(authLoginSchema), async (r
 // Validate token / Get current user
 app.get('/api/auth/me', authenticateToken, (req, res) => {
   res.json({
-    user: { id: req.user.id, name: req.user.name, email: req.user.email }
+    user: { id: req.user.id, _id: req.user.id, name: req.user.name, email: req.user.email }
   });
 });
 

@@ -13,17 +13,34 @@ export default function SettingsPanel({
     setGoogleMapsKey(settings?.googleMapsKey || '');
   }, [settings?.googleMapsKey]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSaveSettings({ googleMapsKey });
+    onSaveSettings({ googleMapsKey: (googleMapsKey || '').trim() });
     onClose();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg overflow-hidden rounded-2xl glass border border-white/15 shadow-2xl p-6 text-slate-200">
+    <div 
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-lg overflow-hidden rounded-2xl glass border border-white/15 shadow-2xl p-6 text-slate-200"
+      >
         
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10">
@@ -32,8 +49,9 @@ export default function SettingsPanel({
             <h3 className="font-display font-bold text-lg text-white">Developer Settings</h3>
           </div>
           <button 
+            type="button"
             onClick={onClose} 
-            className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+            className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

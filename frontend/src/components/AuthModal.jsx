@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function AuthModal({
@@ -13,9 +13,39 @@ export default function AuthModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Clear stale form inputs and error messages when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setEmail('');
+      setPassword('');
+      setName('');
+      setError('');
+      setLoading(false);
+    }
+  }, [isOpen]);
+
+  // Handle Escape key to dismiss modal when not loading
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !loading) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, loading, onClose]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return; // Prevent double submissions
     setError('');
+
+    if (mode === 'register' && name.trim().length > 0 && name.trim().length < 2) {
+      setError('Name must be at least 2 characters long.');
+      return;
+    }
+
     setLoading(true);
 
     if (mode === 'forgot') {
@@ -96,6 +126,7 @@ export default function AuthModal({
 
         {/* Close */}
         <button 
+          type="button"
           onClick={onClose} 
           disabled={loading}
           className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
@@ -199,19 +230,19 @@ export default function AuthModal({
         <div className="flex items-center justify-between text-[11px] text-slate-400 mt-5 pt-4 border-t border-white/5">
           {mode === 'login' ? (
             <>
-              <button disabled={loading} onClick={() => { setMode('register'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+              <button type="button" disabled={loading} onClick={() => { setMode('register'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 Don't have an account? <span className="text-blue-400 font-semibold">Sign Up</span>
               </button>
-              <button disabled={loading} onClick={() => { setMode('forgot'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+              <button type="button" disabled={loading} onClick={() => { setMode('forgot'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 Forgot Password?
               </button>
             </>
           ) : mode === 'register' ? (
-            <button disabled={loading} onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+            <button type="button" disabled={loading} onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
               Already have an account? <span className="text-blue-400 font-semibold">Sign In</span>
             </button>
           ) : (
-            <button disabled={loading} onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+            <button type="button" disabled={loading} onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
               Remembered your password? <span className="text-blue-400 font-semibold">Sign In</span>
             </button>
           )}

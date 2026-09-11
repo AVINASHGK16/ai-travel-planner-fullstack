@@ -49,8 +49,9 @@ export default function Navbar({
           
           {/* Dashboard/Saved Trips */}
           <button
+            type="button"
             onClick={() => setView(view === 'dashboard' ? 'home' : 'dashboard')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all duration-300 border ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all duration-300 border cursor-pointer ${
               view === 'dashboard'
                 ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-transparent'
                 : 'text-slate-300 border-white/10 hover:bg-white/5'
@@ -62,17 +63,19 @@ export default function Navbar({
 
           {/* Dev/API Keys Settings */}
           <button
+            type="button"
             onClick={onOpenSettings}
             title="Configure API Keys"
-            className="p-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 transition-all duration-200"
+            className="p-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 transition-all duration-200 cursor-pointer"
           >
             <Key className="w-4.5 h-4.5" />
           </button>
 
           {/* Light/Dark Toggle */}
           <button
+            type="button"
             onClick={toggleTheme}
-            className="p-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 transition-all duration-200"
+            className="p-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 transition-all duration-200 cursor-pointer"
           >
             {theme === 'dark' ? (
               <Sun className="w-4.5 h-4.5 text-yellow-400" />
@@ -83,8 +86,9 @@ export default function Navbar({
 
           {/* User Profile / Auth */}
           <button
+            type="button"
             onClick={handleAuthClick}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 hover:text-white transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 hover:text-white transition-all duration-200 cursor-pointer"
           >
             <User className="w-4.5 h-4.5 text-blue-400" />
             <span className="text-sm font-medium">

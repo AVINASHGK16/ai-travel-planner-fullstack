@@ -92,6 +92,17 @@ export default function ChatAssistant({ tripData }) {
     }
   }, [messages, isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   const handleSendMessage = async (textToSend) => {
     const rawText = textToSend !== undefined ? textToSend : inputText;
     if (typeof rawText !== 'string') return;
@@ -186,8 +197,9 @@ export default function ChatAssistant({ tripData }) {
             </div>
             
             <button 
+              type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -233,10 +245,11 @@ export default function ChatAssistant({ tripData }) {
             {quickPrompts.map((qp, idx) => (
               <button
                 key={idx}
+                type="button"
                 disabled={loading}
-                onClick={() => handleSendMessage(qp.text)}
+                onClick={() => { if (!loading) handleSendMessage(qp.text); }}
                 className={`px-2.5 py-1.5 bg-slate-900/70 border border-white/5 rounded-lg text-[10px] font-semibold transition-all ${
-                  loading ? 'opacity-50 cursor-not-allowed text-slate-500' : 'hover:border-blue-500/30 text-slate-300 hover:text-white'
+                  loading ? 'opacity-50 cursor-not-allowed text-slate-500' : 'hover:border-blue-500/30 text-slate-300 hover:text-white cursor-pointer'
                 }`}
               >
                 {qp.label}
@@ -259,9 +272,10 @@ export default function ChatAssistant({ tripData }) {
               }`}
             />
             <button
+              type="button"
               onClick={() => handleSendMessage()}
               disabled={loading || !inputText.trim()}
-              className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors shrink-0 shadow-md shadow-blue-500/10"
+              className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors shrink-0 shadow-md shadow-blue-500/10 cursor-pointer"
             >
               <Send className="w-4.5 h-4.5" />
             </button>
@@ -272,8 +286,9 @@ export default function ChatAssistant({ tripData }) {
 
       {/* Floating Toggle Icon */}
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="p-4 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white hover:from-blue-500 hover:to-purple-500 shadow-xl shadow-blue-500/20 transition-all duration-300 active:scale-90 hover:scale-105 shrink-0 z-50 flex items-center justify-center"
+        className="p-4 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white hover:from-blue-500 hover:to-purple-500 shadow-xl shadow-blue-500/20 transition-all duration-300 active:scale-90 hover:scale-105 shrink-0 z-50 flex items-center justify-center cursor-pointer"
       >
         {isOpen ? <X className="w-6 h-6" /> : <MessageSquare className="w-6 h-6 animate-pulse" />}
       </button>

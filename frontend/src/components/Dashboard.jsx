@@ -145,8 +145,9 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
           <p className="text-sm text-slate-400">Review, manage and download your custom itineraries</p>
         </div>
         <button
+          type="button"
           onClick={() => setView('home')}
-          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-blue-500/10 active:scale-[0.98] self-start"
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-blue-500/10 active:scale-[0.98] self-start cursor-pointer"
         >
           Plan A New Trip
         </button>
@@ -181,6 +182,7 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
         /* History Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {(savedTrips || []).filter(Boolean).map((trip, idx) => {
+            const tripId = trip._id || trip.id || `trip_${idx}`;
             const fromCity = typeof trip.from === 'string' ? trip.from.split(',')[0] : 'Origin';
             const toCity = typeof trip.to === 'string' ? trip.to.split(',')[0] : 'Destination';
             const totalCost = trip.budgetDetails?.total ? Number(trip.budgetDetails.total) : Number(trip.budget || 0);
@@ -188,8 +190,11 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
 
             return (
               <div
-                key={trip._id || idx}
-                onClick={() => onSelectTrip(trip)}
+                key={tripId}
+                onClick={() => {
+                  if (deletingTripId) return;
+                  onSelectTrip(trip);
+                }}
                 className="group rounded-2xl glass border border-white/10 overflow-hidden hover:border-white/25 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-xl flex flex-col justify-between"
               >
                 
@@ -225,18 +230,20 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
                 <div className="flex gap-2">
                   {/* Download */}
                   <button
+                    type="button"
                     onClick={(e) => handleDownloadPDF(e, trip)}
                     title="Download Trip PDF"
-                    className="p-2 bg-slate-900 border border-white/5 hover:border-blue-500/30 text-slate-300 hover:text-white rounded-lg transition-colors"
+                    className="p-2 bg-slate-900 border border-white/5 hover:border-blue-500/30 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
                   </button>
                   
                   {/* Share */}
                   <button
+                    type="button"
                     onClick={(e) => handleShareTrip(e, trip)}
                     title="Share Itinerary"
-                    className="p-2 bg-slate-900 border border-white/5 hover:border-indigo-500/30 text-slate-300 hover:text-white rounded-lg transition-colors"
+                    className="p-2 bg-slate-900 border border-white/5 hover:border-indigo-500/30 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
                   >
                     <Share2 className="w-4 h-4" />
                   </button>
@@ -244,21 +251,23 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
 
                 {/* Delete */}
                 <button
-                  disabled={deletingTripId === (trip._id || idx)}
+                  type="button"
+                  disabled={deletingTripId === tripId}
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (deletingTripId) return;
                     if (confirm('Delete this saved travel plan?')) {
-                      onDeleteTrip(trip._id || idx);
+                      onDeleteTrip(tripId);
                     }
                   }}
-                  title={deletingTripId === (trip._id || idx) ? 'Deleting...' : 'Remove Plan'}
-                  className={`p-2 bg-slate-900 border border-white/5 rounded-lg transition-colors ${
-                    deletingTripId === (trip._id || idx)
+                  title={deletingTripId === tripId ? 'Deleting...' : 'Remove Plan'}
+                  className={`p-2 bg-slate-900 border border-white/5 rounded-lg transition-colors cursor-pointer ${
+                    deletingTripId === tripId
                       ? 'opacity-60 cursor-not-allowed text-red-400'
                       : 'hover:border-red-500/30 text-slate-400 hover:text-red-400'
                   }`}
                 >
-                  {deletingTripId === (trip._id || idx) ? (
+                  {deletingTripId === tripId ? (
                     <Loader2 className="w-4 h-4 animate-spin text-red-400" />
                   ) : (
                     <Trash2 className="w-4 h-4" />

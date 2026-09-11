@@ -85,9 +85,9 @@ export default function SmartSuggestions({ suggestions, onSelectMode, isAIGenera
                   </div>
 
                   {/* Title */}
-                  <h4 className="font-display font-semibold text-sm text-slate-300">{item.title || 'Route Option'}</h4>
+                  <h4 className="font-display font-semibold text-sm text-slate-300">{item.title || item.mode || 'Route Option'}</h4>
                   <p className="text-xs font-bold text-white font-mono mt-1">{priceText}</p>
-                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">{item.desc || ''}</p>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">{item.desc || item.description || ''}</p>
                 </div>
 
                 {/* Action Link */}

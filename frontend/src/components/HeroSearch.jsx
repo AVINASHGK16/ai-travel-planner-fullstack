@@ -81,7 +81,9 @@ export default function HeroSearch({ onSearch, loading = false }) {
       alert('Return date cannot be earlier than departure date.');
       return;
     }
-    onSearch({ from: from.trim(), to: to.trim(), date, returnDate, travelers, budget, preferredMode });
+    const cleanTravelers = Math.min(50, Math.max(1, parseInt(travelers, 10) || 1));
+    const cleanBudget = Math.max(100, Math.min(10000000, parseInt(budget, 10) || 2500));
+    onSearch({ from: from.trim(), to: to.trim(), date, returnDate: returnDate || null, travelers: cleanTravelers, budget: cleanBudget, preferredMode });
   };
 
   return (
@@ -236,7 +238,15 @@ export default function HeroSearch({ onSearch, loading = false }) {
                 min="1"
                 max="50"
                 value={travelers}
-                onChange={(e) => setTravelers(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (Number.isNaN(val)) setTravelers('');
+                  else setTravelers(Math.min(50, Math.max(1, val)));
+                }}
+                onBlur={() => {
+                  if (!travelers || travelers < 1) setTravelers(1);
+                  else if (travelers > 50) setTravelers(50);
+                }}
                 className="w-full pl-10 pr-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white"
               />
             </div>
