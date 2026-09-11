@@ -27,6 +27,8 @@ out/
 # App-specific persistent data to ignore
 saved_trips.json
 backend/saved_trips.json
+users.json
+backend/users.json
 
 # Editor directories and files
 .vscode/

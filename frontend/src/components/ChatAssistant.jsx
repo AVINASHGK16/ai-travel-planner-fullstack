@@ -2,6 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Compass, Sparkles, Smile } from 'lucide-react';
 import { getAIChatResponse } from '../utils/planner';
 
+// Safe markdown-bold renderer — prevents XSS from dangerouslySetInnerHTML
+const renderMessageText = (text) => {
+  if (!text) return null;
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+};
+
 export default function ChatAssistant({ tripData, settings }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -32,7 +44,7 @@ export default function ChatAssistant({ tripData, settings }) {
     try {
       let reply = '';
       if (settings.geminiKey) {
-        reply = await getAIChatResponse(settings.geminiKey, messages, text, tripData);
+        reply = await getAIChatResponse(messages, text, tripData, settings.geminiKey);
       } else {
         // Fallback local rules engine for chat queries
         const lower = text.toLowerCase();
@@ -153,11 +165,11 @@ Try asking: *"What should I pack for this trip?"* or *"Are there any good restau
                   className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed ${
                     msg.sender === 'user'
                       ? 'bg-blue-600 text-white rounded-tr-none'
-                      : 'bg-slate-900/60 border border-white/10 text-slate-300 rounded-tl-none markdown-style'
+                      : 'bg-slate-900/60 border border-white/10 text-slate-300 rounded-tl-none'
                   }`}
                   style={{ whiteSpace: 'pre-line' }}
-                  dangerouslySetInnerHTML={{ __html: msg.text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }}
                 >
+                  {renderMessageText(msg.text)}
                 </div>
               </div>
             ))}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, User, KeyRound, Globe } from 'lucide-react';
+import { X, Mail, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function AuthModal({
   isOpen,
@@ -10,195 +10,177 @@ export default function AuthModal({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
+
     if (mode === 'forgot') {
-      alert(`Password reset link sent to ${email}`);
-      setMode('login');
+      setError('Password reset is not yet available. Please contact support.');
+      setLoading(false);
       return;
     }
 
-    // Mock successful authentication
-    const user = {
-      name: mode === 'register' ? name : email.split('@')[0],
-      email: email
-    };
-    onLoginSuccess(user);
-    onClose();
-  };
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
 
-  const handleGoogleSignIn = () => {
-    const user = {
-      name: 'Google Explorer',
-      email: 'explorer@gmail.com'
-    };
-    onLoginSuccess(user);
-    onClose();
+      const body = { email, password };
+      if (mode === 'register') body.name = name;
+
+      const response = await fetch(`${backendUrl}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Authentication failed.');
+      }
+
+      // Pass both user and token to parent
+      onLoginSuccess({ user: data.user, token: data.token });
+      
+      // Reset form
+      setEmail('');
+      setPassword('');
+      setName('');
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl glass border border-white/15 shadow-2xl p-6 text-slate-200">
-        
-        {/* Close Button */}
-        <button 
-          onClick={onClose} 
-          className="absolute right-4 top-4 p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-        >
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+      {/* Overlay */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
+
+      {/* Modal Card */}
+      <div className="relative z-10 w-full max-w-md mx-4 rounded-2xl glass border border-white/10 p-7 text-white animate-slide-up">
+
+        {/* Close */}
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
           <X className="w-5 h-5" />
         </button>
 
-        {/* Modal Header */}
-        <div className="text-center mb-6">
-          <h3 className="font-display font-bold text-2xl text-white">
-            {mode === 'login' && 'Welcome Back'}
-            {mode === 'register' && 'Start Your Adventure'}
-            {mode === 'forgot' && 'Reset Password'}
-          </h3>
-          <p className="text-sm text-slate-400 mt-1.5">
-            {mode === 'login' && 'Sign in to access your saved itineraries'}
-            {mode === 'register' && 'Create an account to start planning trips'}
-            {mode === 'forgot' && "Enter your email to recover your credentials"}
-          </p>
-        </div>
+        {/* Title */}
+        <h2 className="font-display font-bold text-2xl mb-1">
+          {mode === 'login' ? 'Welcome Back' : mode === 'register' ? 'Create Account' : 'Reset Password'}
+        </h2>
+        <p className="text-xs text-slate-400 mb-6">
+          {mode === 'login'
+            ? 'Sign in to access your saved trips and itineraries.'
+            : mode === 'register'
+            ? 'Join us to plan and save your travel adventures.'
+            : 'Enter your email to receive a reset link.'}
+        </p>
 
+        {/* Error Message */}
+        {error && (
+          <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          
-          {/* Name Field (Register Mode) */}
+
           {mode === 'register' && (
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                Full Name
-              </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-3 text-slate-400">
-                  <User className="w-4.5 h-4.5" />
-                </span>
+              <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-1.5 tracking-wider">Full Name</label>
+              <div className="flex items-center gap-2 bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2.5 focus-within:border-blue-500/50 transition-colors">
+                <User className="w-4 h-4 text-slate-500" />
                 <input
                   type="text"
-                  required
+                  placeholder="Your name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="John Doe"
-                  className="w-full pl-11 pr-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-slate-500"
+                  className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500"
                 />
               </div>
             </div>
           )}
 
-          {/* Email Field */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Email Address
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-3 text-slate-400">
-                <Mail className="w-4.5 h-4.5" />
-              </span>
+            <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-1.5 tracking-wider">Email</label>
+            <div className="flex items-center gap-2 bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2.5 focus-within:border-blue-500/50 transition-colors">
+              <Mail className="w-4 h-4 text-slate-500" />
               <input
                 type="email"
-                required
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full pl-11 pr-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-slate-500"
+                required
+                className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500"
               />
             </div>
           </div>
 
-          {/* Password Field */}
           {mode !== 'forgot' && (
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Password
-                </label>
-                {mode === 'login' && (
-                  <button
-                    type="button"
-                    onClick={() => setMode('forgot')}
-                    className="text-xs text-blue-400 hover:text-blue-300 hover:underline"
-                  >
-                    Forgot?
-                  </button>
-                )}
-              </div>
-              <div className="relative">
-                <span className="absolute left-3.5 top-3 text-slate-400">
-                  <Lock className="w-4.5 h-4.5" />
-                </span>
+              <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-1.5 tracking-wider">Password</label>
+              <div className="flex items-center gap-2 bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2.5 focus-within:border-blue-500/50 transition-colors">
+                <Lock className="w-4 h-4 text-slate-500" />
                 <input
                   type="password"
-                  required
+                  placeholder={mode === 'register' ? 'Min 6 characters' : '••••••••'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-11 pr-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-slate-500"
+                  required
+                  minLength={mode === 'register' ? 6 : undefined}
+                  className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500"
                 />
               </div>
             </div>
           )}
 
-          {/* Submit Button */}
+          {/* Submit */}
           <button
             type="submit"
-            className="w-full py-3 mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium rounded-xl transition-all shadow-md shadow-blue-500/20 active:scale-[0.98]"
+            disabled={loading}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {mode === 'login' && 'Sign In'}
-            {mode === 'register' && 'Sign Up'}
-            {mode === 'forgot' && 'Send Reset Instructions'}
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{mode === 'login' ? 'Signing In...' : mode === 'register' ? 'Creating Account...' : 'Sending...'}</span>
+              </>
+            ) : (
+              <span>{mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : 'Send Reset Link'}</span>
+            )}
           </button>
-
-          {/* Google SSO (For Login/Register) */}
-          {mode !== 'forgot' && (
-            <>
-              <div className="relative flex py-2 items-center">
-                <div className="flex-grow border-t border-white/10"></div>
-                <span className="flex-shrink mx-4 text-slate-400 text-xs uppercase tracking-wider">or</span>
-                <div className="flex-grow border-t border-white/10"></div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                className="w-full flex items-center justify-center gap-2 py-2.5 border border-white/10 hover:bg-white/5 text-slate-200 rounded-xl font-medium text-sm transition-all"
-              >
-                <Globe className="w-4 h-4 text-red-400" />
-                Continue with Google
-              </button>
-            </>
-          )}
-
         </form>
 
-        {/* View Toggle Footers */}
-        <div className="text-center mt-6 pt-4 border-t border-white/10 text-sm text-slate-400">
-          {mode === 'login' && (
-            <p>
-              New to travel planning?{' '}
-              <button onClick={() => setMode('register')} className="text-blue-400 hover:underline">
-                Create Account
+        {/* Toggle Modes */}
+        <div className="flex items-center justify-between text-[11px] text-slate-400 mt-5 pt-4 border-t border-white/5">
+          {mode === 'login' ? (
+            <>
+              <button onClick={() => { setMode('register'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer">
+                Don't have an account? <span className="text-blue-400 font-semibold">Sign Up</span>
               </button>
-            </p>
-          )}
-          {mode === 'register' && (
-            <p>
-              Already have an account?{' '}
-              <button onClick={() => setMode('login')} className="text-blue-400 hover:underline">
-                Sign In
+              <button onClick={() => { setMode('forgot'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer">
+                Forgot Password?
               </button>
-            </p>
-          )}
-          {mode === 'forgot' && (
-            <p>
-              Remembered credentials?{' '}
-              <button onClick={() => setMode('login')} className="text-blue-400 hover:underline">
-                Go Back
-              </button>
-            </p>
+            </>
+          ) : mode === 'register' ? (
+            <button onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer">
+              Already have an account? <span className="text-blue-400 font-semibold">Sign In</span>
+            </button>
+          ) : (
+            <button onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer">
+              Back to <span className="text-blue-400 font-semibold">Sign In</span>
+            </button>
           )}
         </div>
 

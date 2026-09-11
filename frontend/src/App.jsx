@@ -12,7 +12,7 @@ import ChatAssistant from './components/ChatAssistant';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
 import SettingsPanel from './components/SettingsPanel';
-import { generateMockData, getAIGeneration, buildTripAIPrompt } from './utils/planner';
+import { generateMockData, getAIGeneration } from './utils/planner';
 
 export default function App() {
   const [theme, setTheme] = useState('dark');
@@ -34,20 +34,51 @@ export default function App() {
 
   // Authentication State
   const [auth, setAuth] = useState({
-    user: JSON.parse(localStorage.getItem('user')) || null,
+    user: null,
+    token: localStorage.getItem('authToken') || null,
     modalOpen: false
   });
 
   // Saved Trips History
   const [savedTrips, setSavedTrips] = useState([]);
 
-  // Load saved trips when user logs in or components mount
+  // Validate stored auth token on mount
+  useEffect(() => {
+    const validateToken = async () => {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const res = await fetch(`${backendUrl}/api/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAuth({ user: data.user, token, modalOpen: false });
+        } else {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('user');
+        }
+      } catch {
+        // Backend offline — use cached user data if available
+        const cachedUser = JSON.parse(localStorage.getItem('user') || 'null');
+        if (cachedUser) {
+          setAuth(prev => ({ ...prev, user: cachedUser }));
+        }
+      }
+    };
+    validateToken();
+  }, []);
+
+  // Load saved trips when user authenticates
   useEffect(() => {
     const fetchTrips = async () => {
-      if (auth.user?.email) {
+      if (auth.user && auth.token) {
         try {
           const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-          const response = await fetch(`${backendUrl}/api/trips?email=${encodeURIComponent(auth.user.email)}`);
+          const response = await fetch(`${backendUrl}/api/trips`, {
+            headers: { 'Authorization': `Bearer ${auth.token}` }
+          });
           if (response.ok) {
             const data = await response.json();
             setSavedTrips(data);
@@ -64,13 +95,20 @@ export default function App() {
         setSavedTrips([]);
       }
     };
-
     fetchTrips();
-  }, [auth.user]);
+  }, [auth.user, auth.token]);
 
-  const handleLoginSuccess = (user) => {
-    setAuth({ user, modalOpen: false });
+  const handleLoginSuccess = ({ user, token }) => {
+    setAuth({ user, token, modalOpen: false });
+    localStorage.setItem('authToken', token);
     localStorage.setItem('user', JSON.stringify(user));
+  };
+
+  const handleLogout = () => {
+    setAuth({ user: null, token: null, modalOpen: false });
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+    setSavedTrips([]);
   };
 
   const handleSaveSettings = (newSettings) => {
@@ -96,18 +134,8 @@ export default function App() {
 
     try {
       if (settings.geminiKey) {
-        // Run using live Gemini AI API
-        const prompt = buildTripAIPrompt(
-          params.from,
-          params.to,
-          params.date,
-          params.returnDate,
-          params.travelers,
-          params.budget,
-          params.preferredMode
-        );
-        
-        const responseData = await getAIGeneration(settings.geminiKey, prompt);
+        // Route AI generation through backend proxy (secure)
+        const responseData = await getAIGeneration(params, settings.geminiKey);
         
         // Formulate coordinates
         const fromCoords = generateMockData(params.from, params.to).coordinates.from;
@@ -191,7 +219,8 @@ export default function App() {
       const response = await fetch(`${backendUrl}/api/trips`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${auth.token}`
         },
         body: JSON.stringify(tripToSave)
       });
@@ -232,7 +261,8 @@ export default function App() {
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         const response = await fetch(`${backendUrl}/api/trips/${tripIdOrIndex}`, {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${auth.token}` }
         });
         if (!response.ok) {
           throw new Error('Failed to delete trip from backend');
@@ -318,6 +348,7 @@ export default function App() {
         setAuth={setAuth}
         setView={setView}
         view={view}
+        onLogout={handleLogout}
       />
 
       {/* Main Container Content */}

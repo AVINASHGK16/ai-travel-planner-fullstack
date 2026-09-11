@@ -15,7 +15,7 @@ export default function WeatherInfo({ weather, destination, openWeatherKey }) {
       const city = destination.split(',')[0].trim();
       try {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-        const url = `${backendUrl}/api/weather?city=${encodeURIComponent(city)}&weatherKey=${openWeatherKey || ''}`;
+        const url = `${backendUrl}/api/weather?city=${encodeURIComponent(city)}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('Weather API request failed');
         const data = await res.json();

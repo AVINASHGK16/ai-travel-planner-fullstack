@@ -238,41 +238,31 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
   };
 }
 
-// Invoke the Gemini API to get intelligent itineraries, recommendations and chat assistance
-export async function getAIGeneration(apiKey, promptText) {
+// Invoke the backend proxy to get AI-powered itineraries (secure — key stays server-side)
+export async function getAIGeneration(searchParams, geminiKey) {
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    const response = await fetch(url, {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const response = await fetch(`${backendUrl}/api/generate`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: promptText }
-            ]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json'
-        }
+        from: searchParams.from,
+        to: searchParams.to,
+        date: searchParams.date,
+        returnDate: searchParams.returnDate,
+        travelers: searchParams.travelers,
+        budget: searchParams.budget,
+        preferredMode: searchParams.preferredMode,
+        geminiKey: geminiKey || undefined
       })
     });
-    
+
     if (!response.ok) {
-      throw new Error(`Gemini API returned status ${response.status}`);
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `API error: ${response.status}`);
     }
-    
-    const responseData = await response.json();
-    const rawText = responseData?.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!rawText) {
-      throw new Error('Empty response from AI engine');
-    }
-    
-    return JSON.parse(rawText.trim());
+
+    return await response.json();
   } catch (error) {
     console.error('AI Generation error:', error);
     throw error;
@@ -345,62 +335,37 @@ export function buildTripAIPrompt(from, to, date, returnDate, travelers, budget,
   `;
 }
 
-// Send standard chat message to Gemini
-export async function getAIChatResponse(apiKey, chatHistory, userMessage, tripData) {
+// Send chat message through backend proxy (secure — key stays server-side)
+export async function getAIChatResponse(chatHistory, userMessage, tripData, geminiKey) {
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    
-    // System context to guide the chatbot
-    const systemPrompt = `You are a friendly, highly intelligent Travel Assistant for the "AI Travel Planner" application. 
-    The user is asking questions about a trip they are planning. 
-    Here is their current trip context:
-    - Origin: ${tripData?.from || 'Unknown'}
-    - Destination: ${tripData?.to || 'Unknown'}
-    - Date: ${tripData?.date || 'Unknown'}
-    - Travelers: ${tripData?.travelers || '1'}
-    - Budget: ${tripData?.budget || 'Standard'}
-    - Total Distance: ${tripData?.distance || 'Unknown'} km
-    
-    Answer the user's question accurately, offering safety tips, restaurant choices, budget tips, packing checklists, or route details when relevant. Keep your answer brief, concise, and beautifully formatted in markdown.`;
-
-    const contents = [
-      { parts: [{ text: systemPrompt }] }
-    ];
-    
-    // Format history
-    chatHistory.forEach(msg => {
-      contents.push({
-        role: msg.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.text }]
-      });
-    });
-    
-    // Add current user message
-    contents.push({
-      role: 'user',
-      parts: [{ text: userMessage }]
-    });
-
-    const response = await fetch(url, {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const response = await fetch(`${backendUrl}/api/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents
+        message: userMessage,
+        chatHistory: chatHistory,
+        tripContext: tripData ? {
+          from: tripData.from,
+          to: tripData.to,
+          date: tripData.date,
+          travelers: tripData.travelers,
+          budget: tripData.budget,
+          distance: tripData.distance
+        } : null,
+        geminiKey: geminiKey || undefined
       })
     });
-    
+
     if (!response.ok) {
-      throw new Error(`Gemini API returned status ${response.status}`);
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Chat API error: ${response.status}`);
     }
-    
-    const responseData = await response.json();
-    const rawText = responseData?.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    return rawText || "I'm sorry, I couldn't process that. Can you try again?";
+
+    const data = await response.json();
+    return data.reply || "I'm sorry, I couldn't process that. Can you try again?";
   } catch (error) {
     console.error('Chat AI response error:', error);
-    return `Chat integration error: ${error.message}. Please verify your Gemini API key in the developer settings.`;
+    throw error;
   }
 }

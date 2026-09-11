@@ -8,7 +8,8 @@ export default function Navbar({
   auth,
   setAuth,
   setView,
-  view
+  view,
+  onLogout
 }) {
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
@@ -19,7 +20,7 @@ export default function Navbar({
   const handleAuthClick = () => {
     if (auth.user) {
       if (confirm('Are you sure you want to logout?')) {
-        setAuth({ ...auth, user: null });
+        if (onLogout) onLogout();
       }
     } else {
       setAuth({ ...auth, modalOpen: true });
