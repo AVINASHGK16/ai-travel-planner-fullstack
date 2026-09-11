@@ -158,17 +158,38 @@ const tripsLimiter = rateLimit({
 
 app.use('/api/', generalLimiter);
 
-// ─── Validation Helpers ─────────────────────────────────────────
+// ─── Validation Helpers & Async Handler ─────────────────────────
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const sanitize = (str, maxLen = 500) => (typeof str === 'string' ? str.trim().slice(0, maxLen) : '');
 
-// ─── JSON File Database Fallback ────────────────────────────────
+// Safe async handler wrapper guaranteeing errors reach centralized middleware
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+// ─── JSON File Database Fallback (Atomic & Safe) ────────────────
 const LOCAL_DB_PATH = path.join(__dirname, 'saved_trips.json');
 const LOCAL_USERS_PATH = path.join(__dirname, 'users.json');
 
+// Atomic write to disk using temp file + rename to prevent partial/corrupted writes
+const atomicWriteJson = (filePath, data) => {
+  const tempPath = `${filePath}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(tempPath, filePath);
+  } catch (err) {
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch {}
+    throw err;
+  }
+};
+
 const loadLocalTrips = () => {
   if (!fs.existsSync(LOCAL_DB_PATH)) {
-    fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify([]));
+    try {
+      atomicWriteJson(LOCAL_DB_PATH, []);
+    } catch {}
     return [];
   }
   try {
@@ -206,25 +227,28 @@ const loadLocalTrips = () => {
 };
 
 const saveLocalTrips = (trips) => {
-  fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(trips, null, 2));
+  atomicWriteJson(LOCAL_DB_PATH, trips);
 };
 
 const loadLocalUsers = () => {
   if (!fs.existsSync(LOCAL_USERS_PATH)) {
-    fs.writeFileSync(LOCAL_USERS_PATH, JSON.stringify([]));
+    try {
+      atomicWriteJson(LOCAL_USERS_PATH, []);
+    } catch {}
     return [];
   }
   try {
     const data = fs.readFileSync(LOCAL_USERS_PATH, 'utf-8');
-    return JSON.parse(data || '[]');
+    const users = JSON.parse(data || '[]');
+    return Array.isArray(users) ? users : [];
   } catch (err) {
-    console.error('Error reading local users file, resetting:', err);
+    console.error('Error reading local users file, resetting:', err.message);
     return [];
   }
 };
 
 const saveLocalUsers = (users) => {
-  fs.writeFileSync(LOCAL_USERS_PATH, JSON.stringify(users, null, 2));
+  atomicWriteJson(LOCAL_USERS_PATH, users);
 };
 
 // ─── MongoDB Setup ──────────────────────────────────────────────
@@ -232,14 +256,28 @@ let mongoConnected = false;
 const MONGO_URI = process.env.MONGO_URI;
 
 if (MONGO_URI) {
+  mongoose.connection.on('connected', () => {
+    console.log('MongoDB successfully connected.');
+    mongoConnected = true;
+  });
+  mongoose.connection.on('disconnected', () => {
+    console.warn('MongoDB disconnected. Running database in JSON fallback mode.');
+    mongoConnected = false;
+  });
+  mongoose.connection.on('error', (err) => {
+    console.warn('MongoDB connection error. Running database in JSON fallback mode:', err.message);
+    mongoConnected = false;
+  });
+  mongoose.connection.on('reconnected', () => {
+    console.log('MongoDB reconnected.');
+    mongoConnected = true;
+  });
+
   mongoose
     .connect(MONGO_URI)
-    .then(() => {
-      console.log('MongoDB successfully connected.');
-      mongoConnected = true;
-    })
     .catch((err) => {
-      console.warn('MongoDB connection failed. Running database in JSON fallback mode:', err.message);
+      console.warn('MongoDB initial connection failed. Running database in JSON fallback mode:', err.message);
+      mongoConnected = false;
     });
 } else {
   console.log('No MONGO_URI provided in environment. Running database in JSON fallback mode.');
@@ -317,7 +355,7 @@ const authenticateToken = (req, res, next) => {
 // ═══════════════════════════════════════════════════════════════
 
 // Register
-app.post('/api/auth/register', authLimiter, validateBody(authRegisterSchema), async (req, res) => {
+app.post('/api/auth/register', authLimiter, validateBody(authRegisterSchema), asyncHandler(async (req, res, next) => {
   const { name, email, password } = req.validatedBody;
   const normalizedEmail = email.toLowerCase().trim();
   const userName = (name && name.trim()) || normalizedEmail.split('@')[0];
@@ -374,13 +412,12 @@ app.post('/api/auth/register', authLimiter, validateBody(authRegisterSchema), as
       });
     }
   } catch (err) {
-    console.error('Registration error:', err);
-    res.status(500).json({ error: 'Registration failed. Please try again.' });
+    next(err);
   }
-});
+}));
 
 // Login
-app.post('/api/auth/login', authLimiter, validateBody(authLoginSchema), async (req, res) => {
+app.post('/api/auth/login', authLimiter, validateBody(authLoginSchema), asyncHandler(async (req, res, next) => {
   const { email, password } = req.validatedBody;
   const normalizedEmail = email.toLowerCase().trim();
 
@@ -415,20 +452,19 @@ app.post('/api/auth/login', authLimiter, validateBody(authLoginSchema), async (r
       user: { id: userIdStr, _id: userIdStr, name: user.name, email: user.email }
     });
   } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Login failed. Please try again.' });
+    next(err);
   }
-});
+}));
 
 // Validate token / Get current user
-app.get('/api/auth/me', authenticateToken, (req, res) => {
+app.get('/api/auth/me', authenticateToken, asyncHandler(async (req, res) => {
   res.json({
     user: { id: req.user.id, _id: req.user.id, name: req.user.name, email: req.user.email }
   });
-});
+}));
 
 // Logout / Revoke Token (Server-side Session Invalidation)
-app.post('/api/auth/logout', authenticateToken, (req, res) => {
+app.post('/api/auth/logout', authenticateToken, asyncHandler(async (req, res) => {
   if (req.token) {
     revokedTokens.add(req.token);
     // Auto-purge token from memory after 7 days (its max lifetime)
@@ -437,14 +473,14 @@ app.post('/api/auth/logout', authenticateToken, (req, res) => {
     }, 7 * 24 * 60 * 60 * 1000);
   }
   res.json({ message: 'Session successfully revoked and logged out.' });
-});
+}));
 
 // ═══════════════════════════════════════════════════════════════
 //  AI API ENDPOINTS (proxied — keys stay server-side)
 // ═══════════════════════════════════════════════════════════════
 
 // 1. Generate travel plan
-app.post('/api/generate', aiGenerateLimiter, validateBody(generateTripSchema), async (req, res) => {
+app.post('/api/generate', aiGenerateLimiter, validateBody(generateTripSchema), asyncHandler(async (req, res, next) => {
   const { from, to, date, returnDate, travelers, budget, preferredMode } = req.validatedBody;
 
   // Security: API key is exclusively read from server environment
@@ -619,12 +655,12 @@ app.post('/api/generate', aiGenerateLimiter, validateBody(generateTripSchema), a
       });
     }
     console.error('Express AI generation error:', String(error?.message || error).replace(/key=[^&\s]+/g, 'key=REDACTED'));
-    res.status(500).json({ error: 'Failed to generate travel plan. Please try again later.', code: 'SERVER_ERROR' });
+    next(error);
   }
-});
+}));
 
 // 2. Chat with AI assistant (proxied — key stays server-side)
-app.post('/api/chat', aiChatLimiter, validateBody(chatSchema), async (req, res) => {
+app.post('/api/chat', aiChatLimiter, validateBody(chatSchema), asyncHandler(async (req, res, next) => {
   const { message, chatHistory, tripContext } = req.validatedBody;
 
   // Security: API key is exclusively read from server environment
@@ -696,12 +732,12 @@ Answer the user's question accurately, offering safety tips, restaurant choices,
       return res.status(504).json({ error: 'AI chat response timed out.', code: 'AI_TIMEOUT' });
     }
     console.error('Chat AI error:', String(error?.message || error).replace(/key=[^&\s]+/g, 'key=REDACTED'));
-    res.status(500).json({ error: 'Failed to process chat message. Please try again later.' });
+    next(error);
   }
-});
+}));
 
 // 3. Fetch weather details (key stays server-side only)
-app.get('/api/weather', weatherLimiter, validateQuery(weatherQuerySchema), async (req, res) => {
+app.get('/api/weather', weatherLimiter, validateQuery(weatherQuerySchema), asyncHandler(async (req, res, next) => {
   const { city } = req.validatedQuery;
   const apiKey = process.env.WEATHER_API_KEY;
 
@@ -776,16 +812,16 @@ app.get('/api/weather', weatherLimiter, validateQuery(weatherQuerySchema), async
       });
     }
     console.error('Weather service error:', String(error?.message || error).replace(/appid=[^&\s]+/g, 'appid=REDACTED'));
-    res.status(500).json({ error: 'Failed to retrieve weather data. Please try again later.', code: 'SERVER_ERROR' });
+    next(error);
   }
-});
+}));
 
 // ═══════════════════════════════════════════════════════════════
 //  TRIP API ENDPOINTS (Protected — require authentication)
 // ═══════════════════════════════════════════════════════════════
 
 // 4. Save trip itinerary
-app.post('/api/trips', tripsLimiter, authenticateToken, validateBody(saveTripSchema), async (req, res) => {
+app.post('/api/trips', tripsLimiter, authenticateToken, validateBody(saveTripSchema), asyncHandler(async (req, res, next) => {
   const tripData = { ...req.validatedBody };
 
   // SECURITY: Override userEmail with authenticated user — ignore client-supplied value
@@ -805,13 +841,12 @@ app.post('/api/trips', tripsLimiter, authenticateToken, validateBody(saveTripSch
       res.status(201).json(newTrip);
     }
   } catch (error) {
-    console.error('Save trip error:', error.message || error);
-    res.status(500).json({ error: 'Failed to save trip itinerary. Please try again.' });
+    next(error);
   }
-});
+}));
 
 // 5. Retrieve saved trips (only the authenticated user's trips)
-app.get('/api/trips', authenticateToken, async (req, res) => {
+app.get('/api/trips', authenticateToken, asyncHandler(async (req, res, next) => {
   try {
     if (mongoConnected) {
       // SECURITY: Filter by authenticated user's email — not a query param
@@ -825,13 +860,12 @@ app.get('/api/trips', authenticateToken, async (req, res) => {
       res.json(filtered);
     }
   } catch (error) {
-    console.error('Fetch trips error:', error.message || error);
-    res.status(500).json({ error: 'Failed to retrieve trips. Please try again.' });
+    next(error);
   }
-});
+}));
 
 // 6. Delete saved trip (with ownership verification)
-app.delete('/api/trips/:id', tripsLimiter, authenticateToken, validateParams(tripIdParamSchema), async (req, res) => {
+app.delete('/api/trips/:id', tripsLimiter, authenticateToken, validateParams(tripIdParamSchema), asyncHandler(async (req, res, next) => {
   const { id } = req.validatedParams;
 
   try {
@@ -851,7 +885,7 @@ app.delete('/api/trips/:id', tripsLimiter, authenticateToken, validateParams(tri
       res.json({ message: 'Trip successfully deleted.' });
     } else {
       const trips = loadLocalTrips();
-      const tripIndex = trips.findIndex(t => t._id === id);
+      const tripIndex = trips.findIndex(t => t._id === id || t.id === id);
       if (tripIndex === -1) {
         return res.status(404).json({ error: 'Trip not found.' });
       }
@@ -864,10 +898,9 @@ app.delete('/api/trips/:id', tripsLimiter, authenticateToken, validateParams(tri
       res.json({ message: 'Trip successfully deleted.' });
     }
   } catch (error) {
-    console.error('Delete trip error:', error.message || error);
-    res.status(500).json({ error: 'Failed to delete trip. Please try again.' });
+    next(error);
   }
-});
+}));
 
 // ─── Serve frontend React application in production ─────────────
 const distPath = path.join(__dirname, 'dist');
@@ -893,7 +926,24 @@ app.use((err, req, res, next) => {
   if (err.message === 'CORS origin not allowed' || err.message === 'Not allowed by CORS') {
     return res.status(403).json({ error: 'CORS origin not allowed.' });
   }
-  console.error('Unhandled server error:', err.message || err);
+  if (err.name === 'CastError') {
+    return res.status(400).json({ error: 'Invalid identifier format.' });
+  }
+  if (err.name === 'ValidationError') {
+    const details = err.errors ? Object.values(err.errors).map(e => e.message) : [err.message];
+    return res.status(400).json({ error: 'Validation error.', details });
+  }
+  if (err.code === 11000) {
+    return res.status(409).json({ error: 'An account with this email already exists.' });
+  }
+
+  // Safe logging: redact potential API keys or tokens in message
+  const safeMessage = String(err?.message || err)
+    .replace(/key=[^&\s]+/gi, 'key=REDACTED')
+    .replace(/appid=[^&\s]+/gi, 'appid=REDACTED')
+    .replace(/Bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer REDACTED');
+
+  console.error('Centralized server error:', safeMessage);
   res.status(500).json({ error: 'An unexpected internal error occurred.' });
 });
 
