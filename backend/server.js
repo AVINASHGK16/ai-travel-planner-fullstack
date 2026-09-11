@@ -8,6 +8,18 @@ import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
+import {
+  validateBody,
+  validateQuery,
+  validateParams,
+  generateTripSchema,
+  weatherQuerySchema,
+  saveTripSchema,
+  tripIdParamSchema,
+  authRegisterSchema,
+  authLoginSchema,
+  chatSchema
+} from './validators.js';
 
 dotenv.config();
 
@@ -40,12 +52,13 @@ app.use(cors({
 }));
 
 // Body parser with size limit to prevent payload attacks
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '250kb' }));
 
-// Rate limiting
+// ─── Rate Limiting ─────────────────────────────────────────────
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200,
+  statusCode: 429,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests. Please try again later.' }
@@ -53,14 +66,47 @@ const generalLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { error: 'Too many authentication attempts. Please wait and try again.' }
+  max: 15,
+  statusCode: 429,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts. Please wait 15 minutes before trying again.' }
 });
 
-const aiLimiter = rateLimit({
+const aiGenerateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  statusCode: 429,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'AI trip generation rate limit exceeded. Please wait before generating more itineraries.' }
+});
+
+const aiChatLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
-  message: { error: 'AI request rate limit exceeded. Please wait before trying again.' }
+  statusCode: 429,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'AI chat assistant rate limit exceeded. Please wait a moment before sending more messages.' }
+});
+
+const weatherLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  statusCode: 429,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Weather lookup rate limit exceeded. Please wait before requesting more weather forecasts.' }
+});
+
+const tripsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  statusCode: 429,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many trip management requests. Please try again later.' }
 });
 
 app.use('/api/', generalLimiter);
@@ -185,22 +231,10 @@ const authenticateToken = (req, res, next) => {
 // ═══════════════════════════════════════════════════════════════
 
 // Register
-app.post('/api/auth/register', authLimiter, async (req, res) => {
-  const { name, email, password } = req.body;
-
-  // Input validation
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
-  }
-  if (!isValidEmail(email)) {
-    return res.status(400).json({ error: 'Please provide a valid email address.' });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
-  }
-
+app.post('/api/auth/register', authLimiter, validateBody(authRegisterSchema), async (req, res) => {
+  const { name, email, password } = req.validatedBody;
   const normalizedEmail = email.toLowerCase().trim();
-  const userName = sanitize(name) || normalizedEmail.split('@')[0];
+  const userName = (name && name.trim()) || normalizedEmail.split('@')[0];
 
   try {
     const hashedPassword = await bcrypt.hash(password, 12);
@@ -260,13 +294,8 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 });
 
 // Login
-app.post('/api/auth/login', authLimiter, async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
-  }
-
+app.post('/api/auth/login', authLimiter, validateBody(authLoginSchema), async (req, res) => {
+  const { email, password } = req.validatedBody;
   const normalizedEmail = email.toLowerCase().trim();
 
   try {
@@ -316,13 +345,8 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 
 // 1. Generate travel plan
-app.post('/api/generate', aiLimiter, async (req, res) => {
-  const { from, to, date, returnDate, travelers, budget, preferredMode } = req.body;
-
-  // Input validation
-  if (!from || !to || !date) {
-    return res.status(400).json({ error: 'Origin, destination, and date are required.' });
-  }
+app.post('/api/generate', aiGenerateLimiter, validateBody(generateTripSchema), async (req, res) => {
+  const { from, to, date, returnDate, travelers, budget, preferredMode } = req.validatedBody;
 
   // Security: API key is exclusively read from server environment
   const keyToUse = process.env.GEMINI_API_KEY;
@@ -333,13 +357,13 @@ app.post('/api/generate', aiLimiter, async (req, res) => {
     });
   }
 
-  const sanitizedFrom = sanitize(from, 200);
-  const sanitizedTo = sanitize(to, 200);
-  const sanitizedDate = sanitize(date, 20);
-  const sanitizedReturnDate = returnDate ? sanitize(returnDate, 20) : '';
-  const sanitizedTravelers = parseInt(travelers) || 1;
-  const sanitizedBudget = parseFloat(budget) || 2500;
-  const sanitizedMode = sanitize(preferredMode, 20) || 'any';
+  const sanitizedFrom = from;
+  const sanitizedTo = to;
+  const sanitizedDate = date;
+  const sanitizedReturnDate = returnDate || '';
+  const sanitizedTravelers = travelers;
+  const sanitizedBudget = budget;
+  const sanitizedMode = preferredMode;
 
   const promptText = `
     You are a professional travel coordinator. Generate a comprehensive travel plan for a trip from "${sanitizedFrom}" to "${sanitizedTo}" on "${sanitizedDate}" ${sanitizedReturnDate ? `returning on "${sanitizedReturnDate}"` : ''} for ${sanitizedTravelers} travelers.
@@ -427,8 +451,8 @@ app.post('/api/generate', aiLimiter, async (req, res) => {
 });
 
 // 2. Chat with AI assistant (proxied — key stays server-side)
-app.post('/api/chat', aiLimiter, async (req, res) => {
-  const { message, chatHistory, tripContext } = req.body;
+app.post('/api/chat', aiChatLimiter, validateBody(chatSchema), async (req, res) => {
+  const { message, chatHistory, tripContext } = req.validatedBody;
 
   // Security: API key is exclusively read from server environment
   const keyToUse = process.env.GEMINI_API_KEY;
@@ -437,11 +461,7 @@ app.post('/api/chat', aiLimiter, async (req, res) => {
     return res.status(503).json({ error: 'Gemini AI service is not configured on the server.' });
   }
 
-  if (!message || typeof message !== 'string' || !message.trim()) {
-    return res.status(400).json({ error: 'Message is required.' });
-  }
-
-  const sanitizedMessage = sanitize(message, 2000);
+  const sanitizedMessage = sanitize(message, 1000);
 
   // Build system prompt with trip context
   const systemPrompt = `You are a friendly, highly intelligent Travel Assistant for the "AI Travel Planner" application. 
@@ -501,16 +521,12 @@ Answer the user's question accurately, offering safety tips, restaurant choices,
 });
 
 // 3. Fetch weather details (key stays server-side only)
-app.get('/api/weather', async (req, res) => {
-  const { city } = req.query;
+app.get('/api/weather', weatherLimiter, validateQuery(weatherQuerySchema), async (req, res) => {
+  const { city } = req.validatedQuery;
   const apiKey = process.env.WEATHER_API_KEY;
 
   if (!apiKey) {
     return res.status(503).json({ error: 'OpenWeather API Key is not configured on the server.' });
-  }
-
-  if (!city || typeof city !== 'string' || !city.trim()) {
-    return res.status(400).json({ error: 'City parameter is required.' });
   }
 
   const sanitizedCity = sanitize(city, 100);
@@ -541,16 +557,12 @@ app.get('/api/weather', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 
 // 4. Save trip itinerary
-app.post('/api/trips', authenticateToken, async (req, res) => {
-  const tripData = req.body;
-
-  // Input validation
-  if (!tripData.from || !tripData.to || !tripData.date) {
-    return res.status(400).json({ error: 'Trip must include origin, destination, and date.' });
-  }
+app.post('/api/trips', tripsLimiter, authenticateToken, validateBody(saveTripSchema), async (req, res) => {
+  const tripData = { ...req.validatedBody };
 
   // SECURITY: Override userEmail with authenticated user — ignore client-supplied value
   tripData.userEmail = req.user.email;
+  delete tripData._id;
 
   try {
     if (mongoConnected) {
@@ -559,7 +571,7 @@ app.post('/api/trips', authenticateToken, async (req, res) => {
       res.status(201).json(savedTrip);
     } else {
       const trips = loadLocalTrips();
-      const newTrip = { ...tripData, _id: Date.now().toString(), createdAt: new Date() };
+      const newTrip = { ...tripData, _id: Date.now().toString(), createdAt: new Date().toISOString() };
       trips.unshift(newTrip);
       saveLocalTrips(trips);
       res.status(201).json(newTrip);
@@ -587,15 +599,14 @@ app.get('/api/trips', authenticateToken, async (req, res) => {
 });
 
 // 6. Delete saved trip (with ownership verification)
-app.delete('/api/trips/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-
-  if (!id) {
-    return res.status(400).json({ error: 'Trip ID is required.' });
-  }
+app.delete('/api/trips/:id', tripsLimiter, authenticateToken, validateParams(tripIdParamSchema), async (req, res) => {
+  const { id } = req.validatedParams;
 
   try {
     if (mongoConnected) {
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ error: 'Invalid trip ID format.' });
+      }
       const trip = await Trip.findById(id);
       if (!trip) {
         return res.status(404).json({ error: 'Trip not found.' });
@@ -637,6 +648,21 @@ if (fs.existsSync(distPath)) {
     res.send('AI Travel Planner Express Server is operational. Run build script to serve frontend files.');
   });
 }
+
+// ─── Global Error Handling Middleware ───────────────────────────
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Payload too large. Maximum allowed request body size is 250kb.' });
+  }
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Malformed JSON payload.' });
+  }
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'CORS origin not allowed.' });
+  }
+  console.error('Unhandled server error:', err.message || err);
+  res.status(500).json({ error: 'An unexpected internal error occurred.' });
+});
 
 app.listen(PORT, () => {
   console.log(`Server executing successfully on http://localhost:${PORT}`);
