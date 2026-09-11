@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -32,9 +33,19 @@ const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // ─── Security Configuration ────────────────────────────────────
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-fallback-secret-change-in-production';
-if (!process.env.JWT_SECRET) {
-  console.warn('⚠️  WARNING: JWT_SECRET is not set. Using insecure default. Set JWT_SECRET in .env for production.');
+// In-memory token revocation blacklist (for true server-side invalidation on logout)
+const revokedTokens = new Set();
+
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (isProduction) {
+    console.error('❌ FATAL: JWT_SECRET environment variable is required in production. Server refusing to start.');
+    process.exit(1);
+  } else {
+    // Generate an ephemeral in-memory random secret per dev run — NEVER embed static fallback secrets in source code
+    JWT_SECRET = crypto.randomBytes(32).toString('hex');
+    console.warn('⚠️  NOTICE: JWT_SECRET is not set in development. Generated an ephemeral in-memory random secret for this session. Set JWT_SECRET in backend/.env for persistent sessions across restarts.');
+  }
 }
 
 // Configured frontend origin(s)
@@ -258,15 +269,25 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
   if (!token) {
-    return res.status(401).json({ error: 'Authentication required. Please sign in.' });
+    return res.status(401).json({ error: 'Authentication required. Please sign in.', code: 'AUTH_REQUIRED' });
+  }
+
+  // Check if token has been explicitly revoked via logout
+  if (revokedTokens.has(token)) {
+    return res.status(401).json({ error: 'Session has been invalidated. Please sign in again.', code: 'TOKEN_REVOKED' });
   }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded; // { id, email, name }
+    req.token = token;
     next();
   } catch (err) {
-    return res.status(403).json({ error: 'Session expired or invalid. Please sign in again.' });
+    const message = err.name === 'TokenExpiredError'
+      ? 'Session expired. Please sign in again.'
+      : 'Invalid session token. Please sign in again.';
+    const code = err.name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID';
+    return res.status(401).json({ error: message, code });
   }
 };
 
@@ -384,6 +405,18 @@ app.get('/api/auth/me', authenticateToken, (req, res) => {
   });
 });
 
+// Logout / Revoke Token (Server-side Session Invalidation)
+app.post('/api/auth/logout', authenticateToken, (req, res) => {
+  if (req.token) {
+    revokedTokens.add(req.token);
+    // Auto-purge token from memory after 7 days (its max lifetime)
+    setTimeout(() => {
+      revokedTokens.delete(req.token);
+    }, 7 * 24 * 60 * 60 * 1000);
+  }
+  res.json({ message: 'Session successfully revoked and logged out.' });
+});
+
 // ═══════════════════════════════════════════════════════════════
 //  AI API ENDPOINTS (proxied — keys stay server-side)
 // ═══════════════════════════════════════════════════════════════
@@ -487,7 +520,14 @@ app.post('/api/generate', aiGenerateLimiter, validateBody(generateTripSchema), a
 
     const data = await response.json();
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    res.json(JSON.parse(rawText.trim()));
+    if (!rawText) {
+      throw new Error('No text content returned from Gemini AI');
+    }
+    let cleaned = rawText.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    }
+    res.json(JSON.parse(cleaned));
   } catch (error) {
     console.error('Express AI generation error:', String(error?.message || error).replace(/key=[^&\s]+/g, 'key=REDACTED'));
     res.status(500).json({ error: 'Failed to generate travel plan. Please try again later.' });
@@ -585,10 +625,10 @@ app.get('/api/weather', weatherLimiter, validateQuery(weatherQuerySchema), async
     }
 
     res.json({
-      temp: `${Math.round(data.main.temp)}°C`,
-      condition: data.weather[0].main,
-      windSpeed: `${Math.round(data.wind.speed * 3.6)} km/h`,
-      rainAlert: data.rain ? 'Possible light showers expected' : 'Clear dry weather forecast'
+      temp: `${Math.round(data?.main?.temp ?? 25)}°C`,
+      condition: data?.weather?.[0]?.main || 'Clear',
+      windSpeed: `${Math.round((data?.wind?.speed ?? 3) * 3.6)} km/h`,
+      rainAlert: data?.rain ? 'Possible light showers expected' : 'Clear dry weather forecast'
     });
   } catch (error) {
     console.error('Weather service error:', String(error?.message || error).replace(/appid=[^&\s]+/g, 'appid=REDACTED'));
@@ -636,6 +676,8 @@ app.get('/api/trips', authenticateToken, async (req, res) => {
     } else {
       const trips = loadLocalTrips();
       const filtered = trips.filter(t => t.userEmail === req.user.email);
+      // Consistent sorting with MongoDB ({ createdAt: -1 })
+      filtered.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       res.json(filtered);
     }
   } catch (error) {

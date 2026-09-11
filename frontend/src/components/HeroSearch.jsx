@@ -26,13 +26,19 @@ export default function HeroSearch({ onSearch }) {
     recognition.maxAlternatives = 1;
 
     if (listeningField === field) {
-      recognition.stop();
+      try { recognition.stop(); } catch {}
       setListeningField(null);
       return;
     }
 
-    setListeningField(field);
-    recognition.start();
+    try {
+      setListeningField(field);
+      recognition.start();
+    } catch (err) {
+      console.warn('Speech recognition start failed:', err);
+      setListeningField(null);
+      return;
+    }
 
     recognition.onresult = (event) => {
       const speechToText = event.results[0][0].transcript;
@@ -56,6 +62,14 @@ export default function HeroSearch({ onSearch }) {
     e.preventDefault();
     if (!from || !to || !date) {
       alert('Please fill out Starting Location, Destination, and Departure Date.');
+      return;
+    }
+    if (from.trim().toLowerCase() === to.trim().toLowerCase()) {
+      alert('Starting location and Destination must be different.');
+      return;
+    }
+    if (returnDate && returnDate < date) {
+      alert('Return date cannot be earlier than departure date.');
       return;
     }
     onSearch({ from, to, date, returnDate, travelers, budget, preferredMode });

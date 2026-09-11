@@ -8,7 +8,7 @@ export default function WeatherInfo({ weather, destination }) {
     // Reset to static generated weather first
     setLiveWeather(weather);
 
-    if (!destination) return;
+    if (!destination || typeof destination !== 'string') return;
 
     let active = true;
     const fetchLiveWeather = async () => {
@@ -29,7 +29,7 @@ export default function WeatherInfo({ weather, destination }) {
           windSpeed: data.windSpeed,
           rainAlert: data.rainAlert,
           // Retain generated transit stop forecast
-          forecast: prev.forecast || []
+          forecast: prev?.forecast || weather?.forecast || []
         }));
       } catch (err) {
         console.warn('Weather proxy offline or unconfigured, using static weather:', err.message);
@@ -106,7 +106,7 @@ export default function WeatherInfo({ weather, destination }) {
           <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-bold mb-2">Transit Waypoints weather</span>
           
           <div className="space-y-2 font-mono text-xs">
-            {liveWeather.forecast.map((stop, idx) => (
+            {(liveWeather.forecast || []).map((stop, idx) => (
               <div key={idx} className="flex items-center justify-between p-2 rounded bg-slate-900/40 border border-white/5">
                 <span className="text-slate-300 truncate max-w-[120px] font-sans">{stop.stop}</span>
                 <div className="flex items-center gap-2">

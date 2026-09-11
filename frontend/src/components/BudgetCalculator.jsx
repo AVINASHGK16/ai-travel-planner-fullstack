@@ -2,31 +2,40 @@ import React, { useState } from 'react';
 import { PiggyBank, Sparkles, TrendingDown, ArrowRight, Lightbulb } from 'lucide-react';
 
 export default function BudgetCalculator({ budgetDetails, travelers, onOptimize }) {
+  const [optimized, setOptimized] = useState(false);
+
   if (!budgetDetails) return null;
 
-  const [optimized, setOptimized] = useState(false);
   const travelersCount = travelers || 1;
 
-  // Optimizations calculator
-  const originalTotal = budgetDetails.total;
-  
+  const tickets = Number(budgetDetails.tickets) || 0;
+  const fuel = Number(budgetDetails.fuel) || 0;
+  const hotel = Number(budgetDetails.hotel) || 0;
+  const food = Number(budgetDetails.food) || 0;
+  const toll = Number(budgetDetails.toll) || 0;
+  const parking = Number(budgetDetails.parking) || 0;
+  const misc = Number(budgetDetails.misc) || 0;
+  const computedTotal = tickets + fuel + hotel + food + toll + parking + misc;
+  const originalTotal = Number(budgetDetails.total) || computedTotal;
+
   // Standard optimizations
   const optDetails = {
-    tickets: Math.round(budgetDetails.tickets * 0.75), // Switch to 3AC train or saver flight
-    fuel: budgetDetails.fuel, // Can't easily optimize fuel
-    hotel: Math.round(budgetDetails.hotel * 0.7), // 3-star instead of 4-star
-    food: Math.round(budgetDetails.food * 0.8), // Local authentic food joints
-    toll: budgetDetails.toll,
-    parking: Math.round(budgetDetails.parking * 0.7), // Prebook parking or public spots
-    misc: Math.round(budgetDetails.misc * 0.6) // Cut unnecessary expenses
+    tickets: Math.round(tickets * 0.75), // Switch to 3AC train or saver flight
+    fuel: fuel, // Can't easily optimize fuel
+    hotel: Math.round(hotel * 0.7), // 3-star instead of 4-star
+    food: Math.round(food * 0.8), // Local authentic food joints
+    toll: toll,
+    parking: Math.round(parking * 0.7), // Prebook parking or public spots
+    misc: Math.round(misc * 0.6) // Cut unnecessary expenses
   };
   
-  optDetails.total = Object.values(optDetails).reduce((a, b) => a + b, 0) - optDetails.total; // Calculate total sum correctly
   const optSum = optDetails.tickets + optDetails.fuel + optDetails.hotel + optDetails.food + optDetails.toll + optDetails.parking + optDetails.misc;
   optDetails.total = optSum;
 
-  const activeDetails = optimized ? optDetails : budgetDetails;
-  const savings = originalTotal - optDetails.total;
+  const activeDetails = optimized ? optDetails : {
+    tickets, fuel, hotel, food, toll, parking, misc, total: originalTotal
+  };
+  const savings = Math.max(0, originalTotal - optDetails.total);
 
   const costItems = [
     { label: 'Ticket cost', value: activeDetails.tickets, color: 'bg-blue-500' },
@@ -38,7 +47,7 @@ export default function BudgetCalculator({ budgetDetails, travelers, onOptimize 
     { label: 'Miscellaneous', value: activeDetails.misc, color: 'bg-purple-500' }
   ].filter(item => item.value > 0); // Hide zero categories
 
-  const maxVal = Math.max(...costItems.map(i => i.value));
+  const maxVal = costItems.length > 0 ? Math.max(...costItems.map(i => i.value)) : 0;
 
   return (
     <div className="p-5 rounded-2xl glass border border-white/10 text-slate-200">

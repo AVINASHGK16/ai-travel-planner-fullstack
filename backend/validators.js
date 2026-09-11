@@ -136,10 +136,22 @@ export const saveTripSchema = z.object({
   date: z.string({ required_error: 'Date is required' })
     .trim()
     .refine(isValidDateString, { message: 'Date must be a valid date in YYYY-MM-DD format' }),
-  returnDate: z.string().trim().optional().nullable(),
+  returnDate: z.string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform(v => (v === '' ? null : v)),
   travelers: z.coerce.number().int().min(1).max(50).optional().default(1),
   budget: z.coerce.number().min(0).max(10000000).optional(),
-  distance: z.coerce.number().min(0).max(50000).optional(),
+  distance: z.union([z.number(), z.string()])
+    .optional()
+    .transform(v => {
+      if (typeof v === 'string') {
+        const parsed = parseFloat(v.replace(/[^\d.]/g, ''));
+        return isNaN(parsed) ? undefined : parsed;
+      }
+      return v;
+    }),
   coordinates: z.object({
     from: z.array(z.number()).length(2).optional(),
     to: z.array(z.number()).length(2).optional(),

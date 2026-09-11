@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ShieldAlert, Sparkles, CloudSun, Map } from 'lucide-react';
 
 export default function SettingsPanel({
@@ -7,7 +7,11 @@ export default function SettingsPanel({
   settings,
   onSaveSettings
 }) {
-  const [googleMapsKey, setGoogleMapsKey] = useState(settings.googleMapsKey || '');
+  const [googleMapsKey, setGoogleMapsKey] = useState(settings?.googleMapsKey || '');
+
+  useEffect(() => {
+    setGoogleMapsKey(settings?.googleMapsKey || '');
+  }, [settings?.googleMapsKey]);
 
   const handleSubmit = (e) => {
     e.preventDefault();

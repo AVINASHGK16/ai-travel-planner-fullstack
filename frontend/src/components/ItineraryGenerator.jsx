@@ -19,8 +19,6 @@ const iconMap = {
 };
 
 export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
-  if (!itinerary) return null;
-
   const [expandedDay, setExpandedDay] = useState(1);
   const [editingActivity, setEditingActivity] = useState(null); // { day, actIdx }
 
@@ -30,6 +28,8 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
   const [formDesc, setFormDesc] = useState('');
   const [formCost, setFormCost] = useState(0);
   const [formIcon, setFormIcon] = useState('Compass');
+
+  if (!itinerary || !Array.isArray(itinerary) || itinerary.length === 0) return null;
 
   const toggleDay = (day) => {
     setExpandedDay(expandedDay === day ? null : day);
@@ -76,7 +76,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
         newActivities = [...(dayPlan.activities || []), updatedActivity];
       } else {
         // Edit existing
-        newActivities = dayPlan.activities.map((act, idx) => 
+        newActivities = (dayPlan.activities || []).map((act, idx) => 
           idx === editingActivity.actIdx ? updatedActivity : act
         );
       }
@@ -99,7 +99,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
         if (dayPlan.day !== day) return dayPlan;
         return {
           ...dayPlan,
-          activities: dayPlan.activities.filter((_, idx) => idx !== actIdx)
+          activities: (dayPlan.activities || []).filter((_, idx) => idx !== actIdx)
         };
       });
       if (onChangeItinerary) {
@@ -155,7 +155,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                   <div className="absolute left-8 top-6 bottom-16 w-0.5 bg-slate-800 pointer-events-none"></div>
 
                   <div className="space-y-6 relative">
-                    {dayPlan.activities?.map((activity, actIdx) => {
+                    {(dayPlan.activities || []).map((activity, actIdx) => {
                       const isEditingCurrent = editingActivity && editingActivity.day === dayPlan.day && editingActivity.actIdx === actIdx;
                       const ActivityIcon = iconMap[activity.icon] || Compass;
 
@@ -207,7 +207,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                   <select 
                                     value={formIcon}
                                     onChange={(e) => setFormIcon(e.target.value)}
-                                    className="bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-xs text-slate-300"
+                                    className="bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-xs text-slate-300" 
                                   >
                                     {Object.keys(iconMap).map(iconName => (
                                       <option key={iconName} value={iconName}>{iconName}</option>
@@ -251,9 +251,9 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                   <Clock className="w-3 h-3 text-slate-600" />
                                   {activity.time}
                                 </span>
-                                {activity.cost > 0 && (
+                                {Number(activity.cost) > 0 && (
                                   <span className="text-emerald-400 font-bold">
-                                    ₹{activity.cost.toLocaleString()}
+                                    ₹{Number(activity.cost).toLocaleString()}
                                   </span>
                                 )}
                               </div>

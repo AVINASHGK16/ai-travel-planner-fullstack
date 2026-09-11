@@ -37,12 +37,12 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       
       doc.setFont('Helvetica', 'normal');
       doc.setFontSize(11);
-      doc.text(`Starting Point: ${trip.from}`, 20, 72);
-      doc.text(`Destination: ${trip.to}`, 20, 79);
-      doc.text(`Travel Date: ${trip.date}`, 20, 86);
-      doc.text(`No. of Travelers: ${trip.travelers}`, 20, 93);
-      doc.text(`Approx. Distance: ${trip.distance || 'N/A'} km`, 20, 100);
-      doc.text(`Budget Tier Level: ₹${trip.budget.toLocaleString()}`, 20, 107);
+      doc.text(`Starting Point: ${trip?.from || 'Origin'}`, 20, 72);
+      doc.text(`Destination: ${trip?.to || 'Destination'}`, 20, 79);
+      doc.text(`Travel Date: ${trip?.date || 'N/A'}`, 20, 86);
+      doc.text(`No. of Travelers: ${trip?.travelers || 1}`, 20, 93);
+      doc.text(`Approx. Distance: ${trip?.distance || 'N/A'} km`, 20, 100);
+      doc.text(`Budget Tier Level: ₹${Number(trip?.budget || 0).toLocaleString()}`, 20, 107);
       
       // Cost Breakdown Section
       doc.line(20, 114, 190, 114);
@@ -52,19 +52,19 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       
       doc.setFont('Helvetica', 'normal');
       doc.setFontSize(11);
-      const budget = trip.budgetDetails;
+      const budget = trip?.budgetDetails;
       if (budget) {
-        doc.text(`- Transportation Tickets: INR ${budget.tickets.toLocaleString()}`, 25, 134);
-        doc.text(`- Road Fuel / Energy Charges: INR ${budget.fuel.toLocaleString()}`, 25, 141);
-        doc.text(`- Hotel / Lodging Stays: INR ${budget.hotel.toLocaleString()}`, 25, 148);
-        doc.text(`- Fooding & Daily Meals: INR ${budget.food.toLocaleString()}`, 25, 155);
-        doc.text(`- Highway Tolls / Passes: INR ${budget.toll.toLocaleString()}`, 25, 162);
-        doc.text(`- Miscellaneous Buffers: INR ${budget.misc.toLocaleString()}`, 25, 169);
+        doc.text(`- Transportation Tickets: INR ${Number(budget.tickets || 0).toLocaleString()}`, 25, 134);
+        doc.text(`- Road Fuel / Energy Charges: INR ${Number(budget.fuel || 0).toLocaleString()}`, 25, 141);
+        doc.text(`- Hotel / Lodging Stays: INR ${Number(budget.hotel || 0).toLocaleString()}`, 25, 148);
+        doc.text(`- Fooding & Daily Meals: INR ${Number(budget.food || 0).toLocaleString()}`, 25, 155);
+        doc.text(`- Highway Tolls / Passes: INR ${Number(budget.toll || 0).toLocaleString()}`, 25, 162);
+        doc.text(`- Miscellaneous Buffers: INR ${Number(budget.misc || 0).toLocaleString()}`, 25, 169);
         
         doc.setFont('Helvetica', 'bold');
-        doc.text(`TOTAL ESTIMATED BUDGET: INR ${budget.total.toLocaleString()}`, 20, 180);
+        doc.text(`TOTAL ESTIMATED BUDGET: INR ${Number(budget.total || 0).toLocaleString()}`, 20, 180);
       } else {
-        doc.text(`- Total Allocated Budget Cap: INR ${trip.budget.toLocaleString()}`, 25, 134);
+        doc.text(`- Total Allocated Budget Cap: INR ${Number(trip?.budget || 0).toLocaleString()}`, 25, 134);
       }
       
       // Add a page for the detailed Itinerary
@@ -80,24 +80,24 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       doc.setFontSize(12);
       let yOffset = 40;
       
-      if (trip.itinerary && trip.itinerary.length > 0) {
+      if (trip?.itinerary && trip.itinerary.length > 0) {
         trip.itinerary.forEach((dayPlan) => {
           if (yOffset > 250) {
             doc.addPage();
             yOffset = 30;
           }
           doc.setFont('Helvetica', 'bold');
-          doc.text(`DAY ${dayPlan.day} - ${dayPlan.title}`, 20, yOffset);
+          doc.text(`DAY ${dayPlan.day} - ${dayPlan.title || 'Plan'}`, 20, yOffset);
           yOffset += 8;
           
           doc.setFont('Helvetica', 'normal');
           doc.setFontSize(10);
-          dayPlan.activities.forEach((act) => {
+          (dayPlan.activities || []).forEach((act) => {
             if (yOffset > 270) {
               doc.addPage();
               yOffset = 30;
             }
-            doc.text(`[${act.time}] ${act.title}: ${act.desc}`, 25, yOffset, { maxWidth: 160 });
+            doc.text(`[${act.time || 'Schedule'}] ${act.title || 'Activity'}: ${act.desc || ''}`, 25, yOffset, { maxWidth: 160 });
             yOffset += 11;
           });
           yOffset += 6;
@@ -108,7 +108,9 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       }
       
       // Save
-      doc.save(`Trip_${trip.from.split(',')[0]}_to_${trip.to.split(',')[0]}.pdf`);
+      const fromCity = (trip?.from || 'Origin').split(',')[0].trim().replace(/[^\w\s-]/g, '');
+      const toCity = (trip?.to || 'Destination').split(',')[0].trim().replace(/[^\w\s-]/g, '');
+      doc.save(`Trip_${fromCity || 'Origin'}_to_${toCity || 'Destination'}.pdf`);
       
     } catch (err) {
       console.error("PDF generation failed:", err);
@@ -147,7 +149,7 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       </div>
 
       {/* Empty State */}
-      {savedTrips.length === 0 ? (
+      {(!savedTrips || savedTrips.length === 0) ? (
         <div className="py-20 rounded-2xl glass border border-white/5 text-center max-w-md mx-auto flex flex-col items-center gap-4">
           <div className="p-4 rounded-full bg-blue-500/15 text-blue-400">
             <Compass className="w-10 h-10 animate-bounce" />
@@ -162,9 +164,9 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
       ) : (
         /* History Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {savedTrips.map((trip, idx) => (
+          {(savedTrips || []).map((trip, idx) => (
             <div
-              key={idx}
+              key={trip._id || idx}
               onClick={() => onSelectTrip(trip)}
               className="group rounded-2xl glass border border-white/10 overflow-hidden hover:border-white/25 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-xl flex flex-col justify-between"
             >
@@ -175,23 +177,23 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex items-center gap-1.5 text-xs text-blue-400 font-bold bg-blue-500/10 px-2.5 py-1 rounded-lg">
                     <Calendar className="w-3.5 h-3.5" />
-                    <span>{trip.date}</span>
+                    <span>{trip.date || 'N/A'}</span>
                   </div>
                   <span className="text-xs font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">
-                    ₹{trip.budgetDetails?.total?.toLocaleString() || trip.budget.toLocaleString()}
+                    ₹{trip.budgetDetails?.total ? Number(trip.budgetDetails.total).toLocaleString() : Number(trip.budget || 0).toLocaleString()}
                   </span>
                 </div>
 
                 {/* Cities */}
                 <div>
                   <h4 className="font-display font-bold text-lg text-white group-hover:text-blue-400 transition-colors flex items-center gap-2">
-                    <span className="truncate max-w-[100px]">{trip.from.split(',')[0]}</span>
+                    <span className="truncate max-w-[100px]">{(trip.from || 'Origin').split(',')[0]}</span>
                     <ArrowRight className="w-4 h-4 text-slate-500" />
-                    <span className="truncate max-w-[100px]">{trip.to.split(',')[0]}</span>
+                    <span className="truncate max-w-[100px]">{(trip.to || 'Destination').split(',')[0]}</span>
                   </h4>
                   <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                    <span>Distance: {trip.distance || 'N/A'} km • {trip.travelers} travelers</span>
+                    <span>Distance: {trip.distance || 'N/A'} km • {trip.travelers || 1} travelers</span>
                   </p>
                 </div>
               </div>

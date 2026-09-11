@@ -80,17 +80,18 @@ export default function ChatAssistant({ tripData }) {
 
   const handleSendMessage = async (textToSend) => {
     const text = textToSend || inputText;
-    if (!text.trim()) return;
+    if (!text || !text.trim() || loading) return;
 
     // Add user message
     const userMsg = { sender: 'user', text };
-    setMessages(prev => [...prev, userMsg]);
+    const updatedHistory = [...messages, userMsg];
+    setMessages(updatedHistory);
     setInputText('');
     setLoading(true);
 
     try {
       // Call backend AI proxy (Gemini key is kept server-side)
-      const reply = await getAIChatResponse(messages, text, tripData);
+      const reply = await getAIChatResponse(updatedHistory, text, tripData);
       setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
     } catch (err) {
       console.warn('Backend AI unavailable, using intelligent local response:', err.message);
@@ -103,7 +104,10 @@ export default function ChatAssistant({ tripData }) {
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter') handleSendMessage();
+    if (e.key === 'Enter' && !loading) {
+      e.preventDefault();
+      handleSendMessage();
+    }
   };
 
   const quickPrompts = [

@@ -14,6 +14,16 @@ import AuthModal from './components/AuthModal';
 import SettingsPanel from './components/SettingsPanel';
 import { generateMockData, getAIGeneration } from './utils/planner';
 
+// Safe JSON parser to prevent uncaught SyntaxError crashes on corrupted localStorage
+const safeJsonParse = (str, fallback) => {
+  if (!str) return fallback;
+  try {
+    return JSON.parse(str);
+  } catch {
+    return fallback;
+  }
+};
+
 export default function App() {
   const [theme, setTheme] = useState('dark');
   const [view, setView] = useState('home'); // 'home' | 'search' | 'dashboard'
@@ -60,10 +70,11 @@ export default function App() {
         } else {
           localStorage.removeItem('authToken');
           localStorage.removeItem('user');
+          setAuth({ user: null, token: null, modalOpen: false });
         }
       } catch {
         // Backend offline — use cached user data if available
-        const cachedUser = JSON.parse(localStorage.getItem('user') || 'null');
+        const cachedUser = safeJsonParse(localStorage.getItem('user'), null);
         if (cachedUser) {
           setAuth(prev => ({ ...prev, user: cachedUser }));
         }
@@ -83,14 +94,17 @@ export default function App() {
           });
           if (response.ok) {
             const data = await response.json();
-            setSavedTrips(data);
+            setSavedTrips(Array.isArray(data) ? data : []);
+          } else if (response.status === 401 || response.status === 403) {
+            // Token expired or invalid — clear session cleanly
+            handleLogout();
           } else {
             throw new Error('Server returned error status');
           }
         } catch (error) {
           console.warn('Backend offline, loading trips from localStorage fallback:', error.message);
-          const localTrips = JSON.parse(localStorage.getItem('savedTrips')) || [];
-          const userTrips = localTrips.filter(t => t.userEmail === auth.user.email);
+          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+          const userTrips = Array.isArray(localTrips) ? localTrips.filter(t => t?.userEmail === auth.user.email) : [];
           setSavedTrips(userTrips);
         }
       } else {
@@ -106,11 +120,24 @@ export default function App() {
     localStorage.setItem('user', JSON.stringify(user));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const token = auth.token;
     setAuth({ user: null, token: null, modalOpen: false });
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
     setSavedTrips([]);
+
+    if (token) {
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        await fetch(`${backendUrl}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      } catch (err) {
+        // Local logout completed even if network drops
+      }
+    }
   };
 
   const handleSaveSettings = (newSettings) => {
@@ -144,15 +171,22 @@ export default function App() {
       }
 
       if (responseData && responseData.itinerary) {
-        // Formulate coordinates
-        const fromCoords = generateMockData(params.from, params.to).coordinates.from;
-        const toCoords = generateMockData(params.from, params.to).coordinates.to;
+        // Generate baseline mock to guarantee complete fallback structures
+        const baselineMock = generateMockData(
+          params.from,
+          params.to,
+          params.date,
+          params.returnDate,
+          params.travelers,
+          params.budget
+        );
+
+        const fromCoords = baselineMock.coordinates.from;
+        const toCoords = baselineMock.coordinates.to;
         const midCoords = [(fromCoords[0] + toCoords[0]) / 2, (fromCoords[1] + toCoords[1]) / 2];
 
-        // Format transport options based on distances
-        const options = generateMockData(params.from, params.to, params.date, params.returnDate, params.travelers, params.budget).options;
-
         const completeTripData = {
+          ...baselineMock,
           ...responseData,
           from: params.from,
           to: params.to,
@@ -160,9 +194,14 @@ export default function App() {
           returnDate: params.returnDate || null,
           travelers: parseInt(params.travelers) || 1,
           budget: parseFloat(params.budget) || 2500,
-          distance: generateMockData(params.from, params.to).distance,
-          coordinates: { from: fromCoords, to: toCoords, mid: midCoords },
-          options
+          distance: baselineMock.distance,
+          coordinates: responseData.coordinates || { from: fromCoords, to: toCoords, mid: midCoords },
+          options: responseData.options || baselineMock.options,
+          suggestions: responseData.suggestions || baselineMock.suggestions,
+          budgetDetails: responseData.budgetDetails || baselineMock.budgetDetails,
+          roadTripDetails: responseData.roadTripDetails || baselineMock.roadTripDetails,
+          weather: responseData.weather || baselineMock.weather,
+          itinerary: Array.isArray(responseData.itinerary) ? responseData.itinerary : baselineMock.itinerary
         };
 
         setActiveTrip(completeTripData);
@@ -205,9 +244,11 @@ export default function App() {
       return;
     }
 
+    if (!activeTrip) return;
+
     // Verify if already saved to avoid duplicates
     const alreadySaved = savedTrips.some(
-      t => t.from === activeTrip.from && t.to === activeTrip.to && t.date === activeTrip.date
+      t => t?.from === activeTrip.from && t?.to === activeTrip.to && t?.date === activeTrip.date
     );
 
     if (alreadySaved) {
@@ -239,8 +280,8 @@ export default function App() {
       setSavedTrips(prev => [savedData, ...prev]);
       
       // Also sync to local storage for offline redundancy
-      const localTrips = JSON.parse(localStorage.getItem('savedTrips')) || [];
-      localStorage.setItem('savedTrips', JSON.stringify([savedData, ...localTrips]));
+      const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+      localStorage.setItem('savedTrips', JSON.stringify([savedData, ...(Array.isArray(localTrips) ? localTrips : [])]));
       
       alert('Trip itinerary successfully saved to your dashboard!');
     } catch (err) {
@@ -253,8 +294,8 @@ export default function App() {
       };
       setSavedTrips(prev => [localSavedTrip, ...prev]);
 
-      const localTrips = JSON.parse(localStorage.getItem('savedTrips')) || [];
-      localStorage.setItem('savedTrips', JSON.stringify([localSavedTrip, ...localTrips]));
+      const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+      localStorage.setItem('savedTrips', JSON.stringify([localSavedTrip, ...(Array.isArray(localTrips) ? localTrips : [])]));
 
       alert('Trip itinerary saved locally (Offline Mode).');
     }
@@ -275,20 +316,20 @@ export default function App() {
         }
         
         // Remove from local state
-        setSavedTrips(prev => prev.filter(t => t._id !== tripIdOrIndex));
+        setSavedTrips(prev => prev.filter(t => t?._id !== tripIdOrIndex));
         
         // Remove from local storage fallback
-        const localTrips = JSON.parse(localStorage.getItem('savedTrips')) || [];
-        const filteredLocal = localTrips.filter(t => t._id !== tripIdOrIndex);
+        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripIdOrIndex) : [];
         localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
       } catch (err) {
         console.warn('Backend delete failed, performing local removal:', err.message);
         
         // If backend was offline, remove from state and local storage fallback
-        setSavedTrips(prev => prev.filter(t => t._id !== tripIdOrIndex));
+        setSavedTrips(prev => prev.filter(t => t?._id !== tripIdOrIndex));
         
-        const localTrips = JSON.parse(localStorage.getItem('savedTrips')) || [];
-        const filteredLocal = localTrips.filter(t => t._id !== tripIdOrIndex);
+        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripIdOrIndex) : [];
         localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
       }
     } else {
@@ -296,8 +337,8 @@ export default function App() {
       const tripToDelete = savedTrips[tripIdOrIndex];
       setSavedTrips(prev => prev.filter((_, i) => i !== tripIdOrIndex));
       if (tripToDelete) {
-        const localTrips = JSON.parse(localStorage.getItem('savedTrips')) || [];
-        const filteredLocal = localTrips.filter(t => t._id !== tripToDelete._id);
+        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripToDelete._id) : [];
         localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
       }
     }
@@ -307,7 +348,7 @@ export default function App() {
   const handleSelectTrip = (trip) => {
     setActiveTrip(trip);
     setView('search');
-    if (trip.options?.own) {
+    if (trip?.options?.own) {
       setActiveMode('own');
     } else {
       setActiveMode('flight');
@@ -316,21 +357,21 @@ export default function App() {
 
   const handleChangeItinerary = (newItinerary) => {
     setActiveTrip(prev => {
-      if (!prev) return prev;
+      if (!prev || !Array.isArray(newItinerary)) return prev;
       
       const newMisc = newItinerary.reduce((acc, day) => {
-        return acc + day.activities.reduce((sum, act) => sum + (parseFloat(act.cost) || 0), 0);
+        return acc + (day?.activities || []).reduce((sum, act) => sum + (parseFloat(act?.cost) || 0), 0);
       }, 0);
 
       const updatedBudgetDetails = prev.budgetDetails ? {
         ...prev.budgetDetails,
         misc: newMisc,
-        total: (prev.budgetDetails.tickets || 0) +
-               (prev.budgetDetails.fuel || 0) +
-               (prev.budgetDetails.hotel || 0) +
-               (prev.budgetDetails.food || 0) +
-               (prev.budgetDetails.toll || 0) +
-               (prev.budgetDetails.parking || 0) +
+        total: (Number(prev.budgetDetails.tickets) || 0) +
+               (Number(prev.budgetDetails.fuel) || 0) +
+               (Number(prev.budgetDetails.hotel) || 0) +
+               (Number(prev.budgetDetails.food) || 0) +
+               (Number(prev.budgetDetails.toll) || 0) +
+               (Number(prev.budgetDetails.parking) || 0) +
                newMisc
       } : null;
 
@@ -433,10 +474,10 @@ export default function App() {
                   <span>Back to search</span>
                 </button>
                 <h2 className="font-display font-extrabold text-2xl text-white tracking-tight">
-                  {activeTrip.from.split(',')[0]} to {activeTrip.to.split(',')[0]} Plan
+                  {(activeTrip.from || 'Origin').split(',')[0]} to {(activeTrip.to || 'Destination').split(',')[0]} Plan
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Departing {activeTrip.date} • {activeTrip.travelers} Travelers • Distance: {activeTrip.distance} km
+                  Departing {activeTrip.date || 'N/A'} • {activeTrip.travelers || 1} Travelers • Distance: {activeTrip.distance || 'N/A'} km
                 </p>
               </div>
 
@@ -523,7 +564,7 @@ export default function App() {
               setView={setView}
             />
             {/* Show Chatbot even on dashboard with last active trip info */}
-            {savedTrips.length > 0 && (
+            {savedTrips?.length > 0 && savedTrips[0] && (
               <ChatAssistant tripData={savedTrips[0]} />
             )}
           </>

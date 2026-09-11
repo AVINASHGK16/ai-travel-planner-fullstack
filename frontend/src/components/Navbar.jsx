@@ -18,7 +18,7 @@ export default function Navbar({
   };
 
   const handleAuthClick = () => {
-    if (auth.user) {
+    if (auth?.user) {
       if (confirm('Are you sure you want to logout?')) {
         if (onLogout) onLogout();
       }
@@ -88,7 +88,7 @@ export default function Navbar({
           >
             <User className="w-4.5 h-4.5 text-blue-400" />
             <span className="text-sm font-medium">
-              {auth.user ? auth.user.name.split(' ')[0] : 'Sign In'}
+              {auth?.user ? (auth.user.name?.split(' ')[0] || auth.user.email?.split('@')[0] || 'User') : 'Sign In'}
             </span>
           </button>
 
