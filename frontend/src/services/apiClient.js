@@ -63,3 +63,14 @@ export const request = async (endpoint, options = {}) => {
     data
   };
 };
+
+/**
+ * Check if a response indicates an authentication/authorization failure.
+ * Components should decide recovery behavior (silent logout vs alert vs modal).
+ */
+export const isAuthError = (res) => res?.status === 401 || res?.status === 403;
+
+/**
+ * Check if a response indicates rate limiting.
+ */
+export const isRateLimited = (res) => res?.status === 429;
