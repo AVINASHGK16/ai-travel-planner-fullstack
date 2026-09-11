@@ -696,29 +696,77 @@ app.get('/api/weather', weatherLimiter, validateQuery(weatherQuerySchema), async
   const apiKey = process.env.WEATHER_API_KEY;
 
   if (!apiKey) {
-    return res.status(503).json({ error: 'OpenWeather API Key is not configured on the server.' });
+    return res.status(503).json({
+      error: 'OpenWeather API Key is not configured on the server.',
+      code: 'WEATHER_UNCONFIGURED'
+    });
   }
 
   const sanitizedCity = sanitize(city, 100);
 
   try {
     const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(sanitizedCity)}&appid=${apiKey}&units=metric`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(6000)
+    });
 
     if (!response.ok) {
-      throw new Error(data.message || 'Error fetching from weather service');
+      if (response.status === 404) {
+        return res.status(404).json({
+          error: `Weather station not found for location "${sanitizedCity}".`,
+          code: 'CITY_NOT_FOUND'
+        });
+      }
+      if (response.status === 429) {
+        return res.status(429).json({
+          error: 'Weather service rate limit reached. Please try again later.',
+          code: 'WEATHER_RATE_LIMITED'
+        });
+      }
+      if (response.status === 401 || response.status === 403) {
+        return res.status(503).json({
+          error: 'Weather service configuration error on server.',
+          code: 'WEATHER_UNCONFIGURED'
+        });
+      }
+      return res.status(502).json({
+        error: 'Weather service is temporarily unavailable.',
+        code: 'WEATHER_UPSTREAM_ERROR'
+      });
     }
 
+    const data = await response.json();
+
+    // Validate that temperature data exists and is a valid finite number
+    if (typeof data?.main?.temp !== 'number' || isNaN(data.main.temp)) {
+      return res.status(502).json({
+        error: 'Weather service returned incomplete temperature data.',
+        code: 'WEATHER_INCOMPLETE'
+      });
+    }
+
+    const tempNum = Math.round(data.main.temp);
+    const condition = data?.weather?.[0]?.main || data?.weather?.[0]?.description || 'Atmosphere';
+    const windSpeedNum = typeof data?.wind?.speed === 'number' && !isNaN(data.wind.speed)
+      ? Math.round(data.wind.speed * 3.6)
+      : null;
+    const windSpeedStr = windSpeedNum !== null ? `${windSpeedNum} km/h` : 'N/A';
+
     res.json({
-      temp: `${Math.round(data?.main?.temp ?? 25)}°C`,
-      condition: data?.weather?.[0]?.main || 'Clear',
-      windSpeed: `${Math.round((data?.wind?.speed ?? 3) * 3.6)} km/h`,
+      temp: `${tempNum}°C`,
+      condition,
+      windSpeed: windSpeedStr,
       rainAlert: data?.rain ? 'Possible light showers expected' : 'Clear dry weather forecast'
     });
   } catch (error) {
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      return res.status(504).json({
+        error: 'Weather request timed out.',
+        code: 'WEATHER_TIMEOUT'
+      });
+    }
     console.error('Weather service error:', String(error?.message || error).replace(/appid=[^&\s]+/g, 'appid=REDACTED'));
-    res.status(500).json({ error: 'Failed to retrieve weather data. Please try again later.' });
+    res.status(500).json({ error: 'Failed to retrieve weather data. Please try again later.', code: 'SERVER_ERROR' });
   }
 });
 

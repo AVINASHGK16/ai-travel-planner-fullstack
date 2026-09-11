@@ -4,10 +4,12 @@ import { Cloud, Sun, CloudRain, Wind, AlertTriangle, Thermometer, Loader2 } from
 export default function WeatherInfo({ weather, destination }) {
   const [liveWeather, setLiveWeather] = useState(weather);
   const [loadingWeather, setLoadingWeather] = useState(false);
+  const [weatherError, setWeatherError] = useState(null);
 
   useEffect(() => {
     // Reset to static generated weather first
     setLiveWeather(weather);
+    setWeatherError(null);
 
     if (!destination || typeof destination !== 'string') return;
 
@@ -22,23 +24,46 @@ export default function WeatherInfo({ weather, destination }) {
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
         const url = `${backendUrl}/api/weather?city=${encodeURIComponent(city)}`;
         const res = await fetch(url, { signal: controller.signal });
-        if (!res.ok) throw new Error(`Weather API returned ${res.status}`);
+        
+        if (!res.ok) {
+          let errData = {};
+          try { errData = await res.json(); } catch {}
+          
+          if (res.status === 404) {
+            throw new Error(`Weather station not found for "${city}".`);
+          }
+          if (res.status === 429) {
+            throw new Error('Weather update rate limit reached. Please check back later.');
+          }
+          if (res.status === 503) {
+            throw new Error('Live weather service is not configured on the server.');
+          }
+          throw new Error(errData.error || 'Live weather service is temporarily unavailable.');
+        }
+
         const data = await res.json();
+        if (!data || typeof data.temp !== 'string' || !data.temp.trim()) {
+          throw new Error('Weather service returned incomplete information.');
+        }
         
         if (!active) return;
         
+        setWeatherError(null);
         setLiveWeather(prev => ({
           ...prev,
           temp: data.temp,
-          condition: data.condition,
-          windSpeed: data.windSpeed,
-          rainAlert: data.rainAlert,
+          condition: data.condition || 'Atmosphere',
+          windSpeed: data.windSpeed || 'N/A',
+          rainAlert: data.rainAlert || 'No alerts',
           // Retain generated transit stop forecast
           forecast: prev?.forecast || weather?.forecast || []
         }));
       } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.warn('Weather proxy offline or unconfigured, using static weather:', err.message);
+        if (!active) return;
+        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+          setWeatherError('Live weather request timed out.');
+        } else {
+          setWeatherError(err.message || 'Live weather data unavailable.');
         }
       } finally {
         if (active) {
@@ -58,7 +83,26 @@ export default function WeatherInfo({ weather, destination }) {
     };
   }, [destination, weather]);
 
-  if (!liveWeather) return null;
+  const hasValidWeather = liveWeather && typeof liveWeather.temp === 'string' && liveWeather.temp.trim() !== '';
+
+  // If completely missing valid weather data, show a safe, styled error card
+  if (!hasValidWeather) {
+    return (
+      <div className="p-5 rounded-2xl glass border border-white/10 text-slate-200">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-slate-900/60 text-amber-400 border border-amber-500/20 shrink-0">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="font-display font-semibold text-sm text-white">Weather Data Unavailable</h4>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {weatherError || `Live weather information could not be retrieved for ${destination?.split(',')?.[0] || 'destination'}.`}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const getWeatherIcon = (cond) => {
     const norm = cond?.toLowerCase() || '';
@@ -74,20 +118,29 @@ export default function WeatherInfo({ weather, destination }) {
       <div className="flex justify-between items-start mb-4 pb-3 border-b border-white/5">
         <div>
           <h4 className="font-display font-semibold text-base text-white">Weather Forecast</h4>
-          <p className="text-xs text-slate-400 flex items-center gap-1.5">
+          <div className="mt-0.5">
             {loadingWeather ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+              <p className="text-xs text-blue-400 flex items-center gap-1.5">
+                <Loader2 className="w-3 h-3 animate-spin" />
                 <span>Updating live weather...</span>
-              </>
+              </p>
+            ) : weatherError ? (
+              <p className="text-xs text-amber-400/90 flex items-center gap-1" title={weatherError}>
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                <span>Estimated route climate (Live station unavailable)</span>
+              </p>
             ) : (
-              <span>Conditions at your transit locations</span>
+              <p className="text-xs text-slate-400">Conditions at your transit locations</p>
             )}
-          </p>
+          </div>
         </div>
         
-        {/* Rain Alert flag */}
-        {liveWeather.rainAlert && !liveWeather.rainAlert.includes('0%') && !liveWeather.rainAlert.toLowerCase().includes('no') ? (
+        {/* Rain Alert flag / Status banner */}
+        {weatherError ? (
+          <div className="bg-slate-800/60 border border-white/10 text-slate-400 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase">
+            <span>Offline</span>
+          </div>
+        ) : liveWeather.rainAlert && !liveWeather.rainAlert.includes('0%') && !liveWeather.rainAlert.toLowerCase().includes('no') ? (
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase animate-pulse">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>Rain Alert</span>
@@ -121,7 +174,7 @@ export default function WeatherInfo({ weather, destination }) {
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Thermometer className="w-4 h-4 text-purple-400" />
-            <span>Condition: Normal</span>
+            <span>Condition: {weatherError ? 'Estimated' : 'Reported'}</span>
           </div>
         </div>
 

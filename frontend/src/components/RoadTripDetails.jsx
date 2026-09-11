@@ -1,13 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Star, HeartPulse, ExternalLink, Loader2 } from 'lucide-react';
+import { Star, HeartPulse, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
+
+// Module-level in-memory cache to eliminate duplicate Nominatim network calls
+const geocodeCache = new Map();
+
+// Strict coordinate validator: prevents Leaflet unrecoverable NaN / invalid coordinate crashes
+export const isValidCoord = (coord) => {
+  if (!Array.isArray(coord) || coord.length < 2) return false;
+  const [lat, lon] = coord;
+  return (
+    typeof lat === 'number' &&
+    typeof lon === 'number' &&
+    !Number.isNaN(lat) &&
+    !Number.isNaN(lon) &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lon >= -180 &&
+    lon <= 180
+  );
+};
+
+const DEFAULT_FROM = [12.9716, 77.5946];
+const DEFAULT_TO = [17.3850, 78.4867];
+const DEFAULT_MID = [15.1783, 78.0406];
 
 // Custom Map center update hook
 function ChangeMapView({ center }) {
   const map = useMap();
   useEffect(() => {
-    if (center) {
+    if (center && isValidCoord(center)) {
       map.setView(center, 7);
     }
   }, [center, map]);
@@ -35,20 +60,28 @@ export default function RoadTripDetails({ tripData }) {
   const own = tripData?.options?.own;
   const roadDetails = tripData?.roadTripDetails;
 
-  const [fromCoords, setFromCoords] = useState(tripData?.coordinates?.from || [12.9716, 77.5946]);
-  const [toCoords, setToCoords] = useState(tripData?.coordinates?.to || [17.3850, 78.4867]);
-  const [midCoords, setMidCoords] = useState(tripData?.coordinates?.mid || [15.0, 78.0]);
+  const [fromCoords, setFromCoords] = useState(() =>
+    isValidCoord(tripData?.coordinates?.from) ? tripData.coordinates.from : DEFAULT_FROM
+  );
+  const [toCoords, setToCoords] = useState(() =>
+    isValidCoord(tripData?.coordinates?.to) ? tripData.coordinates.to : DEFAULT_TO
+  );
+  const [midCoords, setMidCoords] = useState(() =>
+    isValidCoord(tripData?.coordinates?.mid) ? tripData.coordinates.mid : DEFAULT_MID
+  );
   const [loadingCoords, setLoadingCoords] = useState(false);
+  const [geocodeError, setGeocodeError] = useState(null);
 
   useEffect(() => {
-    // Reset to default tripData values first
-    const initFrom = tripData?.coordinates?.from || [12.9716, 77.5946];
-    const initTo = tripData?.coordinates?.to || [17.3850, 78.4867];
-    const initMid = tripData?.coordinates?.mid || [15.0, 78.0];
+    // Reset to verified default values first
+    const initFrom = isValidCoord(tripData?.coordinates?.from) ? tripData.coordinates.from : DEFAULT_FROM;
+    const initTo = isValidCoord(tripData?.coordinates?.to) ? tripData.coordinates.to : DEFAULT_TO;
+    const initMid = isValidCoord(tripData?.coordinates?.mid) ? tripData.coordinates.mid : DEFAULT_MID;
     
     setFromCoords(initFrom);
     setToCoords(initTo);
     setMidCoords(initMid);
+    setGeocodeError(null);
 
     if (!tripData?.from || !tripData?.to) return;
 
@@ -59,46 +92,84 @@ export default function RoadTripDetails({ tripData }) {
       setLoadingCoords(true);
       try {
         const geocodeAddress = async (query) => {
+          if (!query || typeof query !== 'string') return null;
+          const cacheKey = query.trim().toLowerCase();
+          if (geocodeCache.has(cacheKey)) {
+            return geocodeCache.get(cacheKey);
+          }
+
           try {
-            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query.trim())}`;
             const res = await fetch(url, {
               signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : controller.signal,
               headers: {
                 'User-Agent': 'AITravelPlanner/1.0'
               }
             });
-            if (!res.ok) throw new Error('Nominatim request failed');
+            if (!res.ok) throw new Error(`Nominatim HTTP ${res.status}`);
             const data = await res.json();
-            if (data && data.length > 0) {
-              return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+            if (Array.isArray(data) && data.length > 0) {
+              const lat = parseFloat(data[0].lat);
+              const lon = parseFloat(data[0].lon);
+              if (isValidCoord([lat, lon])) {
+                geocodeCache.set(cacheKey, [lat, lon]);
+                return [lat, lon];
+              }
             }
             return null;
           } catch (fetchErr) {
             if (fetchErr.name !== 'AbortError') {
-              console.warn(`Geocoding failed for ${query}:`, fetchErr.message);
+              console.warn(`Geocoding failed for "${query}":`, fetchErr.message);
             }
             return null;
           }
         };
 
-        const resolvedFrom = await geocodeAddress(tripData.from);
-        const resolvedTo = await geocodeAddress(tripData.to);
+        const [resolvedFrom, resolvedTo] = await Promise.all([
+          geocodeAddress(tripData.from),
+          geocodeAddress(tripData.to)
+        ]);
 
         if (!active) return;
 
-        let finalFrom = resolvedFrom || initFrom;
-        let finalTo = resolvedTo || initTo;
-        let finalMid = [
+        let hadIssue = false;
+        let finalFrom = initFrom;
+        if (resolvedFrom && isValidCoord(resolvedFrom)) {
+          finalFrom = resolvedFrom;
+        } else if (!isValidCoord(tripData?.coordinates?.from)) {
+          hadIssue = true;
+        }
+
+        let finalTo = initTo;
+        if (resolvedTo && isValidCoord(resolvedTo)) {
+          finalTo = resolvedTo;
+        } else if (!isValidCoord(tripData?.coordinates?.to)) {
+          hadIssue = true;
+        }
+
+        let finalMid = isValidCoord([
           (finalFrom[0] + finalTo[0]) / 2,
           (finalFrom[1] + finalTo[1]) / 2
-        ];
+        ]) ? [
+          (finalFrom[0] + finalTo[0]) / 2,
+          (finalFrom[1] + finalTo[1]) / 2
+        ] : DEFAULT_MID;
 
         setFromCoords(finalFrom);
         setToCoords(finalTo);
         setMidCoords(finalMid);
+
+        if (hadIssue) {
+          setGeocodeError('Could not resolve exact GPS coordinates. Showing estimated route.');
+        } else {
+          setGeocodeError(null);
+        }
       } catch (err) {
         if (err.name !== 'AbortError') {
-          console.error('Error geocoding map coordinates:', err);
+          console.warn('Error geocoding map coordinates:', err);
+          if (active) {
+            setGeocodeError('Could not resolve route GPS coordinates. Showing estimated route.');
+          }
         }
       } finally {
         if (active) {
@@ -210,16 +281,24 @@ export default function RoadTripDetails({ tripData }) {
       });
     }
 
-    setMarkers(pins);
+    const validPins = pins.filter(pin => isValidCoord(pin?.position));
+    setMarkers(validPins);
   }, [selectedLayer, fromCoords[0], fromCoords[1], toCoords[0], toCoords[1], roadDetails]);
 
   // ── NOW safe to return null if data missing ────────────────────
   if (!own || !roadDetails) return null;
 
-  // Route polylines
+  // Route polylines with verified valid coordinates
+  const safeMid = isValidCoord(midCoords) ? midCoords : DEFAULT_MID;
+  const safeFrom = isValidCoord(fromCoords) ? fromCoords : DEFAULT_FROM;
+  const safeTo = isValidCoord(toCoords) ? toCoords : DEFAULT_TO;
+  const altMid = isValidCoord([safeMid[0] + 0.2, safeMid[1] - 0.3])
+    ? [safeMid[0] + 0.2, safeMid[1] - 0.3]
+    : safeMid;
+
   const routePoints = [
-    [fromCoords, midCoords, toCoords],
-    [fromCoords, [midCoords[0] + 0.2, midCoords[1] - 0.3], toCoords]
+    [safeFrom, safeMid, safeTo],
+    [safeFrom, altMid, safeTo]
   ];
 
   return (
@@ -300,14 +379,8 @@ export default function RoadTripDetails({ tripData }) {
 
       {/* ── Right pane: interactive Leaflet map ──────────────────── */}
       <div className="lg:col-span-7 h-[380px] lg:h-[480px] rounded-xl overflow-hidden border border-white/10 relative">
-        {loadingCoords && (
-          <div className="absolute inset-0 bg-slate-950/70 z-[2000] flex flex-col items-center justify-center space-y-2 backdrop-blur-xs">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-xs text-slate-300 font-medium">Resolving live map coordinates...</span>
-          </div>
-        )}
         <MapContainer
-          center={midCoords}
+          center={safeMid}
           zoom={7}
           className="w-full h-full"
           scrollWheelZoom={false}
@@ -316,7 +389,7 @@ export default function RoadTripDetails({ tripData }) {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <ChangeMapView center={midCoords} />
+          <ChangeMapView center={safeMid} />
 
           {/* Route polyline */}
           <Polyline
@@ -344,6 +417,13 @@ export default function RoadTripDetails({ tripData }) {
           <div className="absolute top-3 right-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-blue-300 font-medium flex items-center gap-1.5 shadow-lg border border-blue-500/20">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
             <span>Resolving map coordinates...</span>
+          </div>
+        )}
+
+        {geocodeError && !loadingCoords && (
+          <div className="absolute top-3 left-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-amber-300 font-medium flex items-center gap-1.5 shadow-lg border border-amber-500/20 bg-amber-950/60 max-w-[85%]">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>{geocodeError}</span>
           </div>
         )}
 
