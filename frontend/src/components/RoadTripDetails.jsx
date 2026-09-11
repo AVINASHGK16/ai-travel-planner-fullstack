@@ -24,16 +24,60 @@ export const isValidCoord = (coord) => {
   );
 };
 
-const DEFAULT_FROM = [12.9716, 77.5946];
-const DEFAULT_TO = [17.3850, 78.4867];
-const DEFAULT_MID = [15.1783, 78.0406];
+// Normalizes and sanitizes coordinate tuples, supporting numeric strings and falling back gracefully
+export const sanitizeCoord = (coord, fallback = null) => {
+  if (!Array.isArray(coord) || coord.length < 2) return fallback;
+  const lat = typeof coord[0] === 'number' ? coord[0] : parseFloat(coord[0]);
+  const lon = typeof coord[1] === 'number' ? coord[1] : parseFloat(coord[1]);
+  if (isValidCoord([lat, lon])) {
+    return [lat, lon];
+  }
+  return fallback;
+};
+
+export const DEFAULT_FROM = [12.9716, 77.5946];
+export const DEFAULT_TO = [17.3850, 78.4867];
+export const DEFAULT_MID = [15.1783, 78.0406];
+
+// React Error Boundary specifically isolating the interactive map component
+export class MapErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.warn('Caught map rendering error safely:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-slate-900/60 rounded-xl border border-white/10 text-slate-300">
+          <span className="text-3xl mb-2">🗺️</span>
+          <h4 className="font-semibold text-sm text-white">Interactive Map Unavailable</h4>
+          <p className="text-xs text-slate-400 mt-1 max-w-xs">
+            Route coordinates could not be rendered. Detailed itinerary and stops are listed below.
+          </p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Custom Map center update hook
 function ChangeMapView({ center }) {
   const map = useMap();
   useEffect(() => {
+    if (!map) return;
     if (center && isValidCoord(center)) {
-      map.setView(center, 7);
+      try {
+        map.setView(center, 7);
+      } catch (e) {
+        console.warn('Leaflet setView safely caught:', e?.message || e);
+      }
     }
   }, [center, map]);
   return null;
@@ -41,8 +85,10 @@ function ChangeMapView({ center }) {
 
 // Generate custom SVG DivIcon for Leaflet markers
 const createCustomIcon = (iconHtml, color) => {
+  const safeColor = typeof color === 'string' && color.trim() ? color : '#3b82f6';
+  const safeHtml = typeof iconHtml === 'string' && iconHtml.trim() ? iconHtml : '📍';
   return L.divIcon({
-    html: `<div style="background-color: ${color}; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 16px;">${iconHtml}</div>`,
+    html: `<div style="background-color: ${safeColor}; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 16px;">${safeHtml}</div>`,
     className: 'custom-leaflet-icon',
     iconSize: [34, 34],
     iconAnchor: [17, 34],
@@ -61,29 +107,33 @@ export default function RoadTripDetails({ tripData }) {
   const roadDetails = tripData?.roadTripDetails;
 
   const [fromCoords, setFromCoords] = useState(() =>
-    isValidCoord(tripData?.coordinates?.from) ? tripData.coordinates.from : DEFAULT_FROM
+    sanitizeCoord(tripData?.coordinates?.from, DEFAULT_FROM)
   );
   const [toCoords, setToCoords] = useState(() =>
-    isValidCoord(tripData?.coordinates?.to) ? tripData.coordinates.to : DEFAULT_TO
+    sanitizeCoord(tripData?.coordinates?.to, DEFAULT_TO)
   );
   const [midCoords, setMidCoords] = useState(() =>
-    isValidCoord(tripData?.coordinates?.mid) ? tripData.coordinates.mid : DEFAULT_MID
+    sanitizeCoord(tripData?.coordinates?.mid, DEFAULT_MID)
   );
   const [loadingCoords, setLoadingCoords] = useState(false);
   const [geocodeError, setGeocodeError] = useState(null);
 
   useEffect(() => {
     // Reset to verified default values first
-    const initFrom = isValidCoord(tripData?.coordinates?.from) ? tripData.coordinates.from : DEFAULT_FROM;
-    const initTo = isValidCoord(tripData?.coordinates?.to) ? tripData.coordinates.to : DEFAULT_TO;
-    const initMid = isValidCoord(tripData?.coordinates?.mid) ? tripData.coordinates.mid : DEFAULT_MID;
+    const initFrom = sanitizeCoord(tripData?.coordinates?.from, DEFAULT_FROM);
+    const initTo = sanitizeCoord(tripData?.coordinates?.to, DEFAULT_TO);
+    const initMid = sanitizeCoord(
+      tripData?.coordinates?.mid,
+      [(initFrom[0] + initTo[0]) / 2, (initFrom[1] + initTo[1]) / 2]
+    ) || DEFAULT_MID;
     
     setFromCoords(initFrom);
     setToCoords(initTo);
     setMidCoords(initMid);
     setGeocodeError(null);
 
-    if (!tripData?.from || !tripData?.to) return;
+    // If neither origin nor destination is present, nothing to geocode
+    if (!tripData?.from && !tripData?.to) return;
 
     let active = true;
     const controller = new AbortController();
@@ -94,6 +144,7 @@ export default function RoadTripDetails({ tripData }) {
         const geocodeAddress = async (query) => {
           if (!query || typeof query !== 'string') return null;
           const cacheKey = query.trim().toLowerCase();
+          if (!cacheKey) return null;
           if (geocodeCache.has(cacheKey)) {
             return geocodeCache.get(cacheKey);
           }
@@ -125,9 +176,10 @@ export default function RoadTripDetails({ tripData }) {
           }
         };
 
+        // Geocode each available endpoint independently (handles one-coordinate and asymmetric input)
         const [resolvedFrom, resolvedTo] = await Promise.all([
-          geocodeAddress(tripData.from),
-          geocodeAddress(tripData.to)
+          tripData?.from ? geocodeAddress(tripData.from) : Promise.resolve(null),
+          tripData?.to ? geocodeAddress(tripData.to) : Promise.resolve(null)
         ]);
 
         if (!active) return;
@@ -136,24 +188,22 @@ export default function RoadTripDetails({ tripData }) {
         let finalFrom = initFrom;
         if (resolvedFrom && isValidCoord(resolvedFrom)) {
           finalFrom = resolvedFrom;
-        } else if (!isValidCoord(tripData?.coordinates?.from)) {
+        } else if (tripData?.from && !isValidCoord(tripData?.coordinates?.from)) {
           hadIssue = true;
         }
 
         let finalTo = initTo;
         if (resolvedTo && isValidCoord(resolvedTo)) {
           finalTo = resolvedTo;
-        } else if (!isValidCoord(tripData?.coordinates?.to)) {
+        } else if (tripData?.to && !isValidCoord(tripData?.coordinates?.to)) {
           hadIssue = true;
         }
 
-        let finalMid = isValidCoord([
+        const calculatedMid = [
           (finalFrom[0] + finalTo[0]) / 2,
           (finalFrom[1] + finalTo[1]) / 2
-        ]) ? [
-          (finalFrom[0] + finalTo[0]) / 2,
-          (finalFrom[1] + finalTo[1]) / 2
-        ] : DEFAULT_MID;
+        ];
+        let finalMid = isValidCoord(calculatedMid) ? calculatedMid : DEFAULT_MID;
 
         setFromCoords(finalFrom);
         setToCoords(finalTo);
@@ -296,10 +346,12 @@ export default function RoadTripDetails({ tripData }) {
     ? [safeMid[0] + 0.2, safeMid[1] - 0.3]
     : safeMid;
 
-  const routePoints = [
+  const rawRoutePoints = [
     [safeFrom, safeMid, safeTo],
     [safeFrom, altMid, safeTo]
   ];
+  // Strictly filter each route point to only valid coordinates
+  const activeRoutePoints = (rawRoutePoints[activeRoute] || rawRoutePoints[0] || []).filter(isValidCoord);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-slate-300">
@@ -379,39 +431,45 @@ export default function RoadTripDetails({ tripData }) {
 
       {/* ── Right pane: interactive Leaflet map ──────────────────── */}
       <div className="lg:col-span-7 h-[380px] lg:h-[480px] rounded-xl overflow-hidden border border-white/10 relative">
-        <MapContainer
-          center={safeMid}
-          zoom={7}
-          className="w-full h-full"
-          scrollWheelZoom={false}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <ChangeMapView center={safeMid} />
+        <MapErrorBoundary>
+          <MapContainer
+            center={safeMid}
+            zoom={7}
+            className="w-full h-full"
+            scrollWheelZoom={false}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <ChangeMapView center={safeMid} />
 
-          {/* Route polyline */}
-          <Polyline
-            positions={routePoints[activeRoute]}
-            color={activeRoute === 0 ? '#3b82f6' : '#a855f7'}
-            weight={5}
-            opacity={0.8}
-          />
+            {/* Route polyline (only rendered if at least 2 valid points exist) */}
+            {activeRoutePoints.length >= 2 && (
+              <Polyline
+                positions={activeRoutePoints}
+                color={activeRoute === 0 ? '#3b82f6' : '#a855f7'}
+                weight={5}
+                opacity={0.8}
+              />
+            )}
 
-          {/* Markers */}
-          {markers.map((marker, index) => (
-            <Marker
-              key={index}
-              position={marker.position}
-              icon={createCustomIcon(marker.iconHtml, marker.color)}
-            >
-              <Popup>
-                <div className="text-xs font-medium">{marker.label}</div>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
+            {/* Markers strictly verified against invalid or NaN coordinates */}
+            {markers
+              .filter(marker => marker && isValidCoord(marker.position))
+              .map((marker, index) => (
+                <Marker
+                  key={index}
+                  position={marker.position}
+                  icon={createCustomIcon(marker.iconHtml, marker.color)}
+                >
+                  <Popup>
+                    <div className="text-xs font-medium">{marker.label}</div>
+                  </Popup>
+                </Marker>
+              ))}
+          </MapContainer>
+        </MapErrorBoundary>
 
         {loadingCoords && (
           <div className="absolute top-3 right-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-blue-300 font-medium flex items-center gap-1.5 shadow-lg border border-blue-500/20">

@@ -2,7 +2,7 @@ import React from 'react';
 import { jsPDF } from 'jspdf';
 import { Download, Share2, Trash2, Calendar, MapPin, DollarSign, Compass, ArrowRight, Loader2 } from 'lucide-react';
 
-export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setView, deletingTripId = null }) {
+export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setView, deletingTripId = null, loadingTrips = false }) {
   
   // Download Trip plan as PDF using jsPDF
   const handleDownloadPDF = (e, trip) => {
@@ -149,8 +149,20 @@ export default function Dashboard({ savedTrips, onDeleteTrip, onSelectTrip, setV
         </button>
       </div>
 
-      {/* Empty State */}
-      {(!savedTrips || savedTrips.length === 0) ? (
+      {/* Loading or Empty State */}
+      {loadingTrips ? (
+        <div className="py-20 rounded-2xl glass border border-white/5 text-center max-w-md mx-auto flex flex-col items-center gap-4">
+          <div className="p-4 rounded-full bg-blue-500/15 text-blue-400">
+            <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-lg text-white">Loading Trips...</h3>
+            <p className="text-xs text-slate-400 mt-1 max-w-[280px]">
+              Retrieving your saved itineraries from the server.
+            </p>
+          </div>
+        </div>
+      ) : (!savedTrips || savedTrips.length === 0) ? (
         <div className="py-20 rounded-2xl glass border border-white/5 text-center max-w-md mx-auto flex flex-col items-center gap-4">
           <div className="p-4 rounded-full bg-blue-500/15 text-blue-400">
             <Compass className="w-10 h-10 animate-bounce" />

@@ -53,6 +53,7 @@ export default function App() {
   // Async operations lifecycle & non-reentrancy states
   const [savingTrip, setSavingTrip] = useState(false);
   const [deletingTripId, setDeletingTripId] = useState(null);
+  const [loadingTrips, setLoadingTrips] = useState(false);
   const searchControllerRef = useRef(null);
 
   // Validate stored auth token on mount
@@ -112,6 +113,7 @@ export default function App() {
     let active = true;
     const fetchTrips = async () => {
       if (auth.user && auth.token) {
+        setLoadingTrips(true);
         try {
           const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
           const response = await fetch(`${backendUrl}/api/trips`, {
@@ -119,10 +121,25 @@ export default function App() {
             headers: { 'Authorization': `Bearer ${auth.token}` }
           });
           if (!active) return;
+
           if (response.ok) {
             const data = await response.json().catch(() => null);
+            const serverTrips = Array.isArray(data) ? data : [];
+            
+            // Preserve any local offline trips created by this user
+            const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+            const offlineOnlyTrips = Array.isArray(localTrips)
+              ? localTrips.filter(t => t?.userEmail === auth.user.email && String(t?._id).startsWith('local_'))
+              : [];
+            
+            // Merge offline trips with server trips (avoiding duplicates)
+            const serverTripIds = new Set(serverTrips.map(t => t?._id).filter(Boolean));
+            const uniqueOffline = offlineOnlyTrips.filter(t => !serverTripIds.has(t?._id));
+            const mergedTrips = [...uniqueOffline, ...serverTrips];
+
             if (active) {
-              setSavedTrips(Array.isArray(data) ? data : []);
+              setSavedTrips(mergedTrips);
+              localStorage.setItem('savedTrips', JSON.stringify(mergedTrips));
             }
           } else if (response.status === 401 || response.status === 403) {
             // Token expired or invalid — clear session cleanly
@@ -141,9 +158,12 @@ export default function App() {
           const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
           const userTrips = Array.isArray(localTrips) ? localTrips.filter(t => t?.userEmail === auth.user.email) : [];
           setSavedTrips(userTrips);
+        } finally {
+          if (active) setLoadingTrips(false);
         }
       } else {
         setSavedTrips([]);
+        setLoadingTrips(false);
       }
     };
     fetchTrips();
@@ -326,6 +346,11 @@ export default function App() {
 
     if (!activeTrip) return;
 
+    if (!activeTrip.from || !activeTrip.to) {
+      alert('Cannot save incomplete trip. Please plan a trip first.');
+      return;
+    }
+
     // Verify if already saved to avoid duplicates
     const alreadySaved = savedTrips.some(
       t => t?.from === activeTrip.from && t?.to === activeTrip.to && t?.date === activeTrip.date
@@ -412,64 +437,80 @@ export default function App() {
     }
   };
 
-  // Delete trip from history (non-reentrant)
+  // Delete trip from history (non-reentrant and state consistent)
   const handleDeleteTrip = async (tripIdOrIndex) => {
     if (deletingTripId !== null) return;
     setDeletingTripId(tripIdOrIndex);
 
     try {
-      // If it's a string ID, call the API
-      if (typeof tripIdOrIndex === 'string') {
-        try {
-          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-          const response = await fetch(`${backendUrl}/api/trips/${tripIdOrIndex}`, {
-            method: 'DELETE',
-            signal: AbortSignal.timeout ? AbortSignal.timeout(7000) : undefined,
-            headers: { 'Authorization': `Bearer ${auth.token}` }
-          });
+      // Determine the actual trip ID
+      let targetId = tripIdOrIndex;
+      if (typeof tripIdOrIndex === 'number') {
+        const tripObj = savedTrips[tripIdOrIndex];
+        if (!tripObj) return;
+        targetId = tripObj._id;
+      }
 
-          if (response.status === 401 || response.status === 403) {
-            alert('Your session has expired. Please sign in again.');
-            handleLogout();
-            setAuth(prev => ({ ...prev, modalOpen: true }));
-            return;
-          }
+      if (!targetId) return;
 
-          if (response.status === 429) {
-            alert('Too many delete requests. Please wait a moment before trying again.');
-            return;
-          }
+      // Local offline trip: only exists in client storage
+      if (typeof targetId === 'string' && targetId.startsWith('local_')) {
+        setSavedTrips(prev => prev.filter(t => t?._id !== targetId));
+        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== targetId) : [];
+        localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+        return;
+      }
 
-          if (!response.ok && response.status !== 404) {
-            throw new Error(`Failed to delete trip from backend: status ${response.status}`);
-          }
-          
-          // Remove from local state
-          setSavedTrips(prev => prev.filter(t => t?._id !== tripIdOrIndex));
-          
-          // Remove from local storage fallback
-          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-          const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripIdOrIndex) : [];
-          localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
-        } catch (err) {
-          console.warn('Backend delete failed, performing local removal:', err.message);
-          
-          // If backend was offline, remove from state and local storage fallback
-          setSavedTrips(prev => prev.filter(t => t?._id !== tripIdOrIndex));
-          
-          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-          const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripIdOrIndex) : [];
-          localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+      // Backend trip: requires authenticated server confirmation
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const response = await fetch(`${backendUrl}/api/trips/${targetId}`, {
+          method: 'DELETE',
+          signal: AbortSignal.timeout ? AbortSignal.timeout(7000) : undefined,
+          headers: { 'Authorization': `Bearer ${auth.token}` }
+        });
+
+        if (response.status === 401 || response.status === 403) {
+          alert('Your session has expired. Please sign in again.');
+          handleLogout();
+          setAuth(prev => ({ ...prev, modalOpen: true }));
+          return; // Trip remains visible
         }
-      } else {
-        // Fallback for index
-        const tripToDelete = savedTrips[tripIdOrIndex];
-        setSavedTrips(prev => prev.filter((_, i) => i !== tripIdOrIndex));
-        if (tripToDelete) {
-          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
-          const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== tripToDelete._id) : [];
-          localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+
+        if (response.status === 429) {
+          alert('Too many delete requests. Please wait a moment before trying again.');
+          return; // Trip remains visible
         }
+
+        if (response.status === 404) {
+          // Trip was already deleted or not found on server — clean up local state
+          setSavedTrips(prev => prev.filter(t => t?._id !== targetId));
+          const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+          const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== targetId) : [];
+          localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+          return;
+        }
+
+        if (!response.ok) {
+          let errorDetail = '';
+          try {
+            const errJson = await response.json();
+            if (errJson?.error) errorDetail = `: ${errJson.error}`;
+          } catch { /* ignore parsing errors */ }
+          alert(`Failed to delete trip from server${errorDetail}. Please try again.`);
+          return; // Trip remains visible on server error
+        }
+        
+        // Deletion confirmed by server (200/204) — remove from local state and storage
+        setSavedTrips(prev => prev.filter(t => t?._id !== targetId));
+        const localTrips = safeJsonParse(localStorage.getItem('savedTrips'), []);
+        const filteredLocal = Array.isArray(localTrips) ? localTrips.filter(t => t?._id !== targetId) : [];
+        localStorage.setItem('savedTrips', JSON.stringify(filteredLocal));
+      } catch (err) {
+        console.warn('Network error while deleting trip:', err.message);
+        // Network drop or timeout — DO NOT delete locally; keep trip visible
+        alert('Could not delete trip due to a network error. Please check your connection and try again.');
       }
     } finally {
       setDeletingTripId(null);
@@ -478,9 +519,32 @@ export default function App() {
 
   // Select trip from dashboard history to view
   const handleSelectTrip = (trip) => {
-    setActiveTrip(trip);
+    if (!trip) {
+      alert('Selected trip data is unavailable.');
+      return;
+    }
+    // Defensive normalization to ensure all child components render smoothly
+    const normalizedTrip = {
+      ...trip,
+      from: trip.from || 'Origin',
+      to: trip.to || 'Destination',
+      date: trip.date || new Date().toISOString().split('T')[0],
+      travelers: typeof trip.travelers === 'number' ? trip.travelers : (parseInt(trip.travelers, 10) || 1),
+      budget: typeof trip.budget === 'number' ? trip.budget : (parseFloat(trip.budget) || 5000),
+      itinerary: Array.isArray(trip.itinerary) ? trip.itinerary : [],
+      options: trip.options || {
+        own: {
+          distance: trip.distance || '350 km',
+          time: '5 hrs 30 mins',
+          routes: [
+            { name: 'Primary Route', distance: trip.distance || '350 km', time: '5h 30m', tolls: 250, roadCondition: 'Good' }
+          ]
+        }
+      }
+    };
+    setActiveTrip(normalizedTrip);
     setView('search');
-    if (trip?.options?.own) {
+    if (normalizedTrip?.options?.own) {
       setActiveMode('own');
     } else {
       setActiveMode('flight');
@@ -729,6 +793,7 @@ export default function App() {
               onSelectTrip={handleSelectTrip}
               setView={handleNavigate}
               deletingTripId={deletingTripId}
+              loadingTrips={loadingTrips}
             />
             {/* Show Chatbot even on dashboard with last active trip info */}
             {savedTrips?.length > 0 && savedTrips[0] && (
