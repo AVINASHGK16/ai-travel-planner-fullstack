@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Compass, Sparkles, ChevronLeft, Save, Loader2, AlertTriangle } from 'lucide-react';
+import HeroSearch from '../components/HeroSearch';
 import SmartSuggestions from '../components/SmartSuggestions';
 import TravelOptions from '../components/TravelOptions';
 import RoadTripDetails from '../components/RoadTripDetails';
@@ -13,79 +14,39 @@ import { generateMockData, getAIGeneration } from '../utils/planner';
 import { useAuth } from '../context/AuthContext';
 import { storage, isValidTripsArray } from '../utils/storage';
 import { createTrip } from '../services/tripService';
+import { useTrip } from '../hooks/useTrip';
 
 export default function PlannerPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { tripId } = useParams();
   const { user, token, logout, openAuthModal } = useAuth();
+  const { trip: routeTrip, loading: resolvingTrip, notFound: tripNotFound } = useTrip(tripId);
 
   const [loading, setLoading] = useState(false);
   const [savingTrip, setSavingTrip] = useState(false);
-  const [activeTrip, setActiveTrip] = useState(null);
+  const [activeTrip, setActiveTrip] = useState(() => {
+    if (tripId) return null;
+    return storage.getJSON('activePlan', null);
+  });
   const [activeMode, setActiveMode] = useState('flight');
   const searchControllerRef = useRef(null);
 
-  const getTripById = (id) => {
-    if (!id) return null;
-    const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
-    return localTrips.find(t => (t?._id === id || t?.id === id || String(t?._id) === String(id))) || null;
-  };
-
-  // Normalize saved trip helper
-  const normalizeSavedTrip = (trip) => {
-    if (!trip) return null;
-    return {
-      ...trip,
-      from: trip.from || 'Origin',
-      to: trip.to || 'Destination',
-      date: trip.date || new Date().toISOString().split('T')[0],
-      travelers: typeof trip.travelers === 'number' ? trip.travelers : (parseInt(trip.travelers, 10) || 1),
-      budget: typeof trip.budget === 'number' ? trip.budget : (parseFloat(trip.budget) || 5000),
-      itinerary: Array.isArray(trip.itinerary) ? trip.itinerary : [],
-      options: trip.options || {
-        own: {
-          distance: trip.distance || '350 km',
-          time: '5 hrs 30 mins',
-          routes: [
-            { name: 'Primary Route', distance: trip.distance || '350 km', time: '5h 30m', tolls: 250, roadCondition: 'Good' }
-          ]
-        }
-      }
-    };
-  };
-
-  // Effect 1: Handle tripId route parameter (viewing saved trip directly or after refresh)
+  // Sync resolved trip from route parameter /plan/:tripId
   useEffect(() => {
-    if (tripId) {
-      if (searchControllerRef.current) {
-        searchControllerRef.current.abort();
-        searchControllerRef.current = null;
-      }
+    if (tripId && routeTrip) {
+      setActiveTrip(routeTrip);
+      setActiveMode(routeTrip?.options?.own ? 'own' : 'flight');
       setLoading(false);
-
-      const foundTrip = getTripById(tripId);
-      if (foundTrip) {
-        const normalized = normalizeSavedTrip(foundTrip);
-        setActiveTrip(normalized);
-        setActiveMode(normalized?.options?.own ? 'own' : 'flight');
-      } else {
-        // Trip not found in memory or storage — alert and return to dashboard
-        console.warn(`Trip with ID "${tripId}" not found.`);
-      }
     }
-  }, [tripId]);
+  }, [tripId, routeTrip]);
 
-  // Effect 2: Handle new search params from route state (/plan)
+  // Handle new search parameters from route state (/plan)
   useEffect(() => {
     const searchParams = location.state?.searchParams;
     if (!tripId && searchParams) {
       handleSearch(searchParams);
-    } else if (!tripId && !searchParams && !activeTrip) {
-      // Direct navigation to /plan without params — redirect back home
-      navigate('/', { replace: true });
     }
-
     return () => {
       if (searchControllerRef.current) {
         searchControllerRef.current.abort();
@@ -168,6 +129,7 @@ export default function PlannerPage() {
         };
 
         setActiveTrip(completeTripData);
+        storage.setJSON('activePlan', completeTripData);
       } else {
         const mockData = generateMockData(
           params.from,
@@ -178,12 +140,14 @@ export default function PlannerPage() {
           params.budget
         );
 
-        setActiveTrip({
+        const fallbackPlan = {
           ...mockData,
           isAIGenerated: false,
           generationSource: 'deterministic_fallback',
           generationNotice: aiErrorNotice || 'Standard curated itinerary (offline/fallback mode)'
-        });
+        };
+        setActiveTrip(fallbackPlan);
+        storage.setJSON('activePlan', fallbackPlan);
       }
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -196,12 +160,14 @@ export default function PlannerPage() {
         params.travelers,
         params.budget
       );
-      setActiveTrip({
+      const catchPlan = {
         ...fallbackData,
         isAIGenerated: false,
         generationSource: 'deterministic_fallback',
         generationNotice: err.message || 'Error communicating with AI service'
-      });
+      };
+      setActiveTrip(catchPlan);
+      storage.setJSON('activePlan', catchPlan);
     } finally {
       if (!controller.signal.aborted) {
         setLoading(false);
@@ -229,11 +195,13 @@ export default function PlannerPage() {
                newMisc
       } : null;
 
-      return {
+      const updatedTrip = {
         ...prev,
         itinerary: newItinerary,
         ...(updatedBudgetDetails && { budgetDetails: updatedBudgetDetails })
       };
+      storage.setJSON('activePlan', updatedTrip);
+      return updatedTrip;
     });
   };
 
@@ -318,8 +286,52 @@ export default function PlannerPage() {
       searchControllerRef.current.abort();
       searchControllerRef.current = null;
     }
-    navigate('/');
+    setActiveTrip(null);
+    storage.remove('activePlan');
+    navigate('/plan');
   };
+
+  if (tripId && resolvingTrip) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 text-center space-y-4">
+        <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+        <h3 className="font-display font-bold text-xl text-white">Loading Travel Plan...</h3>
+        <p className="text-sm text-slate-400">Resolving itinerary details for trip #{tripId}</p>
+      </div>
+    );
+  }
+
+  if (tripId && tripNotFound) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 text-center space-y-5">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <div>
+          <h3 className="font-display font-bold text-2xl text-white">Trip Not Found</h3>
+          <p className="text-sm text-slate-400 max-w-md mt-2">
+            We couldn't find a saved travel plan matching ID <code className="px-1.5 py-0.5 rounded bg-white/10 text-blue-300 font-mono text-xs">{tripId}</code>. It may have been deleted, or the URL might be incorrect.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-all cursor-pointer shadow-lg shadow-blue-600/20"
+          >
+            View Saved Trips
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/plan')}
+            className="px-5 py-2.5 bg-white/10 hover:bg-white/15 text-slate-200 rounded-xl text-sm font-semibold transition-all cursor-pointer"
+          >
+            Create New Plan
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -340,19 +352,16 @@ export default function PlannerPage() {
 
   if (!activeTrip) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-center space-y-4">
-        <Compass className="w-12 h-12 text-slate-500" />
-        <h3 className="font-display font-bold text-lg text-white">No Active Travel Plan Found</h3>
-        <p className="text-sm text-slate-400 max-w-sm">
-          Please search for a destination from the home page or select a saved trip from your dashboard.
-        </p>
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-all cursor-pointer"
-        >
-          Go to Search
-        </button>
+      <div className="max-w-7xl mx-auto px-6 py-12 space-y-8">
+        <div className="text-center space-y-2">
+          <h1 className="font-display font-black text-3xl md:text-5xl text-white tracking-tight">
+            Plan Your <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">Next Adventure</span>
+          </h1>
+          <p className="text-slate-400 text-sm md:text-base max-w-xl mx-auto">
+            Generate AI-optimized multi-modal travel itineraries, real-time weather forecasts, and route estimates.
+          </p>
+        </div>
+        <HeroSearch onSearch={handleSearch} loading={loading} />
       </div>
     );
   }
