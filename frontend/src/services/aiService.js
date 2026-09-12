@@ -1,4 +1,4 @@
-import { request } from './apiClient.js';
+import { request, ApiError, normalizeApiError } from './apiClient.js';
 
 /**
  * Request trip generation from AI backend proxy
@@ -26,23 +26,16 @@ export const generateTrip = async (searchParams, signal = null) => {
     });
 
     if (!res.ok) {
-      const err = new Error(res.data?.error || `AI generation failed with status ${res.status}`);
-      err.code = res.data?.code || (res.status === 429 ? 'AI_QUOTA_EXCEEDED' : 'AI_ERROR');
-      err.status = res.status;
-      throw err;
+      throw normalizeApiError(res, `AI generation failed with status ${res.status}`);
     }
 
     return res.data;
   } catch (error) {
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
       if (signal?.aborted) {
-        const cancelErr = new Error('Search cancelled by user');
-        cancelErr.code = 'CANCELLED';
-        throw cancelErr;
+        throw new ApiError('Search cancelled by user', 499, 'CANCELLED');
       }
-      const timeoutErr = new Error('AI generation timed out after 20 seconds');
-      timeoutErr.code = 'AI_TIMEOUT';
-      throw timeoutErr;
+      throw new ApiError('AI generation timed out after 20 seconds', 408, 'AI_TIMEOUT');
     }
     throw error;
   }
@@ -84,10 +77,7 @@ export const sendChatMessage = async ({ message, chatHistory = [], tripContext =
     });
 
     if (!res.ok) {
-      const err = new Error(res.data?.error || `Chat API error: ${res.status}`);
-      err.status = res.status;
-      err.code = res.data?.code;
-      throw err;
+      throw normalizeApiError(res, `Chat API error: ${res.status}`);
     }
 
     if (res.data && typeof res.data.reply === 'string' && res.data.reply.trim()) {

@@ -1,4 +1,4 @@
-import { request } from './apiClient.js';
+import { request, ApiError, normalizeApiError } from './apiClient.js';
 
 /**
  * Request live weather forecast data for a specified city.
@@ -16,20 +16,20 @@ export const getWeather = async (city, signal = null) => {
 
   if (!res.ok) {
     if (res.status === 404) {
-      throw new Error(`Weather station not found for "${city}".`);
+      throw new ApiError(`Weather station not found for "${city}".`, 404, 'NOT_FOUND');
     }
     if (res.status === 429) {
-      throw new Error('Weather update rate limit reached. Please check back later.');
+      throw new ApiError('Weather update rate limit reached. Please check back later.', 429, 'RATE_LIMIT_EXCEEDED');
     }
     if (res.status === 503) {
-      throw new Error('Live weather service is not configured on the server.');
+      throw new ApiError('Live weather service is not configured on the server.', 503, 'SERVICE_UNAVAILABLE');
     }
-    throw new Error(res.data?.error || 'Live weather service is temporarily unavailable.');
+    throw normalizeApiError(res, 'Live weather service is temporarily unavailable.');
   }
 
   const data = res.data;
   if (!data || typeof data.temp !== 'string' || !data.temp.trim()) {
-    throw new Error('Weather service returned incomplete information.');
+    throw new ApiError('Weather service returned incomplete information.', 502, 'INCOMPLETE_DATA');
   }
 
   return data;

@@ -65,6 +65,40 @@ export const request = async (endpoint, options = {}) => {
 };
 
 /**
+ * Simple, normalized error object for API failures.
+ * Encapsulates status, code, and user-facing message while maintaining standard Error prototype.
+ */
+export class ApiError extends Error {
+  constructor(message, status = 500, code = 'API_ERROR', details = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+/**
+ * Extract or normalize an ApiError from an API response object.
+ * @param {Object} res - Response object from request() { ok, status, data }
+ * @param {string} [defaultMessage] - Fallback message
+ * @returns {ApiError}
+ */
+export const normalizeApiError = (res, defaultMessage = 'A network error occurred.') => {
+  const status = res?.status || 500;
+  const data = res?.data;
+  const message = data?.details?.[0]?.message || data?.error || res?.statusText || defaultMessage;
+  const code = data?.code || (
+    status === 429 ? 'RATE_LIMIT_EXCEEDED' :
+    status === 401 ? 'UNAUTHORIZED' :
+    status === 403 ? 'FORBIDDEN' :
+    status === 404 ? 'NOT_FOUND' :
+    status === 409 ? 'CONFLICT' : 'API_ERROR'
+  );
+  return new ApiError(message, status, code, data?.details || null);
+};
+
+/**
  * Check if a response indicates an authentication/authorization failure.
  * Components should decide recovery behavior (silent logout vs alert vs modal).
  */

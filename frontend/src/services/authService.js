@@ -1,4 +1,4 @@
-import { request } from './apiClient.js';
+import { request, ApiError, normalizeApiError } from './apiClient.js';
 
 export const register = async ({ name, email, password }, signal = null) => {
   const body = { email: email.trim(), password };
@@ -13,19 +13,12 @@ export const register = async ({ name, email, password }, signal = null) => {
 
   if (!res.ok) {
     if (res.status === 429) {
-      throw new Error('Too many authentication attempts. Please wait a few minutes before trying again.');
+      throw new ApiError('Too many authentication attempts. Please wait a few minutes before trying again.', 429, 'RATE_LIMIT_EXCEEDED');
     }
     if (res.status === 409) {
-      throw new Error('An account with this email already exists. Please sign in instead.');
+      throw new ApiError('An account with this email already exists. Please sign in instead.', 409, 'CONFLICT');
     }
-    if (res.status === 400) {
-      const detailMsg = res.data?.details?.[0]?.message;
-      throw new Error(detailMsg || res.data?.error || 'Please check your inputs and try again.');
-    }
-    if (res.status >= 500) {
-      throw new Error('Server error occurred. Please try again in a few moments.');
-    }
-    throw new Error(res.data?.error || 'Registration failed. Please try again.');
+    throw normalizeApiError(res, 'Registration failed. Please try again.');
   }
 
   return res.data; // { token, user }
@@ -43,19 +36,12 @@ export const login = async ({ email, password }, signal = null) => {
 
   if (!res.ok) {
     if (res.status === 429) {
-      throw new Error('Too many authentication attempts. Please wait a few minutes before trying again.');
+      throw new ApiError('Too many authentication attempts. Please wait a few minutes before trying again.', 429, 'RATE_LIMIT_EXCEEDED');
     }
     if (res.status === 401) {
-      throw new Error('Invalid email or password.');
+      throw new ApiError('Invalid email or password.', 401, 'UNAUTHORIZED');
     }
-    if (res.status === 400) {
-      const detailMsg = res.data?.details?.[0]?.message;
-      throw new Error(detailMsg || res.data?.error || 'Please check your inputs and try again.');
-    }
-    if (res.status >= 500) {
-      throw new Error('Server error occurred. Please try again in a few moments.');
-    }
-    throw new Error(res.data?.error || 'Authentication failed. Please try again.');
+    throw normalizeApiError(res, 'Authentication failed. Please try again.');
   }
 
   return res.data; // { token, user }
