@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Compass, Sparkles, ChevronLeft, Save, Loader2, AlertTriangle } from 'lucide-react';
-import HeroSearch from '../components/HeroSearch';
+import { Compass, Sparkles, AlertTriangle, Loader2, Edit3, ChevronDown, ChevronUp } from 'lucide-react';
+import { 
+  PlannerHeader, 
+  TripConfigurationCard, 
+  QuickStartSuggestions, 
+  TripSummaryBar 
+} from '../components/planner';
 import SmartSuggestions from '../components/SmartSuggestions';
 import TravelOptions from '../components/TravelOptions';
 import RoadTripDetails from '../components/RoadTripDetails';
@@ -10,6 +15,9 @@ import BudgetCalculator from '../components/BudgetCalculator';
 import ItineraryGenerator from '../components/ItineraryGenerator';
 import ChatAssistant from '../components/ChatAssistant';
 import ErrorBoundary from '../components/ErrorBoundary';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Skeleton } from '../components/ui/Skeleton';
 import { generateMockData, getAIGeneration, resolveTripGeography, calculateModeBudget } from '../utils/planner';
 import { useAuth } from '../context/AuthContext';
 import { storage, isValidTripsArray } from '../utils/storage';
@@ -34,6 +42,9 @@ export default function PlannerPage() {
     return storage.getJSON('activePlan', null);
   });
   const [activeMode, setActiveMode] = useState('flight');
+  const [suggestedValues, setSuggestedValues] = useState(null);
+  const [showEditForm, setShowEditForm] = useState(false);
+
   const searchControllerRef = useRef(null);
   const flightControllerRef = useRef(null);
   const flightRequestIdRef = useRef(0);
@@ -92,6 +103,7 @@ export default function PlannerPage() {
 
     setLoading(true);
     setSearchError(null);
+    setShowEditForm(false);
 
     try {
       // 1. Authoritative Geocoding & Route Calculation
@@ -181,9 +193,7 @@ export default function PlannerPage() {
                 options: {
                   ...prev.options,
                   flight: offers
-                },
-                flightStatus: latestFlightResultRef.current.status,
-                flightProvider: latestFlightResultRef.current.provider
+                }
               };
               storage.setJSON('activePlan', updated);
               return updated;
@@ -193,147 +203,83 @@ export default function PlannerPage() {
           .catch(err => {
             if (flightController.signal.aborted) return;
             if (flightRequestIdRef.current !== currentFlightRequestId) return;
-            console.warn('Flight provider search failed:', err.message || err);
-            const userNotice = err.message || 'Flight data unavailable from provider.';
-            setFlightError(userNotice);
-            // Retain truthful empty flight state rather than falsely presenting synthetic estimates
-            latestFlightResultRef.current = {
-              requestId: currentFlightRequestId,
-              offers: [],
-              status: 'FLIGHT_PROVIDER_ERROR',
-              provider: null
-            };
-            setActiveTrip(prev => {
-              if (!prev || flightRequestIdRef.current !== currentFlightRequestId) return prev;
-              const updated = {
-                ...prev,
-                options: {
-                  ...prev.options,
-                  flight: []
-                },
-                flightStatus: 'FLIGHT_PROVIDER_ERROR',
-                flightError: userNotice
-              };
-              storage.setJSON('activePlan', updated);
-              return updated;
-            });
+            console.warn('Flight provider query warning:', err?.message || err);
+            setFlightError(err?.message || 'Could not retrieve live flight offers.');
             setFlightLoading(false);
           });
       } else {
-        // Short corridor (< 200 km): commercial flights do not operate
         setFlightLoading(false);
         setFlightError(null);
       }
 
-      // 4. Attempt Gemini narrative itinerary generation
-      let responseData = null;
-      let aiErrorNotice = null;
-
+      // 4. Enrich with AI itinerary if possible
+      let aiEnrichedTrip = baselineMock;
       try {
-        responseData = await getAIGeneration(params, controller.signal);
+        const aiResult = await getAIGeneration(
+          params.from,
+          params.to,
+          params.date,
+          params.travelers,
+          params.budget,
+          controller.signal
+        );
+
+        if (!controller.signal.aborted && aiResult && Array.isArray(aiResult.itinerary) && aiResult.itinerary.length > 0) {
+          aiEnrichedTrip = {
+            ...baselineMock,
+            itinerary: aiResult.itinerary,
+            isAIGenerated: true,
+            generationNotice: null
+          };
+        } else if (!controller.signal.aborted && aiResult?.isFallback) {
+          aiEnrichedTrip = {
+            ...baselineMock,
+            generationNotice: aiResult.message || 'Gemini quota reached or service busy.'
+          };
+        }
       } catch (aiErr) {
-        if (aiErr.code === 'CANCELLED') return;
-        aiErrorNotice = aiErr.message || 'AI service unavailable';
+        if (controller.signal.aborted) return;
+        console.warn('AI Itinerary enrichment unavailable:', aiErr.message);
+        aiEnrichedTrip = {
+          ...baselineMock,
+          generationNotice: 'Deterministic itinerary loaded (AI offline).'
+        };
       }
 
       if (controller.signal.aborted) return;
 
-      // Determine flight offers to include in the plan
-      const currentFlightOffers = (latestFlightResultRef.current.requestId === currentFlightRequestId && latestFlightResultRef.current.offers !== null)
-        ? latestFlightResultRef.current.offers
-        : (canFly ? [] : []);
-
-      if (responseData && responseData.itinerary && responseData.isAIGenerated) {
-        // Enforce Gemini Boundary: AI provides itinerary narrative, but deterministic
-        // travel facts (distance, route, coordinates, budgets, options) are authoritative.
-        const completeTripData = {
-          ...baselineMock,
-          from: params.from,
-          to: params.to,
-          date: params.date,
-          returnDate: params.returnDate || null,
-          tripDays: baselineMock.tripDays || 1,
-          travelers: parseInt(params.travelers, 10) || 1,
-          budget: parseFloat(params.budget) || 2500,
-          transportMode: effectiveMode,
-          distance: baselineMock.distance,
-          coordinates: baselineMock.coordinates,
-          canonicalLocations: baselineMock.canonicalLocations,
-          routeDetails: baselineMock.routeDetails,
-          options: {
-            ...baselineMock.options,
-            flight: currentFlightOffers
-          },
-          costComponents: baselineMock.costComponents,
-          budgetDetails: baselineMock.budgetDetails,
-          weather: baselineMock.weather,
-          itinerary: Array.isArray(responseData.itinerary) ? responseData.itinerary : baselineMock.itinerary,
-          isAIGenerated: true,
-          generationSource: 'ai',
-          generationNotice: null
+      // Attach any resolved flight results if already arrived
+      if (latestFlightResultRef.current.offers) {
+        aiEnrichedTrip.options = {
+          ...aiEnrichedTrip.options,
+          flight: latestFlightResultRef.current.offers
         };
-
-        setActiveTrip(completeTripData);
-        storage.setJSON('activePlan', completeTripData);
-      } else {
-        const fallbackPlan = {
-          ...baselineMock,
-          options: {
-            ...baselineMock.options,
-            flight: currentFlightOffers
-          },
-          isAIGenerated: false,
-          generationSource: 'deterministic_fallback',
-          generationNotice: aiErrorNotice || 'Standard curated itinerary (offline/fallback mode)'
-        };
-        setActiveTrip(fallbackPlan);
-        storage.setJSON('activePlan', fallbackPlan);
       }
+
+      setActiveTrip(aiEnrichedTrip);
+      storage.setJSON('activePlan', aiEnrichedTrip);
+      setLoading(false);
+
     } catch (err) {
       if (controller.signal.aborted) return;
-      console.error('Search processing error:', err);
-      setSearchError(err.message || 'Error processing trip search. Please try again.');
-    } finally {
-      if (!controller.signal.aborted) {
-        setLoading(false);
-      }
+      console.error('Plan calculation error:', err);
+      setSearchError('An unexpected error occurred while calculating your itinerary. Please try again.');
+      setLoading(false);
     }
   };
 
   const handleChangeItinerary = (newItinerary) => {
     setActiveTrip(prev => {
-      if (!prev || !Array.isArray(newItinerary)) return prev;
-
-      const newMisc = newItinerary.reduce((acc, day) => {
-        return acc + (day?.activities || []).reduce((sum, act) => sum + (parseFloat(act?.cost) || 0), 0);
-      }, 0);
-
-      const currentCosts = prev.costComponents ? {
-        ...prev.costComponents,
-        miscCost: newMisc
-      } : {
-        ...prev.budgetDetails,
-        misc: newMisc
-      };
-
-      const updatedBudget = calculateModeBudget(activeMode, currentCosts);
-
-      const updatedTrip = {
-        ...prev,
-        itinerary: newItinerary,
-        budgetDetails: updatedBudget,
-        costComponents: prev.costComponents ? { ...prev.costComponents, miscCost: newMisc } : prev.costComponents
-      };
-      storage.setJSON('activePlan', updatedTrip);
-      return updatedTrip;
+      if (!prev) return prev;
+      const updated = { ...prev, itinerary: newItinerary };
+      storage.setJSON('activePlan', updated);
+      return updated;
     });
   };
 
   const handleSaveActiveTrip = async () => {
-    if (savingTrip) return;
-
-    if (!user) {
-      alert('Please Sign In first to save your trip itinerary!');
+    if (!user || !token) {
+      alert('Please sign in or create an account to save your travel itinerary.');
       openAuthModal();
       return;
     }
@@ -420,190 +366,221 @@ export default function PlannerPage() {
     setFlightError(null);
     setActiveTrip(null);
     setSearchError(null);
+    setShowEditForm(false);
     storage.remove('activePlan');
     navigate('/plan');
   };
 
+  // State: Loading saved trip from URL
   if (tripId && resolvingTrip) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-center space-y-4">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-        <h3 className="font-display font-bold text-xl text-white">Loading Travel Plan...</h3>
-        <p className="text-sm text-slate-400">Resolving itinerary details for trip #{tripId}</p>
+      <div className="max-w-4xl mx-auto px-4 py-12 space-y-6 animate-fade-in">
+        <div className="text-center space-y-3 py-6">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+          <h2 className="font-display font-bold text-xl text-slate-900">Loading Travel Plan...</h2>
+          <p className="text-sm text-slate-500">Resolving itinerary details for trip #{tripId}</p>
+        </div>
+        <Card className="p-6 space-y-4">
+          <Skeleton className="h-6 w-1/3" />
+          <Skeleton className="h-4 w-1/2" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </div>
+        </Card>
       </div>
     );
   }
 
+  // State: Saved trip not found
   if (tripId && tripNotFound) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-center space-y-5">
-        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-          <AlertTriangle className="w-8 h-8" />
-        </div>
-        <div>
-          <h3 className="font-display font-bold text-2xl text-white">Trip Not Found</h3>
-          <p className="text-sm text-slate-400 max-w-md mt-2">
-            We couldn't find a saved travel plan matching ID <code className="px-1.5 py-0.5 rounded bg-white/10 text-blue-300 font-mono text-xs">{tripId}</code>. It may have been deleted, or the URL might be incorrect.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard')}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-all cursor-pointer shadow-lg shadow-blue-600/20"
-          >
-            View Saved Trips
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/plan')}
-            className="px-5 py-2.5 bg-white/10 hover:bg-white/15 text-slate-200 rounded-xl text-sm font-semibold transition-all cursor-pointer"
-          >
-            Create New Plan
-          </button>
-        </div>
+      <div className="max-w-lg mx-auto px-4 py-20 text-center animate-fade-in">
+        <Card className="p-8 space-y-5 border-slate-200 shadow-sm">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mx-auto">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="font-display font-bold text-2xl text-slate-900">Trip Not Found</h2>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              We couldn't find a saved travel plan matching ID <code className="px-1.5 py-0.5 rounded bg-slate-100 text-blue-600 font-mono text-xs font-semibold">{tripId}</code>. It may have been deleted, or the URL might be incorrect.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <Button
+              variant="primary"
+              onClick={() => navigate('/dashboard')}
+              className="w-full sm:w-auto cursor-pointer"
+            >
+              View Saved Trips
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate('/plan')}
+              className="w-full sm:w-auto cursor-pointer"
+            >
+              Create New Plan
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
 
+  // State: Calculating / Generating Plan
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-center space-y-4">
-        <div className="relative">
-          <Compass className="w-16 h-16 text-blue-500 animate-spin-slow" />
-          <Sparkles className="w-6 h-6 text-purple-400 absolute -top-1 -right-1 animate-bounce" />
-        </div>
-        <div>
-          <h3 className="font-display font-bold text-xl text-white">Calculating Authentic Travel Plan</h3>
-          <p className="text-sm text-slate-400 mt-1 max-w-[280px]">
-            Resolving authoritative coordinates, highway routes, and mode-specific budgets...
-          </p>
-        </div>
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-6 animate-fade-in">
+        <Card className="p-8 space-y-6 border-slate-200 shadow-sm bg-white">
+          <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+            <Compass className="w-14 h-14 text-blue-600 animate-spin-slow" />
+            <Sparkles className="w-5 h-5 text-purple-600 absolute -top-1 -right-1 animate-bounce" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="font-display font-bold text-xl text-slate-900">
+              Generating Authentic Itinerary
+            </h2>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+              Resolving canonical coordinates, calculating real highway routes, and fetching mode-aware budgets...
+            </p>
+          </div>
+          <div className="space-y-2 pt-2 text-left">
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+              <span>Querying transport options & live routes...</span>
+            </div>
+            <Skeleton className="h-2 w-full rounded" />
+          </div>
+        </Card>
       </div>
     );
   }
 
+  // State: Empty Planner / Fresh search
   if (!activeTrip) {
     return (
-      <div className="max-w-7xl mx-auto px-6 py-12 space-y-8">
-        <div className="text-center space-y-2">
-          <h1 className="font-display font-black text-3xl md:text-5xl text-white tracking-tight">
-            Plan Your <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">Next Adventure</span>
-          </h1>
-          <p className="text-slate-400 text-sm md:text-base max-w-xl mx-auto">
-            Generate authoritative multi-modal travel itineraries, real road routes, and mode-aware budgets.
-          </p>
-        </div>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8 animate-fade-in">
+        
+        {/* Compact SaaS Header */}
+        <PlannerHeader />
 
+        {/* Geographic or Search Resolution Notice */}
         {searchError && (
-          <div className="max-w-3xl mx-auto p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 text-amber-300 text-sm shadow-md">
+          <div
+            role="alert"
+            className="max-w-4xl mx-auto p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-3 text-amber-800 text-sm shadow-xs animate-fade-in"
+          >
             <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
               <div>
-                <h5 className="font-semibold text-white text-sm">Geographic Resolution Notice</h5>
-                <p className="text-xs text-amber-300/90 mt-0.5">{searchError}</p>
+                <h5 className="font-semibold text-slate-900 text-sm">Geographic Resolution Notice</h5>
+                <p className="text-xs text-amber-700 mt-0.5">{searchError}</p>
               </div>
             </div>
             <button
+              type="button"
               onClick={() => setSearchError(null)}
-              className="text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors"
+              className="text-xs text-amber-800 hover:text-amber-950 font-medium px-2.5 py-1 rounded bg-amber-100/80 hover:bg-amber-100 transition-colors cursor-pointer"
             >
               Dismiss
             </button>
           </div>
         )}
 
-        <HeroSearch onSearch={handleSearch} loading={loading} />
+        {/* Main Trip Configuration Card */}
+        <TripConfigurationCard
+          onSearch={handleSearch}
+          loading={loading}
+          initialValues={suggestedValues}
+        />
+
+        {/* Inspiration / Quick Start Corridors */}
+        <QuickStartSuggestions
+          onSelectSuggestion={(values) => {
+            setSuggestedValues(values);
+            window.scrollTo({ top: 120, behavior: 'smooth' });
+          }}
+        />
+
       </div>
     );
   }
 
+  // State: Generated Trip / Results View
   return (
     <ErrorBoundary fallbackTitle="Travel Plan Error" onReset={handleBackToSearch}>
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 animate-fade-in">
 
-        {/* Header / Summary panel */}
-        <div className="flex flex-col md:flex-row justify-between md:items-center p-5 rounded-2xl glass border border-white/10 gap-4">
-          <div>
+        {/* Trip Summary Header Bar */}
+        <TripSummaryBar
+          activeTrip={activeTrip}
+          onBackToSearch={handleBackToSearch}
+          onSaveTrip={handleSaveActiveTrip}
+          savingTrip={savingTrip}
+        />
+
+        {/* Optional: Collapsible Configuration Card to modify search */}
+        <div className="space-y-2">
+          <div className="flex justify-end">
             <button
               type="button"
-              onClick={handleBackToSearch}
-              className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 font-semibold mb-2 group transition-colors cursor-pointer"
+              onClick={() => setShowEditForm(!showEditForm)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 px-3 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
             >
-              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-              <span>Back to search</span>
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>{showEditForm ? 'Hide Search Parameters' : 'Modify Search Parameters'}</span>
+              {showEditForm ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
-            <h2 className="font-display font-extrabold text-2xl text-white tracking-tight">
-              {(typeof activeTrip.from === 'string' ? activeTrip.from.split(',')[0] : 'Origin')} to {(typeof activeTrip.to === 'string' ? activeTrip.to.split(',')[0] : 'Destination')} Plan
-            </h2>
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <p className="text-xs text-slate-400">
-                Departing {activeTrip.date || 'N/A'}{activeTrip.returnDate ? ` • Returning ${activeTrip.returnDate}` : ''} • {activeTrip.travelers || 1} Travelers • Distance: {activeTrip.distance || 'N/A'} km
-              </p>
-              {activeTrip.isAIGenerated ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                  <Sparkles className="w-3 h-3" />
-                  <span>Gemini AI Narrative</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30" title={activeTrip.generationNotice || 'Curated standard plan'}>
-                  <Compass className="w-3 h-3" />
-                  <span>Curated Standard Plan (Offline/Fallback)</span>
-                </span>
-              )}
-              {activeTrip.routeDetails?.source && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30">
-                  <span>Route: {activeTrip.routeDetails.source.toUpperCase()}</span>
-                </span>
-              )}
+          </div>
+
+          {showEditForm && (
+            <div className="animate-fade-in pt-1">
+              <TripConfigurationCard
+                onSearch={handleSearch}
+                loading={loading}
+                initialValues={{
+                  from: activeTrip.from,
+                  to: activeTrip.to,
+                  date: activeTrip.date,
+                  returnDate: activeTrip.returnDate,
+                  travelers: activeTrip.travelers,
+                  budget: activeTrip.budget,
+                  preferredMode: activeMode
+                }}
+              />
             </div>
-          </div>
-
-          {/* Action items */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleSaveActiveTrip}
-              disabled={savingTrip}
-              className={`flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 ${
-                savingTrip ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'
-              }`}
-            >
-              {savingTrip ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>Save Plan</span>
-                </>
-              )}
-            </button>
-          </div>
+          )}
         </div>
 
         {/* Informational banner when deterministic fallback was used */}
         {!activeTrip.isAIGenerated && activeTrip.generationNotice && (
-          <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2.5 shadow-sm">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2.5 shadow-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
             <span>Notice: {activeTrip.generationNotice}. Displaying deterministic itinerary with mode-aware budget.</span>
           </div>
         )}
 
-        {/* Smart suggestions row */}
-        <SmartSuggestions
-          suggestions={activeTrip.suggestions}
-          onSelectMode={handleSelectMode}
-          isAIGenerated={Boolean(activeTrip.isAIGenerated)}
-        />
+        {/* Smart Recommendations Row */}
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
+          <SmartSuggestions
+            suggestions={activeTrip.suggestions}
+            onSelectMode={handleSelectMode}
+            isAIGenerated={Boolean(activeTrip.isAIGenerated)}
+          />
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Transport options grid (Left 8 cols) */}
-          <div className="lg:col-span-8 space-y-8">
-            <div className="p-6 rounded-2xl glass border border-white/10">
-              <h3 className="font-display font-bold text-lg text-white mb-4">Compare & Book Transports</h3>
+        {/* Results Hierarchy (8 cols Left / 4 cols Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+          
+          {/* Left Column: Transport Options & Day-by-day Itinerary */}
+          <div className="lg:col-span-8 space-y-6">
+            
+            {/* Travel Options Card */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
+              <h3 className="font-display font-bold text-lg text-white mb-4">
+                Compare & Book Transports
+              </h3>
               <TravelOptions
                 from={activeTrip.from}
                 to={activeTrip.to}
@@ -618,17 +595,18 @@ export default function PlannerPage() {
               </TravelOptions>
             </div>
 
-            {/* Day-by-day Itinerary */}
-            <div className="p-6 rounded-2xl glass border border-white/10">
+            {/* Itinerary Generator Card */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
               <ItineraryGenerator
                 itinerary={activeTrip.itinerary}
                 onChangeItinerary={handleChangeItinerary}
               />
             </div>
+
           </div>
 
-          {/* Weather, Budget details (Right 4 cols) */}
-          <div className="lg:col-span-4 space-y-8">
+          {/* Right Column: Weather & Budget */}
+          <div className="lg:col-span-4 space-y-6">
             <WeatherInfo
               weather={activeTrip.weather}
               destination={activeTrip.to}
@@ -641,10 +619,12 @@ export default function PlannerPage() {
               activeMode={activeMode}
             />
           </div>
+
         </div>
 
         {/* Floating Chat Assistant */}
         <ChatAssistant tripData={activeTrip} />
+
       </div>
     </ErrorBoundary>
   );

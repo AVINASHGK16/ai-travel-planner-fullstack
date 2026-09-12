@@ -46,6 +46,7 @@ export function AppShell({ children, onOpenSettings }) {
                 <button
                   type="button"
                   onClick={() => setMobileSidebarOpen(false)}
+                  aria-label="Close navigation menu"
                   className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -85,9 +86,9 @@ export function AppShell({ children, onOpenSettings }) {
                   Support
                 </button>
                 <span>•</span>
-                <span className="hover:text-slate-800 cursor-pointer">Privacy Policy</span>
+                <span>Privacy Policy</span>
                 <span>•</span>
-                <span className="hover:text-slate-800 cursor-pointer">Terms of Service</span>
+                <span>Terms of Service</span>
               </div>
             </div>
           </footer>

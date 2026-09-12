@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Compass, Menu, Key, User, LogOut, FolderHeart, Settings as SettingsIcon, ChevronDown } from 'lucide-react';
 import { Dropdown, DropdownItem, DropdownDivider } from '../ui/Dropdown';
 import { Button } from '../ui/Button';
@@ -45,9 +45,10 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
           <Menu className="w-5 h-5" />
         </button>
 
-        <div
-          onClick={() => navigate('/')}
-          className="flex items-center gap-2.5 cursor-pointer group"
+        <Link
+          to="/"
+          className="flex items-center gap-2.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg"
+          aria-label="Roamly Home"
         >
           <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs transition-transform group-hover:scale-105">
             <Compass className="w-4.5 h-4.5" />
@@ -60,7 +61,7 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
               SaaS
             </Badge>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Center: Current Route Context */}

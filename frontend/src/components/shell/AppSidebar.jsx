@@ -29,9 +29,11 @@ export function AppSidebar({ onOpenHelp, onCloseMobile, className = '' }) {
     }
   };
 
+  const searchParams = new URLSearchParams(location.search);
+  const tabParam = searchParams.get('tab');
   const isPlanActive = location.pathname === '/' || location.pathname.startsWith('/plan');
-  const isDashboardActive = location.pathname === '/dashboard' && !location.search.includes('saved');
-  const isSavedActive = location.pathname === '/dashboard' && location.search.includes('saved');
+  const isDashboardActive = location.pathname === '/dashboard' && tabParam !== 'saved';
+  const isSavedActive = location.pathname === '/dashboard' && tabParam === 'saved';
   const isProfileActive = location.pathname === '/settings';
 
   const navItems = [

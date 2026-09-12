@@ -19,7 +19,8 @@ export function Select({
   required = false,
   ...props
 }) {
-  const generatedId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+  const reactId = React.useId();
+  const generatedId = id || (label ? `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${reactId}` : reactId);
 
   return (
     <div className="w-full space-y-1.5 text-left">
