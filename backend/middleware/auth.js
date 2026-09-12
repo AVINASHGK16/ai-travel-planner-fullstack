@@ -87,3 +87,12 @@ export const tripsLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many trip management requests. Please try again later.' }
 });
+
+export const flightSearchLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  statusCode: 429,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Flight search rate limit exceeded. Please wait before searching for more flights.', code: 'RATE_LIMIT_EXCEEDED' }
+});

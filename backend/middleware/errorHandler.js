@@ -44,7 +44,8 @@ export const errorHandler = (err, req, res, next) => {
   const safeMessage = String(err?.message || err)
     .replace(/key=[^&\s]+/gi, 'key=REDACTED')
     .replace(/appid=[^&\s]+/gi, 'appid=REDACTED')
-    .replace(/Bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer REDACTED');
+    .replace(/Bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer REDACTED')
+    .replace(/duffel_(?:test|live)_[a-zA-Z0-9_-]+/gi, 'duffel_REDACTED');
 
   console.error('Centralized server error:', safeMessage);
   res.status(500).json({ error: 'An unexpected internal error occurred.' });

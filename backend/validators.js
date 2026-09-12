@@ -257,3 +257,35 @@ export const chatSchema = z.object({
   })).max(30).optional(),
   tripContext: z.record(z.any()).optional()
 });
+
+// ─── 8. Flight Search Query Schema (/api/flights/search) ─────────
+export const flightSearchQuerySchema = z.object({
+  origin: z.string({ required_error: 'Origin is required' })
+    .trim()
+    .min(1, 'Origin location cannot be empty')
+    .max(100, 'Origin location cannot exceed 100 characters')
+    .regex(SAFE_LOCATION_REGEX, 'Origin contains invalid characters'),
+  destination: z.string({ required_error: 'Destination is required' })
+    .trim()
+    .min(1, 'Destination cannot be empty')
+    .max(100, 'Destination cannot exceed 100 characters')
+    .regex(SAFE_LOCATION_REGEX, 'Destination contains invalid characters'),
+  date: z.string({ required_error: 'Departure date is required' })
+    .trim()
+    .refine(isValidDateString, { message: 'Departure date must be a valid date in YYYY-MM-DD format' }),
+  passengers: z.coerce.number({ invalid_type_error: 'Passengers must be a number' })
+    .int('Passengers must be an integer')
+    .min(1, 'At least 1 passenger is required')
+    .max(9, 'Maximum 9 passengers allowed')
+    .default(1),
+  cabin: z.enum(['economy', 'premium_economy', 'business', 'first'], {
+    errorMap: () => ({ message: 'Cabin must be one of: economy, premium_economy, business, first' })
+  }).default('economy'),
+  allowEstimate: z.preprocess(
+    val => val === 'true' || val === true || val === '1',
+    z.boolean().optional()
+  ).default(false)
+}).refine(data => data.origin.toLowerCase().trim() !== data.destination.toLowerCase().trim(), {
+  message: 'Origin and destination must be different locations',
+  path: ['destination']
+});

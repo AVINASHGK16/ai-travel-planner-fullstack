@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import { storage, isValidTripsArray } from '../utils/storage';
 import { createTrip } from '../services/tripService';
 import { useTrip } from '../hooks/useTrip';
+import { searchFlights } from '../services/flightService';
 
 export default function PlannerPage() {
   const location = useLocation();
@@ -24,6 +25,8 @@ export default function PlannerPage() {
   const { trip: routeTrip, loading: resolvingTrip, notFound: tripNotFound } = useTrip(tripId);
 
   const [loading, setLoading] = useState(false);
+  const [flightLoading, setFlightLoading] = useState(false);
+  const [flightError, setFlightError] = useState(null);
   const [savingTrip, setSavingTrip] = useState(false);
   const [searchError, setSearchError] = useState(null);
   const [activeTrip, setActiveTrip] = useState(() => {
@@ -32,6 +35,9 @@ export default function PlannerPage() {
   });
   const [activeMode, setActiveMode] = useState('flight');
   const searchControllerRef = useRef(null);
+  const flightControllerRef = useRef(null);
+  const flightRequestIdRef = useRef(0);
+  const latestFlightResultRef = useRef({ requestId: 0, offers: null, status: null, provider: null });
 
   // Sync resolved trip from route parameter /plan/:tripId
   useEffect(() => {
@@ -52,6 +58,9 @@ export default function PlannerPage() {
     return () => {
       if (searchControllerRef.current) {
         searchControllerRef.current.abort();
+      }
+      if (flightControllerRef.current) {
+        flightControllerRef.current.abort();
       }
     };
   }, [location.state, tripId]);
@@ -74,6 +83,9 @@ export default function PlannerPage() {
   const handleSearch = async (params) => {
     if (searchControllerRef.current) {
       searchControllerRef.current.abort();
+    }
+    if (flightControllerRef.current) {
+      flightControllerRef.current.abort();
     }
     const controller = new AbortController();
     searchControllerRef.current = controller;
@@ -117,7 +129,89 @@ export default function PlannerPage() {
         geoData
       );
 
-      // 3. Attempt Gemini narrative itinerary generation
+      // 3. Initiate provider-backed flight search if corridor supports commercial flights (>= 200 km)
+      const currentFlightRequestId = ++flightRequestIdRef.current;
+      latestFlightResultRef.current = { requestId: currentFlightRequestId, offers: null, status: null, provider: null };
+
+      if (canFly) {
+        const flightController = new AbortController();
+        flightControllerRef.current = flightController;
+        setFlightLoading(true);
+        setFlightError(null);
+
+        const originCity = geoData?.fromLocation?.name || (typeof params.from === 'string' ? params.from.split(',')[0].trim() : params.from);
+        const destCity = geoData?.toLocation?.name || (typeof params.to === 'string' ? params.to.split(',')[0].trim() : params.to);
+        const passengersCount = parseInt(params.travelers, 10) || 1;
+
+        searchFlights({
+          origin: originCity,
+          destination: destCity,
+          date: params.date,
+          passengers: passengersCount,
+          cabin: 'economy',
+          allowEstimate: false
+        }, flightController.signal)
+          .then(res => {
+            if (flightController.signal.aborted) return;
+            if (flightRequestIdRef.current !== currentFlightRequestId) return;
+            const offers = Array.isArray(res?.offers) ? res.offers : [];
+            latestFlightResultRef.current = {
+              requestId: currentFlightRequestId,
+              offers,
+              status: res?.status || (offers.length > 0 ? 'CONFIRMED_OFFERS' : 'NO_FLIGHTS_FOUND'),
+              provider: res?.provider || 'duffel'
+            };
+
+            setActiveTrip(prev => {
+              if (!prev || flightRequestIdRef.current !== currentFlightRequestId) return prev;
+              const updated = {
+                ...prev,
+                options: {
+                  ...prev.options,
+                  flight: offers
+                },
+                flightStatus: latestFlightResultRef.current.status,
+                flightProvider: latestFlightResultRef.current.provider
+              };
+              storage.setJSON('activePlan', updated);
+              return updated;
+            });
+            setFlightLoading(false);
+          })
+          .catch(err => {
+            if (flightController.signal.aborted) return;
+            if (flightRequestIdRef.current !== currentFlightRequestId) return;
+            console.warn('Flight provider search failed, maintaining estimated fallback:', err.message || err);
+            setFlightError(err.message || 'Flight provider unavailable. Showing estimated fares.');
+            // Retain explicit estimated fallback from baselineMock
+            latestFlightResultRef.current = {
+              requestId: currentFlightRequestId,
+              offers: baselineMock.options.flight || [],
+              status: 'ESTIMATED_FALLBACK',
+              provider: null
+            };
+            setActiveTrip(prev => {
+              if (!prev || flightRequestIdRef.current !== currentFlightRequestId) return prev;
+              const updated = {
+                ...prev,
+                options: {
+                  ...prev.options,
+                  flight: baselineMock.options.flight || []
+                },
+                flightStatus: 'ESTIMATED_FALLBACK'
+              };
+              storage.setJSON('activePlan', updated);
+              return updated;
+            });
+            setFlightLoading(false);
+          });
+      } else {
+        // Short corridor (< 200 km): commercial flights do not operate
+        setFlightLoading(false);
+        setFlightError(null);
+      }
+
+      // 4. Attempt Gemini narrative itinerary generation
       let responseData = null;
       let aiErrorNotice = null;
 
@@ -129,6 +223,11 @@ export default function PlannerPage() {
       }
 
       if (controller.signal.aborted) return;
+
+      // Determine flight offers to include in the plan
+      const currentFlightOffers = (latestFlightResultRef.current.requestId === currentFlightRequestId && latestFlightResultRef.current.offers !== null)
+        ? latestFlightResultRef.current.offers
+        : baselineMock.options.flight;
 
       if (responseData && responseData.itinerary && responseData.isAIGenerated) {
         // Enforce Gemini Boundary: AI provides itinerary narrative, but deterministic
@@ -147,7 +246,10 @@ export default function PlannerPage() {
           coordinates: baselineMock.coordinates,
           canonicalLocations: baselineMock.canonicalLocations,
           routeDetails: baselineMock.routeDetails,
-          options: baselineMock.options,
+          options: {
+            ...baselineMock.options,
+            flight: currentFlightOffers
+          },
           costComponents: baselineMock.costComponents,
           budgetDetails: baselineMock.budgetDetails,
           weather: baselineMock.weather,
@@ -162,6 +264,10 @@ export default function PlannerPage() {
       } else {
         const fallbackPlan = {
           ...baselineMock,
+          options: {
+            ...baselineMock.options,
+            flight: currentFlightOffers
+          },
           isAIGenerated: false,
           generationSource: 'deterministic_fallback',
           generationNotice: aiErrorNotice || 'Standard curated itinerary (offline/fallback mode)'
@@ -291,6 +397,13 @@ export default function PlannerPage() {
       searchControllerRef.current.abort();
       searchControllerRef.current = null;
     }
+    if (flightControllerRef.current) {
+      flightControllerRef.current.abort();
+      flightControllerRef.current = null;
+    }
+    flightRequestIdRef.current++;
+    setFlightLoading(false);
+    setFlightError(null);
     setActiveTrip(null);
     setSearchError(null);
     storage.remove('activePlan');
@@ -484,6 +597,8 @@ export default function PlannerPage() {
                 options={activeTrip.options}
                 activeMode={activeMode}
                 setActiveMode={handleSelectMode}
+                flightLoading={flightLoading}
+                flightError={flightError}
               >
                 <RoadTripDetails tripData={activeTrip} />
               </TravelOptions>

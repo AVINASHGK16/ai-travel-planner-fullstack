@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plane, Train, Bus, Car, Navigation, ChevronRight, Star, Clock, AlertCircle } from 'lucide-react';
+import { Plane, Train, Bus, Car, Navigation, ChevronRight, Star, Clock, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function TravelOptions({
   from,
@@ -8,16 +8,42 @@ export default function TravelOptions({
   options,
   activeMode,
   setActiveMode,
-  children // This will be RoadTripDetails component if Own Vehicle is selected
+  children, // This will be RoadTripDetails component if Own Vehicle is selected
+  flightLoading = false,
+  flightError = null
 }) {
   
   // Safe currency / price formatter that handles numbers, strings, and missing values
-  const formatPrice = (p) => {
-    if (typeof p === 'number' && !Number.isNaN(p)) return `₹${p.toLocaleString()}`;
+  const formatPrice = (p, currency = 'INR') => {
+    const symbol = currency === 'USD' ? '$' : (currency === 'EUR' ? '€' : (currency === 'GBP' ? '£' : '₹'));
+    if (typeof p === 'number' && !Number.isNaN(p)) return `${symbol}${p.toLocaleString()}`;
     if (typeof p === 'string' && p.trim()) {
-      return p.trim().startsWith('₹') ? p.trim() : `₹${p.trim()}`;
+      return p.trim().startsWith(symbol) ? p.trim() : `${symbol}${p.trim()}`;
     }
     return 'N/A';
+  };
+
+  // Honest flight provenance badge
+  const renderFlightBadge = (flight) => {
+    if (flight.source === 'live') {
+      return (
+        <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded font-mono text-[10px]">
+          Live Offer
+        </span>
+      );
+    }
+    if (flight.source === 'sandbox') {
+      return (
+        <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-mono text-[10px]">
+          Duffel Sandbox
+        </span>
+      );
+    }
+    return (
+      <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-mono text-[10px]">
+        Estimated Fare
+      </span>
+    );
   };
 
   // Format city for URL parameters safely
@@ -94,28 +120,47 @@ export default function TravelOptions({
   };
 
   const renderFlightTab = () => {
+    if (flightLoading) {
+      return (
+        <div className="p-8 rounded-xl border border-white/5 bg-slate-900/20 text-center text-slate-400 flex flex-col items-center gap-3">
+          <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+          <h5 className="font-semibold text-white text-sm">Searching Available Flights</h5>
+          <p className="text-xs text-slate-400">Retrieving flight offers from provider...</p>
+        </div>
+      );
+    }
+
     const flightList = (options?.flight || []).filter(f => f && typeof f === 'object');
     if (flightList.length === 0) {
       return (
         <div className="p-6 rounded-xl border border-white/5 bg-slate-900/20 text-center text-slate-400 flex flex-col items-center gap-2">
           <AlertCircle className="w-8 h-8 text-amber-500" />
-          <h5 className="font-semibold text-white text-sm">No Commercial Flights on this Corridor</h5>
-          <p className="text-xs max-w-md">Commercial passenger flights do not operate on short corridors (&lt;200 km). Please choose Train, Bus, or Road transit options!</p>
+          <h5 className="font-semibold text-white text-sm">No Commercial Flights Available</h5>
+          <p className="text-xs max-w-md">Commercial passenger flights are not available for this corridor or date. Please choose Train, Bus, or Road transit options!</p>
         </div>
       );
     }
 
     return (
       <div className="space-y-4">
+        {flightError && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>Notice: {flightError}</span>
+          </div>
+        )}
         {flightList.map((flight, idx) => (
           <div key={idx} className="p-5 rounded-xl border border-white/10 bg-slate-900/30 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-indigo-500/30 transition-all">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Plane className="w-5 h-5 text-indigo-400" />
-                <h4 className="font-display font-semibold text-base text-white">{flight.airline || 'Airline Option'}</h4>
-                <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-mono text-[10px]">Estimated Fare</span>
+                <h4 className="font-display font-semibold text-base text-white">
+                  {flight.airline || 'Airline Option'}
+                  {flight.flightNumber ? <span className="ml-2 font-mono text-xs text-slate-400">#{flight.flightNumber}</span> : null}
+                </h4>
+                {renderFlightBadge(flight)}
               </div>
-              <div className="flex items-center gap-4 text-xs text-slate-400">
+              <div className="flex items-center gap-4 text-xs text-slate-400 flex-wrap">
                 <span className="flex items-center gap-1 font-mono text-slate-300">
                   <Clock className="w-3.5 h-3.5" />
                   {flight.depart || '--'} → {flight.arrive || '--'} ({flight.duration || 'N/A'})
@@ -123,16 +168,25 @@ export default function TravelOptions({
                 <span className="bg-slate-800 px-2 py-0.5 rounded font-mono">
                   {flight.stops === 0 ? 'Non-stop' : (flight.stops ? `${flight.stops} stop` : 'Direct')}
                 </span>
-                <span className="flex items-center gap-0.5 text-yellow-400">
-                  <Star className="w-3.5 h-3.5 fill-current" />
-                  {flight.rating ?? 4.2}
-                </span>
+                {flight.rating !== undefined && (
+                  <span className="flex items-center gap-0.5 text-yellow-400">
+                    <Star className="w-3.5 h-3.5 fill-current" />
+                    {flight.rating}
+                  </span>
+                )}
+                {flight.cabin && (
+                  <span className="bg-slate-800/80 text-slate-300 px-2 py-0.5 rounded font-mono capitalize">
+                    {flight.cabin.replace('_', ' ')}
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-none pt-3 md:pt-0 border-white/5">
               <div className="text-right">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Estimated Price</span>
-                <span className="text-lg font-bold text-emerald-400 font-mono">{formatPrice(flight.price)}</span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">
+                  {flight.isEstimated ? 'Estimated Price' : 'Total Price'}
+                </span>
+                <span className="text-lg font-bold text-emerald-400 font-mono">{formatPrice(flight.price, flight.currency)}</span>
               </div>
               <a
                 href={getGoibiboUrl()}
