@@ -17,6 +17,7 @@ export const searchFlights = async ({
   origin,
   destination,
   date,
+  returnDate,
   passengers = 1,
   cabin = 'economy',
   allowEstimate = false
@@ -25,6 +26,7 @@ export const searchFlights = async ({
   if (origin) params.append('origin', origin);
   if (destination) params.append('destination', destination);
   if (date) params.append('date', date);
+  if (returnDate) params.append('returnDate', returnDate);
   if (passengers) params.append('passengers', String(passengers));
   if (cabin) params.append('cabin', cabin);
   if (allowEstimate) params.append('allowEstimate', 'true');

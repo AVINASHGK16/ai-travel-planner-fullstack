@@ -6,6 +6,19 @@
 
 import { resolveAirport } from './airportResolver.js';
 import { duffelProvider } from './duffelProvider.js';
+import { serpApiProvider } from './serpApiProvider.js';
+
+export const resolveDefaultFlightProvider = () => {
+  const serpKey = (process.env.SERPAPI_KEY && process.env.SERPAPI_KEY.trim()) ||
+    (process.env.SERPAPI_API_KEY && process.env.SERPAPI_API_KEY.trim());
+  if (serpKey) {
+    return serpApiProvider;
+  }
+  if (process.env.DUFFEL_API_KEY && process.env.DUFFEL_API_KEY.trim()) {
+    return duffelProvider;
+  }
+  return serpApiProvider;
+};
 
 // Haversine formula to approximate direct distance between two coordinates [lat, lon] in km
 export const calculateGreatCircleDistance = (lat1, lon1, lat2, lon2) => {
@@ -42,11 +55,11 @@ const AIRPORT_COORDS = {
 /**
  * Creates an instance of FlightService with optional provider dependency injection.
  * @param {Object} [deps]
- * @param {Object} [deps.provider] - Flight provider adapter (e.g. duffelProvider)
+ * @param {Object} [deps.provider] - Flight provider adapter (e.g. serpApiProvider or duffelProvider)
  * @param {Function} [deps.airportResolver] - Airport resolution function
  */
 export const createFlightService = (deps = {}) => {
-  const provider = deps.provider || duffelProvider;
+  const getProvider = () => deps.provider || resolveDefaultFlightProvider();
   const resolver = deps.airportResolver || resolveAirport;
 
   /**
@@ -65,6 +78,7 @@ export const createFlightService = (deps = {}) => {
     origin,
     destination,
     date,
+    returnDate,
     passengers = 1,
     cabin = 'economy',
     allowEstimateFallback = false,
@@ -92,6 +106,7 @@ export const createFlightService = (deps = {}) => {
           origin: originAirport,
           destination: destAirport,
           departureDate: date,
+          returnDate: returnDate || null,
           passengers: Number(passengers) || 1,
           cabin,
           distance,
@@ -100,17 +115,19 @@ export const createFlightService = (deps = {}) => {
           status: 'NO_COMMERCIAL_FLIGHTS',
           message: 'Commercial passenger flights do not operate on short corridors (<200 km). Please choose Train, Bus, or Road transit options.',
           isEstimated: false,
-          provider: 'duffel'
+          provider: 'SerpApi'
         };
       }
     }
 
     // 4. Query provider
     try {
-      const result = await provider.searchFlights({
+      const activeProvider = getProvider();
+      const result = await activeProvider.searchFlights({
         originCode: originAirport.code,
         destinationCode: destAirport.code,
         departureDate: date,
+        returnDate,
         passengers: Number(passengers) || 1,
         cabin,
         signal
@@ -123,11 +140,12 @@ export const createFlightService = (deps = {}) => {
         origin: originAirport,
         destination: destAirport,
         departureDate: date,
+        returnDate: returnDate || null,
         passengers: Number(passengers) || 1,
         cabin,
         offers,
         count: offers.length,
-        provider: result?.provider || 'duffel',
+        provider: result?.provider || 'SerpApi',
         isEstimated,
         status: offers.length > 0
           ? (isEstimated ? 'SANDBOX_OFFERS' : 'CONFIRMED_OFFERS')

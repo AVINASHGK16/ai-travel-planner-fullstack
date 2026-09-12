@@ -273,6 +273,10 @@ export const flightSearchQuerySchema = z.object({
   date: z.string({ required_error: 'Departure date is required' })
     .trim()
     .refine(isValidDateString, { message: 'Departure date must be a valid date in YYYY-MM-DD format' }),
+  returnDate: z.string()
+    .trim()
+    .refine(isValidDateString, { message: 'Return date must be a valid date in YYYY-MM-DD format' })
+    .optional(),
   passengers: z.coerce.number({ invalid_type_error: 'Passengers must be a number' })
     .int('Passengers must be an integer')
     .min(1, 'At least 1 passenger is required')
@@ -288,4 +292,12 @@ export const flightSearchQuerySchema = z.object({
 }).refine(data => data.origin.toLowerCase().trim() !== data.destination.toLowerCase().trim(), {
   message: 'Origin and destination must be different locations',
   path: ['destination']
+}).refine(data => {
+  if (data.returnDate && data.date) {
+    return data.returnDate >= data.date;
+  }
+  return true;
+}, {
+  message: 'Return date cannot be earlier than departure date',
+  path: ['returnDate']
 });

@@ -25,10 +25,15 @@ export default function TravelOptions({
 
   // Honest flight provenance badge
   const renderFlightBadge = (flight) => {
-    if (flight.source === 'live') {
+    const isLive = !flight.isEstimated && (
+      String(flight.provider || '').toLowerCase() === 'serpapi' ||
+      String(flight.source || '').toLowerCase() === 'serpapi' ||
+      String(flight.source || '').toLowerCase() === 'live'
+    );
+    if (isLive) {
       return (
         <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded font-mono text-[10px]">
-          Live Offer
+          Google Flights (Live)
         </span>
       );
     }
@@ -125,7 +130,7 @@ export default function TravelOptions({
         <div className="p-8 rounded-xl border border-white/5 bg-slate-900/20 text-center text-slate-400 flex flex-col items-center gap-3">
           <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
           <h5 className="font-semibold text-white text-sm">Searching Available Flights</h5>
-          <p className="text-xs text-slate-400">Retrieving flight offers from provider...</p>
+          <p className="text-xs text-slate-400">Retrieving flight offers from Google Flights via SerpApi...</p>
         </div>
       );
     }
@@ -134,9 +139,15 @@ export default function TravelOptions({
     if (flightList.length === 0) {
       return (
         <div className="p-6 rounded-xl border border-white/5 bg-slate-900/20 text-center text-slate-400 flex flex-col items-center gap-2">
-          <AlertCircle className="w-8 h-8 text-amber-500" />
-          <h5 className="font-semibold text-white text-sm">No Commercial Flights Available</h5>
-          <p className="text-xs max-w-md">Commercial passenger flights are not available for this corridor or date. Please choose Train, Bus, or Road transit options!</p>
+          <AlertCircle className={`w-8 h-8 ${flightError ? 'text-rose-400' : 'text-amber-500'}`} />
+          <h5 className="font-semibold text-white text-sm">
+            {flightError ? 'Flight Data Unavailable' : 'No Commercial Flights Available'}
+          </h5>
+          <p className="text-xs max-w-md">
+            {flightError
+              ? flightError
+              : 'Commercial passenger flights are not available for this corridor or date. Please choose Train, Bus, or Road transit options!'}
+          </p>
         </div>
       );
     }
@@ -189,7 +200,7 @@ export default function TravelOptions({
                 <span className="text-lg font-bold text-emerald-400 font-mono">{formatPrice(flight.price, flight.currency)}</span>
               </div>
               <a
-                href={getGoibiboUrl()}
+                href={flight.bookingUrl || getGoibiboUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-indigo-500/10 flex items-center gap-1.5 active:scale-[0.98]"

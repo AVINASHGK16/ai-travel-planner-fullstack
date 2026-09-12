@@ -147,6 +147,7 @@ export default function PlannerPage() {
           origin: originCity,
           destination: destCity,
           date: params.date,
+          returnDate: params.returnDate || null,
           passengers: passengersCount,
           cabin: 'economy',
           allowEstimate: false
@@ -159,13 +160,24 @@ export default function PlannerPage() {
               requestId: currentFlightRequestId,
               offers,
               status: res?.status || (offers.length > 0 ? 'CONFIRMED_OFFERS' : 'NO_FLIGHTS_FOUND'),
-              provider: res?.provider || 'duffel'
+              provider: res?.provider || 'SerpApi'
             };
 
             setActiveTrip(prev => {
               if (!prev || flightRequestIdRef.current !== currentFlightRequestId) return prev;
+              const realFlightCost = offers.length > 0 ? offers[0].price : prev.costComponents?.flightCost;
+              const updatedCostComponents = prev.costComponents ? {
+                ...prev.costComponents,
+                flightCost: realFlightCost
+              } : prev.costComponents;
+              const updatedBudget = updatedCostComponents
+                ? calculateModeBudget(prev.transportMode || 'flight', updatedCostComponents)
+                : prev.budgetDetails;
+
               const updated = {
                 ...prev,
+                costComponents: updatedCostComponents,
+                budgetDetails: updatedBudget,
                 options: {
                   ...prev.options,
                   flight: offers
@@ -181,13 +193,14 @@ export default function PlannerPage() {
           .catch(err => {
             if (flightController.signal.aborted) return;
             if (flightRequestIdRef.current !== currentFlightRequestId) return;
-            console.warn('Flight provider search failed, maintaining estimated fallback:', err.message || err);
-            setFlightError(err.message || 'Flight provider unavailable. Showing estimated fares.');
-            // Retain explicit estimated fallback from baselineMock
+            console.warn('Flight provider search failed:', err.message || err);
+            const userNotice = err.message || 'Flight data unavailable from provider.';
+            setFlightError(userNotice);
+            // Retain truthful empty flight state rather than falsely presenting synthetic estimates
             latestFlightResultRef.current = {
               requestId: currentFlightRequestId,
-              offers: baselineMock.options.flight || [],
-              status: 'ESTIMATED_FALLBACK',
+              offers: [],
+              status: 'FLIGHT_PROVIDER_ERROR',
               provider: null
             };
             setActiveTrip(prev => {
@@ -196,9 +209,10 @@ export default function PlannerPage() {
                 ...prev,
                 options: {
                   ...prev.options,
-                  flight: baselineMock.options.flight || []
+                  flight: []
                 },
-                flightStatus: 'ESTIMATED_FALLBACK'
+                flightStatus: 'FLIGHT_PROVIDER_ERROR',
+                flightError: userNotice
               };
               storage.setJSON('activePlan', updated);
               return updated;
@@ -227,7 +241,7 @@ export default function PlannerPage() {
       // Determine flight offers to include in the plan
       const currentFlightOffers = (latestFlightResultRef.current.requestId === currentFlightRequestId && latestFlightResultRef.current.offers !== null)
         ? latestFlightResultRef.current.offers
-        : baselineMock.options.flight;
+        : (canFly ? [] : []);
 
       if (responseData && responseData.itinerary && responseData.isAIGenerated) {
         // Enforce Gemini Boundary: AI provides itinerary narrative, but deterministic

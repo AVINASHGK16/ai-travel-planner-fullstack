@@ -1,7 +1,7 @@
 import express from 'express';
 import { flightService } from '../services/flightService.js';
 import { flightSearchLimiter, asyncHandler } from '../middleware/auth.js';
-import { validateQuery, flightSearchQuerySchema } from '../validators.js';
+import { validateQuery, validateBody, flightSearchQuerySchema } from '../validators.js';
 
 const router = express.Router();
 
@@ -20,11 +20,35 @@ router.get(
   flightSearchLimiter,
   validateQuery(flightSearchQuerySchema),
   asyncHandler(async (req, res) => {
-    const { origin, destination, date, passengers, cabin, allowEstimate } = req.validatedQuery;
+    const { origin, destination, date, returnDate, passengers, cabin, allowEstimate } = req.validatedQuery;
     const result = await flightService.searchFlights({
       origin,
       destination,
       date,
+      returnDate,
+      passengers,
+      cabin,
+      allowEstimateFallback: allowEstimate
+    });
+    res.json(result);
+  })
+);
+
+/**
+ * POST /api/flights/search
+ * Body payload matches the same search schema
+ */
+router.post(
+  '/search',
+  flightSearchLimiter,
+  validateBody(flightSearchQuerySchema),
+  asyncHandler(async (req, res) => {
+    const { origin, destination, date, returnDate, passengers, cabin, allowEstimate } = req.validatedBody;
+    const result = await flightService.searchFlights({
+      origin,
+      destination,
+      date,
+      returnDate,
       passengers,
       cabin,
       allowEstimateFallback: allowEstimate
