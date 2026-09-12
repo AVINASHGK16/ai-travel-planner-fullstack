@@ -1,34 +1,71 @@
 import React, { useState } from 'react';
-import { PiggyBank, Sparkles, TrendingDown, ArrowRight, Lightbulb } from 'lucide-react';
+import { PiggyBank, Sparkles, TrendingDown, ArrowRight, Lightbulb, Plane, Train, Bus, Car, Navigation } from 'lucide-react';
 
-export default function BudgetCalculator({ budgetDetails, travelers, onOptimize }) {
+const MODE_LABELS = {
+  flight: { label: 'Flight', icon: Plane, ticketLabel: 'Flight Airfare' },
+  train: { label: 'Train', icon: Train, ticketLabel: 'Train Ticket' },
+  bus: { label: 'Bus', icon: Bus, ticketLabel: 'Bus Ticket' },
+  cab: { label: 'Cab', icon: Car, ticketLabel: 'Cab Fare' },
+  own: { label: 'Own Vehicle', icon: Navigation, ticketLabel: 'Vehicle Transit' }
+};
+
+export default function BudgetCalculator({ budgetDetails, travelers, activeMode = 'flight', onOptimize }) {
   const [optimized, setOptimized] = useState(false);
 
   if (!budgetDetails) return null;
 
+  const currentMode = (activeMode || budgetDetails.mode || 'flight').toLowerCase();
   const travelersCount = travelers || 1;
+  const modeMeta = MODE_LABELS[currentMode] || MODE_LABELS.flight;
+  const ModeIcon = modeMeta.icon;
 
-  const tickets = Number(budgetDetails.tickets) || 0;
-  const fuel = Number(budgetDetails.fuel) || 0;
-  const hotel = Number(budgetDetails.hotel) || 0;
-  const food = Number(budgetDetails.food) || 0;
-  const toll = Number(budgetDetails.toll) || 0;
-  const parking = Number(budgetDetails.parking) || 0;
-  const misc = Number(budgetDetails.misc) || 0;
+  // Base raw components
+  const rawTickets = Number(budgetDetails.tickets) || 0;
+  const rawFuel = Number(budgetDetails.fuel) || 0;
+  const rawHotel = Number(budgetDetails.hotel) || 0;
+  const rawFood = Number(budgetDetails.food) || 0;
+  const rawToll = Number(budgetDetails.toll) || 0;
+  const rawParking = Number(budgetDetails.parking) || 0;
+  const rawMisc = Number(budgetDetails.misc) || 0;
+
+  // Enforce mode-aware mutual exclusivity
+  let tickets = 0;
+  let fuel = 0;
+  let toll = 0;
+  let parking = 0;
+
+  if (currentMode === 'flight' || currentMode === 'train' || currentMode === 'bus' || currentMode === 'cab') {
+    tickets = rawTickets;
+    fuel = 0;
+    toll = 0;
+    parking = 0;
+  } else if (currentMode === 'own') {
+    tickets = 0;
+    fuel = rawFuel;
+    toll = rawToll;
+    parking = rawParking;
+  }
+
+  const hotel = rawHotel;
+  const food = rawFood;
+  const misc = rawMisc;
+
   const computedTotal = tickets + fuel + hotel + food + toll + parking + misc;
-  const originalTotal = Number(budgetDetails.total) || computedTotal;
+  const originalTotal = (budgetDetails.mode === currentMode && typeof budgetDetails.total === 'number')
+    ? budgetDetails.total
+    : computedTotal;
 
-  // Standard optimizations
+  // Standard optimizations strictly for active mode
   const optDetails = {
-    tickets: Math.round(tickets * 0.75), // Switch to 3AC train or saver flight
-    fuel: fuel, // Can't easily optimize fuel
-    hotel: Math.round(hotel * 0.7), // 3-star instead of 4-star
-    food: Math.round(food * 0.8), // Local authentic food joints
-    toll: toll,
-    parking: Math.round(parking * 0.7), // Prebook parking or public spots
+    tickets: Math.round(tickets * 0.75), // Saver class fare
+    fuel: fuel, // Fuel price cannot be reduced
+    hotel: Math.round(hotel * 0.7), // 3-star lodging instead of luxury
+    food: Math.round(food * 0.8), // Regional authentic food joints
+    toll: toll, // Highway tolls are fixed
+    parking: Math.round(parking * 0.7), // Prebook spots or public lots
     misc: Math.round(misc * 0.6) // Cut unnecessary expenses
   };
-  
+
   const optSum = optDetails.tickets + optDetails.fuel + optDetails.hotel + optDetails.food + optDetails.toll + optDetails.parking + optDetails.misc;
   optDetails.total = optSum;
 
@@ -37,15 +74,16 @@ export default function BudgetCalculator({ budgetDetails, travelers, onOptimize 
   };
   const savings = Math.max(0, originalTotal - optDetails.total);
 
+  // Items to display in the chart (only relevant non-zero categories for this mode)
   const costItems = [
-    { label: 'Ticket cost', value: activeDetails.tickets, color: 'bg-blue-500' },
-    { label: 'Fuel cost', value: activeDetails.fuel, color: 'bg-emerald-500' },
+    { label: modeMeta.ticketLabel, value: activeDetails.tickets, color: 'bg-blue-500' },
+    { label: 'Vehicle Fuel', value: activeDetails.fuel, color: 'bg-emerald-500' },
     { label: 'Hotel stay', value: activeDetails.hotel, color: 'bg-pink-500' },
     { label: 'Food & Meals', value: activeDetails.food, color: 'bg-orange-500' },
-    { label: 'Tolls & Passes', value: activeDetails.toll, color: 'bg-yellow-500' },
+    { label: 'Highway Tolls', value: activeDetails.toll, color: 'bg-yellow-500' },
     { label: 'Parking fees', value: activeDetails.parking, color: 'bg-teal-500' },
     { label: 'Miscellaneous', value: activeDetails.misc, color: 'bg-purple-500' }
-  ].filter(item => item.value > 0); // Hide zero categories
+  ].filter(item => item.value > 0);
 
   const maxVal = costItems.length > 0 ? Math.max(...costItems.map(i => i.value)) : 0;
 
@@ -55,11 +93,17 @@ export default function BudgetCalculator({ budgetDetails, travelers, onOptimize 
       {/* Title Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-white/5 mb-5 gap-3">
         <div>
-          <h4 className="font-display font-semibold text-base text-white flex items-center gap-2">
-            <PiggyBank className="w-5 h-5 text-emerald-400" />
-            Trip Budget Breakdown
-          </h4>
-          <p className="text-xs text-slate-400">Detailed cost tracking ({travelersCount} travelers)</p>
+          <div className="flex items-center gap-2">
+            <h4 className="font-display font-semibold text-base text-white flex items-center gap-2">
+              <PiggyBank className="w-5 h-5 text-emerald-400" />
+              Trip Budget Breakdown
+            </h4>
+            <span className="flex items-center gap-1 text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              <ModeIcon className="w-3 h-3" />
+              {modeMeta.label}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">Mode-specific cost tracking ({travelersCount} travelers)</p>
         </div>
         
         {/* Toggle optimizer */}
@@ -117,13 +161,13 @@ export default function BudgetCalculator({ budgetDetails, travelers, onOptimize 
           <div className="mt-4 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10 space-y-2">
             <span className="text-[10px] font-bold text-blue-400 flex items-center gap-1.5 uppercase">
               <Lightbulb className="w-3.5 h-3.5 shrink-0" />
-              AI Recommendations
+              Recommendations
             </span>
             
             {optimized ? (
               <div className="space-y-1">
                 <p className="text-xs text-slate-300 leading-normal">
-                  Applied saver fares, local dining spots and 3-star lodging rates.
+                  Applied saver fares, local authentic dining and 3-star lodging rates.
                 </p>
                 <div className="text-xs text-emerald-400 font-semibold flex items-center gap-1 mt-1 font-mono">
                   <TrendingDown className="w-3.5 h-3.5" />
@@ -133,7 +177,7 @@ export default function BudgetCalculator({ budgetDetails, travelers, onOptimize 
             ) : (
               <div className="space-y-1">
                 <p className="text-xs text-slate-400 leading-normal">
-                  Toggle the optimizer to lower stays by 30% and transportation fares by 25%.
+                  Toggle optimizer to apply saver accommodation rates and travel fare discounts.
                 </p>
                 <button
                   onClick={() => setOptimized(true)}

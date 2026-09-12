@@ -1,6 +1,6 @@
 const sanitize = (str, maxLen = 500) => (typeof str === 'string' ? str.trim().slice(0, maxLen) : '');
 
-export const getWeather = async (city) => {
+export const getWeather = async (cityOrParams) => {
   const apiKey = process.env.WEATHER_API_KEY;
 
   if (!apiKey) {
@@ -10,17 +10,41 @@ export const getWeather = async (city) => {
     throw err;
   }
 
-  const sanitizedCity = sanitize(city, 100);
+  let lat = null;
+  let lon = null;
+  let city = null;
+
+  if (typeof cityOrParams === 'object' && cityOrParams !== null) {
+    if (typeof cityOrParams.lat === 'number' && typeof cityOrParams.lon === 'number' && !isNaN(cityOrParams.lat) && !isNaN(cityOrParams.lon)) {
+      lat = cityOrParams.lat;
+      lon = cityOrParams.lon;
+    }
+    city = cityOrParams.city || null;
+  } else if (typeof cityOrParams === 'string') {
+    city = cityOrParams;
+  }
+
+  const sanitizedCity = city ? sanitize(city, 100) : '';
 
   try {
-    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(sanitizedCity)}&appid=${apiKey}&units=metric`;
+    let url;
+    if (lat !== null && lon !== null) {
+      url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`;
+    } else if (sanitizedCity) {
+      url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(sanitizedCity)}&appid=${apiKey}&units=metric`;
+    } else {
+      const err = new Error('City or coordinates required for weather lookup.');
+      err.statusCode = 400;
+      throw err;
+    }
+
     const response = await fetch(url, {
       signal: AbortSignal.timeout(6000)
     });
 
     if (!response.ok) {
       if (response.status === 404) {
-        const err = new Error(`Weather station not found for location "${sanitizedCity}".`);
+        const err = new Error(`Weather station not found for location "${sanitizedCity || `${lat}, ${lon}`}".`);
         err.statusCode = 404;
         err.code = 'CITY_NOT_FOUND';
         throw err;

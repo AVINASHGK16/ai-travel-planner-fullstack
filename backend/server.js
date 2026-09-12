@@ -15,6 +15,7 @@ import authRoutes from './routes/authRoutes.js';
 import tripRoutes from './routes/tripRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import weatherRoutes from './routes/weatherRoutes.js';
+import geoRoutes from './routes/geoRoutes.js';
 
 dotenv.config();
 
@@ -85,6 +86,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api', aiRoutes);
 app.use('/api', weatherRoutes);
+app.use('/api/geo', geoRoutes);
 
 // ─── Serve frontend React application in production ─────────────
 const distPath = path.join(__dirname, 'dist');

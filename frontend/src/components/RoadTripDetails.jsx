@@ -3,9 +3,6 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import L from 'leaflet';
 import { Star, HeartPulse, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 
-// Module-level in-memory cache to eliminate duplicate Nominatim network calls
-const geocodeCache = new Map();
-
 // Strict coordinate validator: prevents Leaflet unrecoverable NaN / invalid coordinate crashes
 export const isValidCoord = (coord) => {
   if (!Array.isArray(coord) || coord.length < 2) return false;
@@ -34,10 +31,6 @@ export const sanitizeCoord = (coord, fallback = null) => {
   }
   return fallback;
 };
-
-export const DEFAULT_FROM = [12.9716, 77.5946];
-export const DEFAULT_TO = [17.3850, 78.4867];
-export const DEFAULT_MID = [15.1783, 78.0406];
 
 // React Error Boundary specifically isolating the interactive map component
 export class MapErrorBoundary extends React.Component {
@@ -106,151 +99,32 @@ export default function RoadTripDetails({ tripData }) {
   const own = tripData?.options?.own;
   const roadDetails = tripData?.roadTripDetails;
 
-  const [fromCoords, setFromCoords] = useState(() =>
-    sanitizeCoord(tripData?.coordinates?.from, DEFAULT_FROM)
-  );
-  const [toCoords, setToCoords] = useState(() =>
-    sanitizeCoord(tripData?.coordinates?.to, DEFAULT_TO)
-  );
-  const [midCoords, setMidCoords] = useState(() =>
-    sanitizeCoord(tripData?.coordinates?.mid, DEFAULT_MID)
-  );
-  const [loadingCoords, setLoadingCoords] = useState(false);
-  const [geocodeError, setGeocodeError] = useState(null);
+  // Authoritative coordinates directly from tripData — zero private geocoder, zero arbitrary city fallback
+  const fromCoords = sanitizeCoord(tripData?.coordinates?.from, null);
+  const toCoords = sanitizeCoord(tripData?.coordinates?.to, null);
+  const hasValidRouteCoords = isValidCoord(fromCoords) && isValidCoord(toCoords);
+  const mapCenter = hasValidRouteCoords
+    ? [(fromCoords[0] + toCoords[0]) / 2, (fromCoords[1] + toCoords[1]) / 2]
+    : null;
+
+  // Real road geometry from OSRM
+  const routeGeometry = (tripData?.routeDetails?.geometry && Array.isArray(tripData.routeDetails.geometry))
+    ? tripData.routeDetails.geometry.filter(isValidCoord)
+    : null;
+  const hasRoadGeometry = Array.isArray(routeGeometry) && routeGeometry.length >= 2;
+  const isEstimatedRoute = !hasRoadGeometry || tripData?.routeDetails?.isRoadRoute === false || tripData?.routeDetails?.source === 'haversine_estimate';
 
   useEffect(() => {
-    // Reset to verified default values first
-    const initFrom = sanitizeCoord(tripData?.coordinates?.from, DEFAULT_FROM);
-    const initTo = sanitizeCoord(tripData?.coordinates?.to, DEFAULT_TO);
-    const initMid = sanitizeCoord(
-      tripData?.coordinates?.mid,
-      [(initFrom[0] + initTo[0]) / 2, (initFrom[1] + initTo[1]) / 2]
-    ) || DEFAULT_MID;
-    
-    setFromCoords(initFrom);
-    setToCoords(initTo);
-    setMidCoords(initMid);
-    setGeocodeError(null);
-
-    // If neither origin nor destination is present, nothing to geocode
-    if (!tripData?.from && !tripData?.to) return;
-
-    let active = true;
-    const controller = new AbortController();
-
-    const geocode = async () => {
-      setLoadingCoords(true);
-      try {
-        const geocodeAddress = async (query) => {
-          if (!query || typeof query !== 'string') return null;
-          const cacheKey = query.trim().toLowerCase();
-          if (!cacheKey) return null;
-          if (geocodeCache.has(cacheKey)) {
-            return geocodeCache.get(cacheKey);
-          }
-
-          try {
-            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query.trim())}`;
-            const timeoutSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function')
-              ? AbortSignal.timeout(6000)
-              : undefined;
-            const fetchSignal = (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function' && timeoutSignal)
-              ? AbortSignal.any([controller.signal, timeoutSignal])
-              : controller.signal;
-
-            const res = await fetch(url, {
-              signal: fetchSignal,
-              headers: {
-                'User-Agent': 'AITravelPlanner/1.0'
-              }
-            });
-            if (!res.ok) throw new Error(`Nominatim HTTP ${res.status}`);
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              const lat = parseFloat(data[0].lat);
-              const lon = parseFloat(data[0].lon);
-              if (isValidCoord([lat, lon])) {
-                geocodeCache.set(cacheKey, [lat, lon]);
-                return [lat, lon];
-              }
-            }
-            return null;
-          } catch (fetchErr) {
-            if (fetchErr.name !== 'AbortError') {
-              console.warn(`Geocoding failed for "${query}":`, fetchErr.message);
-            }
-            return null;
-          }
-        };
-
-        // Geocode each available endpoint independently (handles one-coordinate and asymmetric input)
-        const [resolvedFrom, resolvedTo] = await Promise.all([
-          tripData?.from ? geocodeAddress(tripData.from) : Promise.resolve(null),
-          tripData?.to ? geocodeAddress(tripData.to) : Promise.resolve(null)
-        ]);
-
-        if (!active) return;
-
-        let hadIssue = false;
-        let finalFrom = initFrom;
-        if (resolvedFrom && isValidCoord(resolvedFrom)) {
-          finalFrom = resolvedFrom;
-        } else if (tripData?.from && !isValidCoord(tripData?.coordinates?.from)) {
-          hadIssue = true;
-        }
-
-        let finalTo = initTo;
-        if (resolvedTo && isValidCoord(resolvedTo)) {
-          finalTo = resolvedTo;
-        } else if (tripData?.to && !isValidCoord(tripData?.coordinates?.to)) {
-          hadIssue = true;
-        }
-
-        const calculatedMid = [
-          (finalFrom[0] + finalTo[0]) / 2,
-          (finalFrom[1] + finalTo[1]) / 2
-        ];
-        let finalMid = isValidCoord(calculatedMid) ? calculatedMid : DEFAULT_MID;
-
-        setFromCoords(finalFrom);
-        setToCoords(finalTo);
-        setMidCoords(finalMid);
-
-        if (hadIssue) {
-          setGeocodeError('Could not resolve exact GPS coordinates. Showing estimated route.');
-        } else {
-          setGeocodeError(null);
-        }
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          console.warn('Error geocoding map coordinates:', err);
-          if (active) {
-            setGeocodeError('Could not resolve route GPS coordinates. Showing estimated route.');
-          }
-        }
-      } finally {
-        if (active) {
-          setLoadingCoords(false);
-        }
-      }
-    };
-
-    geocode();
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [tripData?.from, tripData?.to]);
-
-  useEffect(() => {
-    if (!roadDetails) return; // bail early inside effect (allowed)
+    if (!roadDetails || !hasValidRouteCoords) {
+      setMarkers([]);
+      return;
+    }
 
     const pins = [];
 
-    // Start / End markers
-    pins.push({ position: fromCoords, label: `Starting: ${tripData?.from || ''}`, iconHtml: '📍', color: '#3b82f6' });
-    pins.push({ position: toCoords,   label: `Destination: ${tripData?.to || ''}`, iconHtml: '🏁', color: '#ef4444' });
+    // Start / End markers strictly using canonical locations
+    pins.push({ position: fromCoords, label: `Starting: ${tripData?.from || 'Origin'}`, iconHtml: '📍', color: '#3b82f6' });
+    pins.push({ position: toCoords,   label: `Destination: ${tripData?.to || 'Destination'}`, iconHtml: '🏁', color: '#ef4444' });
 
     // Petrol stations
     if (selectedLayer === 'all' || selectedLayer === 'fuel') {
@@ -329,7 +203,7 @@ export default function RoadTripDetails({ tripData }) {
     if (selectedLayer === 'all' || selectedLayer === 'emergencies') {
       roadDetails.emergencies?.hospitals?.filter(Boolean).forEach((hosp, idx) => {
         pins.push({
-          position: [midCoords[0] + (idx * 0.04 - 0.02), midCoords[1] + (idx * 0.05 - 0.02)],
+          position: [mapCenter[0] + (idx * 0.04 - 0.02), mapCenter[1] + (idx * 0.05 - 0.02)],
           label: `${hosp} (Hospital)`, iconHtml: '🏥', color: '#dc2626'
         });
       });
@@ -343,25 +217,10 @@ export default function RoadTripDetails({ tripData }) {
 
     const validPins = pins.filter(pin => isValidCoord(pin?.position));
     setMarkers(validPins);
-  }, [selectedLayer, fromCoords[0], fromCoords[1], toCoords[0], toCoords[1], roadDetails]);
+  }, [selectedLayer, fromCoords, toCoords, roadDetails, hasValidRouteCoords]);
 
   // ── NOW safe to return null if data missing ────────────────────
   if (!own || !roadDetails) return null;
-
-  // Route polylines with verified valid coordinates
-  const safeMid = isValidCoord(midCoords) ? midCoords : DEFAULT_MID;
-  const safeFrom = isValidCoord(fromCoords) ? fromCoords : DEFAULT_FROM;
-  const safeTo = isValidCoord(toCoords) ? toCoords : DEFAULT_TO;
-  const altMid = isValidCoord([safeMid[0] + 0.2, safeMid[1] - 0.3])
-    ? [safeMid[0] + 0.2, safeMid[1] - 0.3]
-    : safeMid;
-
-  const rawRoutePoints = [
-    [safeFrom, safeMid, safeTo],
-    [safeFrom, altMid, safeTo]
-  ];
-  // Strictly filter each route point to only valid coordinates
-  const activeRoutePoints = (rawRoutePoints[activeRoute] || rawRoutePoints[0] || []).filter(isValidCoord);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-slate-300">
@@ -373,11 +232,25 @@ export default function RoadTripDetails({ tripData }) {
         <div className="p-4 rounded-xl border border-white/10 bg-slate-900/30 grid grid-cols-2 gap-4">
           <div className="text-center p-2 bg-white/5 rounded-lg">
             <span className="text-[10px] text-slate-500 uppercase block font-medium">Distance</span>
-            <span className="text-lg font-bold text-white font-mono">{own.distance}</span>
+            <span className="text-lg font-bold text-white font-mono">
+              {tripData?.routeDetails?.distanceKm ? `${tripData.routeDetails.distanceKm} km` : (own.distance || 'N/A')}
+            </span>
+            {tripData?.routeDetails?.source === 'haversine_estimate' && (
+              <span className="text-[9px] text-amber-400 block font-sans">Est. straight-line</span>
+            )}
+            {tripData?.routeDetails?.source === 'osrm' && (
+              <span className="text-[9px] text-emerald-400 block font-sans">Highway road dist</span>
+            )}
           </div>
           <div className="text-center p-2 bg-white/5 rounded-lg">
             <span className="text-[10px] text-slate-500 uppercase block font-medium">Est. Drive Time</span>
-            <span className="text-lg font-bold text-white font-mono">{own.time}</span>
+            <span className="text-lg font-bold text-white font-mono">
+              {tripData?.routeDetails?.durationMinutes
+                ? (tripData.routeDetails.durationMinutes >= 60
+                    ? `${Math.floor(tripData.routeDetails.durationMinutes / 60)}h ${tripData.routeDetails.durationMinutes % 60}m`
+                    : `${tripData.routeDetails.durationMinutes}m`)
+                : (own.time || 'N/A')}
+            </span>
           </div>
         </div>
 
@@ -439,60 +312,70 @@ export default function RoadTripDetails({ tripData }) {
         </div>
       </div>
 
-      {/* ── Right pane: interactive Leaflet map ──────────────────── */}
+      {/* ── Right pane: interactive Leaflet map or controlled unavailable state ── */}
       <div className="lg:col-span-7 h-[380px] lg:h-[480px] rounded-xl overflow-hidden border border-white/10 relative">
-        <MapErrorBoundary>
-          <MapContainer
-            center={safeMid}
-            zoom={7}
-            className="w-full h-full"
-            scrollWheelZoom={false}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <ChangeMapView center={safeMid} />
-
-            {/* Route polyline (only rendered if at least 2 valid points exist) */}
-            {activeRoutePoints.length >= 2 && (
-              <Polyline
-                positions={activeRoutePoints}
-                color={activeRoute === 0 ? '#3b82f6' : '#a855f7'}
-                weight={5}
-                opacity={0.8}
-              />
-            )}
-
-            {/* Markers strictly verified against invalid or NaN coordinates */}
-            {markers
-              .filter(marker => marker && isValidCoord(marker.position))
-              .map((marker, index) => (
-                <Marker
-                  key={index}
-                  position={marker.position}
-                  icon={createCustomIcon(marker.iconHtml, marker.color)}
-                >
-                  <Popup>
-                    <div className="text-xs font-medium">{marker.label}</div>
-                  </Popup>
-                </Marker>
-              ))}
-          </MapContainer>
-        </MapErrorBoundary>
-
-        {loadingCoords && (
-          <div className="absolute top-3 right-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-blue-300 font-medium flex items-center gap-1.5 shadow-lg border border-blue-500/20">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-            <span>Resolving map coordinates...</span>
+        {!hasValidRouteCoords ? (
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-slate-900/60 text-slate-300">
+            <AlertTriangle className="w-8 h-8 text-amber-400 mb-3" />
+            <h4 className="font-semibold text-sm text-white">Route Map Unavailable</h4>
+            <p className="text-xs text-slate-400 mt-1 max-w-xs">
+              Authoritative route coordinates are missing or unverified. Fallback to arbitrary cities like Hyderabad is disabled.
+            </p>
           </div>
+        ) : (
+          <MapErrorBoundary>
+            <MapContainer
+              center={mapCenter}
+              zoom={7}
+              className="w-full h-full"
+              scrollWheelZoom={false}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <ChangeMapView center={mapCenter} />
+
+              {/* Authentic OSRM road polyline (never synthetic triangles) */}
+              {hasRoadGeometry && activeRoute === 0 && (
+                <Polyline
+                  positions={routeGeometry}
+                  color="#3b82f6"
+                  weight={5}
+                  opacity={0.8}
+                />
+              )}
+
+              {/* Markers strictly verified against invalid or NaN coordinates */}
+              {markers
+                .filter(marker => marker && isValidCoord(marker.position))
+                .map((marker, index) => (
+                  <Marker
+                    key={index}
+                    position={marker.position}
+                    icon={createCustomIcon(marker.iconHtml, marker.color)}
+                  >
+                    <Popup>
+                      <div className="text-xs font-medium">{marker.label}</div>
+                    </Popup>
+                  </Marker>
+                ))}
+            </MapContainer>
+          </MapErrorBoundary>
         )}
 
-        {geocodeError && !loadingCoords && (
-          <div className="absolute top-3 left-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-amber-300 font-medium flex items-center gap-1.5 shadow-lg border border-amber-500/20 bg-amber-950/60 max-w-[85%]">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span>{geocodeError}</span>
-          </div>
+        {/* Informative provenance banner */}
+        {hasValidRouteCoords && (
+          isEstimatedRoute ? (
+            <div className="absolute top-3 left-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-amber-300 font-medium flex items-center gap-1.5 shadow-lg border border-amber-500/20 bg-amber-950/60 max-w-[85%]">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Route geometry unavailable (Straight-line estimate only)</span>
+            </div>
+          ) : (
+            <div className="absolute top-3 left-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-emerald-300 font-medium flex items-center gap-1.5 shadow-lg border border-emerald-500/20 bg-emerald-950/60 max-w-[85%]">
+              <span>🛣️ Authentic Highway Road Geometry</span>
+            </div>
+          )
         )}
 
         <div className="absolute bottom-3 left-3 z-[1000] glass px-3 py-1.5 rounded-lg text-[10px] text-slate-300 font-mono pointer-events-none">

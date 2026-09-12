@@ -10,7 +10,7 @@ import BudgetCalculator from '../components/BudgetCalculator';
 import ItineraryGenerator from '../components/ItineraryGenerator';
 import ChatAssistant from '../components/ChatAssistant';
 import ErrorBoundary from '../components/ErrorBoundary';
-import { generateMockData, getAIGeneration } from '../utils/planner';
+import { generateMockData, getAIGeneration, resolveTripGeography, calculateModeBudget } from '../utils/planner';
 import { useAuth } from '../context/AuthContext';
 import { storage, isValidTripsArray } from '../utils/storage';
 import { createTrip } from '../services/tripService';
@@ -25,6 +25,7 @@ export default function PlannerPage() {
 
   const [loading, setLoading] = useState(false);
   const [savingTrip, setSavingTrip] = useState(false);
+  const [searchError, setSearchError] = useState(null);
   const [activeTrip, setActiveTrip] = useState(() => {
     if (tripId) return null;
     return storage.getJSON('activePlan', null);
@@ -36,7 +37,8 @@ export default function PlannerPage() {
   useEffect(() => {
     if (tripId && routeTrip) {
       setActiveTrip(routeTrip);
-      setActiveMode(routeTrip?.options?.own ? 'own' : 'flight');
+      const savedMode = routeTrip.transportMode || (routeTrip?.options?.own ? 'own' : 'flight');
+      setActiveMode(savedMode);
       setLoading(false);
     }
   }, [tripId, routeTrip]);
@@ -54,6 +56,21 @@ export default function PlannerPage() {
     };
   }, [location.state, tripId]);
 
+  const handleSelectMode = (newMode) => {
+    setActiveMode(newMode);
+    setActiveTrip(prev => {
+      if (!prev) return prev;
+      const updatedBudget = calculateModeBudget(newMode, prev.costComponents || prev.budgetDetails);
+      const updatedTrip = {
+        ...prev,
+        transportMode: newMode,
+        budgetDetails: updatedBudget
+      };
+      storage.setJSON('activePlan', updatedTrip);
+      return updatedTrip;
+    });
+  };
+
   const handleSearch = async (params) => {
     if (searchControllerRef.current) {
       searchControllerRef.current.abort();
@@ -62,14 +79,45 @@ export default function PlannerPage() {
     searchControllerRef.current = controller;
 
     setLoading(true);
-
-    if (params.preferredMode && params.preferredMode !== 'any') {
-      setActiveMode(params.preferredMode);
-    } else {
-      setActiveMode('flight');
-    }
+    setSearchError(null);
 
     try {
+      // 1. Authoritative Geocoding & Route Calculation
+      let geoData = null;
+      try {
+        geoData = await resolveTripGeography(params.from, params.to, controller.signal);
+      } catch (geoErr) {
+        if (controller.signal.aborted) return;
+        setSearchError(geoErr.message || 'Geographic location could not be resolved. Please verify city spelling.');
+        setLoading(false);
+        return;
+      }
+
+      if (controller.signal.aborted) return;
+
+      const { routeDetails } = geoData;
+      const canFly = (routeDetails?.distanceKm || 0) >= 200;
+      let effectiveMode = params.preferredMode && params.preferredMode !== 'any'
+        ? params.preferredMode
+        : (canFly ? 'flight' : 'own');
+      if (effectiveMode === 'flight' && !canFly) {
+        effectiveMode = 'own';
+      }
+      setActiveMode(effectiveMode);
+
+      // 2. Generate baseline truthful domain plan
+      const baselineMock = generateMockData(
+        params.from,
+        params.to,
+        params.date,
+        params.returnDate,
+        params.travelers,
+        params.budget,
+        effectiveMode,
+        geoData
+      );
+
+      // 3. Attempt Gemini narrative itinerary generation
       let responseData = null;
       let aiErrorNotice = null;
 
@@ -78,36 +126,15 @@ export default function PlannerPage() {
       } catch (aiErr) {
         if (aiErr.code === 'CANCELLED') return;
         aiErrorNotice = aiErr.message || 'AI service unavailable';
-        console.warn('Backend AI generation unavailable, using local itinerary engine:', aiErr.message);
       }
 
       if (controller.signal.aborted) return;
 
       if (responseData && responseData.itinerary && responseData.isAIGenerated) {
-        const baselineMock = generateMockData(
-          params.from,
-          params.to,
-          params.date,
-          params.returnDate,
-          params.travelers,
-          params.budget
-        );
-
-        const fromCoords = baselineMock.coordinates.from;
-        const toCoords = baselineMock.coordinates.to;
-        const midCoords = [(fromCoords[0] + toCoords[0]) / 2, (fromCoords[1] + toCoords[1]) / 2];
-
-        const aiSuggestions = (responseData.cheapest || responseData.fastest || responseData.comfort || responseData.value || responseData.eco) ? {
-          cheapest: responseData.cheapest ? { ...responseData.cheapest, desc: responseData.cheapest.desc || responseData.cheapest.description } : baselineMock.suggestions?.cheapest,
-          fastest: responseData.fastest ? { ...responseData.fastest, desc: responseData.fastest.desc || responseData.fastest.description } : baselineMock.suggestions?.fastest,
-          comfort: responseData.comfort ? { ...responseData.comfort, desc: responseData.comfort.desc || responseData.comfort.description } : baselineMock.suggestions?.comfort,
-          value: responseData.value ? { ...responseData.value, desc: responseData.value.desc || responseData.value.description } : baselineMock.suggestions?.value,
-          eco: responseData.eco ? { ...responseData.eco, desc: responseData.eco.desc || responseData.eco.description } : baselineMock.suggestions?.eco,
-        } : null;
-
+        // Enforce Gemini Boundary: AI provides itinerary narrative, but deterministic
+        // travel facts (distance, route, coordinates, budgets, options) are authoritative.
         const completeTripData = {
           ...baselineMock,
-          ...responseData,
           from: params.from,
           to: params.to,
           date: params.date,
@@ -115,13 +142,15 @@ export default function PlannerPage() {
           tripDays: baselineMock.tripDays || 1,
           travelers: parseInt(params.travelers, 10) || 1,
           budget: parseFloat(params.budget) || 2500,
+          transportMode: effectiveMode,
           distance: baselineMock.distance,
-          coordinates: responseData.coordinates || { from: fromCoords, to: toCoords, mid: midCoords },
-          options: responseData.options || baselineMock.options,
-          suggestions: responseData.suggestions || aiSuggestions || baselineMock.suggestions,
-          budgetDetails: responseData.budgetDetails || baselineMock.budgetDetails,
-          roadTripDetails: responseData.roadTripDetails || baselineMock.roadTripDetails,
-          weather: responseData.weather || baselineMock.weather,
+          coordinates: baselineMock.coordinates,
+          canonicalLocations: baselineMock.canonicalLocations,
+          routeDetails: baselineMock.routeDetails,
+          options: baselineMock.options,
+          costComponents: baselineMock.costComponents,
+          budgetDetails: baselineMock.budgetDetails,
+          weather: baselineMock.weather,
           itinerary: Array.isArray(responseData.itinerary) ? responseData.itinerary : baselineMock.itinerary,
           isAIGenerated: true,
           generationSource: 'ai',
@@ -131,17 +160,8 @@ export default function PlannerPage() {
         setActiveTrip(completeTripData);
         storage.setJSON('activePlan', completeTripData);
       } else {
-        const mockData = generateMockData(
-          params.from,
-          params.to,
-          params.date,
-          params.returnDate,
-          params.travelers,
-          params.budget
-        );
-
         const fallbackPlan = {
-          ...mockData,
+          ...baselineMock,
           isAIGenerated: false,
           generationSource: 'deterministic_fallback',
           generationNotice: aiErrorNotice || 'Standard curated itinerary (offline/fallback mode)'
@@ -152,22 +172,7 @@ export default function PlannerPage() {
     } catch (err) {
       if (controller.signal.aborted) return;
       console.error('Search processing error:', err);
-      const fallbackData = generateMockData(
-        params.from,
-        params.to,
-        params.date,
-        params.returnDate,
-        params.travelers,
-        params.budget
-      );
-      const catchPlan = {
-        ...fallbackData,
-        isAIGenerated: false,
-        generationSource: 'deterministic_fallback',
-        generationNotice: err.message || 'Error communicating with AI service'
-      };
-      setActiveTrip(catchPlan);
-      storage.setJSON('activePlan', catchPlan);
+      setSearchError(err.message || 'Error processing trip search. Please try again.');
     } finally {
       if (!controller.signal.aborted) {
         setLoading(false);
@@ -183,22 +188,21 @@ export default function PlannerPage() {
         return acc + (day?.activities || []).reduce((sum, act) => sum + (parseFloat(act?.cost) || 0), 0);
       }, 0);
 
-      const updatedBudgetDetails = prev.budgetDetails ? {
+      const currentCosts = prev.costComponents ? {
+        ...prev.costComponents,
+        miscCost: newMisc
+      } : {
         ...prev.budgetDetails,
-        misc: newMisc,
-        total: (Number(prev.budgetDetails.tickets) || 0) +
-               (Number(prev.budgetDetails.fuel) || 0) +
-               (Number(prev.budgetDetails.hotel) || 0) +
-               (Number(prev.budgetDetails.food) || 0) +
-               (Number(prev.budgetDetails.toll) || 0) +
-               (Number(prev.budgetDetails.parking) || 0) +
-               newMisc
-      } : null;
+        misc: newMisc
+      };
+
+      const updatedBudget = calculateModeBudget(activeMode, currentCosts);
 
       const updatedTrip = {
         ...prev,
         itinerary: newItinerary,
-        ...(updatedBudgetDetails && { budgetDetails: updatedBudgetDetails })
+        budgetDetails: updatedBudget,
+        costComponents: prev.costComponents ? { ...prev.costComponents, miscCost: newMisc } : prev.costComponents
       };
       storage.setJSON('activePlan', updatedTrip);
       return updatedTrip;
@@ -231,6 +235,7 @@ export default function PlannerPage() {
 
     const tripToSave = {
       ...activeTrip,
+      transportMode: activeMode,
       userEmail: user.email
     };
 
@@ -287,6 +292,7 @@ export default function PlannerPage() {
       searchControllerRef.current = null;
     }
     setActiveTrip(null);
+    setSearchError(null);
     storage.remove('activePlan');
     navigate('/plan');
   };
@@ -341,9 +347,9 @@ export default function PlannerPage() {
           <Sparkles className="w-6 h-6 text-purple-400 absolute -top-1 -right-1 animate-bounce" />
         </div>
         <div>
-          <h3 className="font-display font-bold text-xl text-white">Generating Best Travel Plan</h3>
+          <h3 className="font-display font-bold text-xl text-white">Calculating Authentic Travel Plan</h3>
           <p className="text-sm text-slate-400 mt-1 max-w-[280px]">
-            Analyzing routing channels, lodging indexes, petrol stations, and coordinates...
+            Resolving authoritative coordinates, highway routes, and mode-specific budgets...
           </p>
         </div>
       </div>
@@ -358,9 +364,28 @@ export default function PlannerPage() {
             Plan Your <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">Next Adventure</span>
           </h1>
           <p className="text-slate-400 text-sm md:text-base max-w-xl mx-auto">
-            Generate AI-optimized multi-modal travel itineraries, real-time weather forecasts, and route estimates.
+            Generate authoritative multi-modal travel itineraries, real road routes, and mode-aware budgets.
           </p>
         </div>
+
+        {searchError && (
+          <div className="max-w-3xl mx-auto p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 text-amber-300 text-sm shadow-md">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+              <div>
+                <h5 className="font-semibold text-white text-sm">Geographic Resolution Notice</h5>
+                <p className="text-xs text-amber-300/90 mt-0.5">{searchError}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSearchError(null)}
+              className="text-xs text-slate-400 hover:text-white px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         <HeroSearch onSearch={handleSearch} loading={loading} />
       </div>
     );
@@ -391,12 +416,17 @@ export default function PlannerPage() {
               {activeTrip.isAIGenerated ? (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
                   <Sparkles className="w-3 h-3" />
-                  <span>Gemini AI Generated</span>
+                  <span>Gemini AI Narrative</span>
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30" title={activeTrip.generationNotice || 'Curated standard plan'}>
                   <Compass className="w-3 h-3" />
                   <span>Curated Standard Plan (Offline/Fallback)</span>
+                </span>
+              )}
+              {activeTrip.routeDetails?.source && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                  <span>Route: {activeTrip.routeDetails.source.toUpperCase()}</span>
                 </span>
               )}
             </div>
@@ -431,14 +461,14 @@ export default function PlannerPage() {
         {!activeTrip.isAIGenerated && activeTrip.generationNotice && (
           <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2.5 shadow-sm">
             <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-            <span>Notice: {activeTrip.generationNotice}. Displaying standard curated itinerary for this route.</span>
+            <span>Notice: {activeTrip.generationNotice}. Displaying deterministic itinerary with mode-aware budget.</span>
           </div>
         )}
 
         {/* Smart suggestions row */}
         <SmartSuggestions
           suggestions={activeTrip.suggestions}
-          onSelectMode={(mode) => setActiveMode(mode)}
+          onSelectMode={handleSelectMode}
           isAIGenerated={Boolean(activeTrip.isAIGenerated)}
         />
 
@@ -453,7 +483,7 @@ export default function PlannerPage() {
                 date={activeTrip.date}
                 options={activeTrip.options}
                 activeMode={activeMode}
-                setActiveMode={setActiveMode}
+                setActiveMode={handleSelectMode}
               >
                 <RoadTripDetails tripData={activeTrip} />
               </TravelOptions>
@@ -473,11 +503,13 @@ export default function PlannerPage() {
             <WeatherInfo
               weather={activeTrip.weather}
               destination={activeTrip.to}
+              destinationCoords={activeTrip.coordinates?.to}
             />
 
             <BudgetCalculator
               budgetDetails={activeTrip.budgetDetails}
               travelers={activeTrip.travelers}
+              activeMode={activeMode}
             />
           </div>
         </div>

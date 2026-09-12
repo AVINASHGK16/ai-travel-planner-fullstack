@@ -99,7 +99,8 @@ export default function TravelOptions({
       return (
         <div className="p-6 rounded-xl border border-white/5 bg-slate-900/20 text-center text-slate-400 flex flex-col items-center gap-2">
           <AlertCircle className="w-8 h-8 text-amber-500" />
-          <p className="text-sm">Flights are only recommended for longer travel distances (250km+). Please check Train, Bus or Own Vehicle options!</p>
+          <h5 className="font-semibold text-white text-sm">No Commercial Flights on this Corridor</h5>
+          <p className="text-xs max-w-md">Commercial passenger flights do not operate on short corridors (&lt;200 km). Please choose Train, Bus, or Road transit options!</p>
         </div>
       );
     }
@@ -111,7 +112,8 @@ export default function TravelOptions({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Plane className="w-5 h-5 text-indigo-400" />
-                <h4 className="font-display font-semibold text-base text-white">{flight.airline || 'Airline Service'}</h4>
+                <h4 className="font-display font-semibold text-base text-white">{flight.airline || 'Airline Option'}</h4>
+                <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-mono text-[10px]">Estimated Fare</span>
               </div>
               <div className="flex items-center gap-4 text-xs text-slate-400">
                 <span className="flex items-center gap-1 font-mono text-slate-300">
@@ -129,7 +131,7 @@ export default function TravelOptions({
             </div>
             <div className="flex items-center justify-between md:justify-end gap-6 border-t md:border-none pt-3 md:pt-0 border-white/5">
               <div className="text-right">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Price per ticket</span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Estimated Price</span>
                 <span className="text-lg font-bold text-emerald-400 font-mono">{formatPrice(flight.price)}</span>
               </div>
               <a
@@ -138,7 +140,7 @@ export default function TravelOptions({
                 rel="noopener noreferrer"
                 className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition-all shadow-md shadow-indigo-500/10 flex items-center gap-1.5 active:scale-[0.98]"
               >
-                <span>Book Now</span>
+                <span>Check Flights</span>
                 <ChevronRight className="w-4 h-4" />
               </a>
             </div>

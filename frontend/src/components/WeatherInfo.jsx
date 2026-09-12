@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Cloud, Sun, CloudRain, Wind, AlertTriangle, Thermometer, Loader2 } from 'lucide-react';
 import { getWeather } from '../services/weatherService';
 
-export default function WeatherInfo({ weather, destination }) {
+export default function WeatherInfo({ weather, destination, destinationCoords }) {
   const [liveWeather, setLiveWeather] = useState(weather);
   const [loadingWeather, setLoadingWeather] = useState(false);
   const [weatherError, setWeatherError] = useState(null);
@@ -15,7 +15,7 @@ export default function WeatherInfo({ weather, destination }) {
     setLiveWeather(weather || initialWeatherRef.current);
     setWeatherError(null);
 
-    if (!targetCity) return;
+    if (!targetCity && (!Array.isArray(destinationCoords) || destinationCoords.length < 2)) return;
 
     let active = true;
     const controller = new AbortController();
@@ -23,7 +23,10 @@ export default function WeatherInfo({ weather, destination }) {
     const fetchLiveWeather = async () => {
       setLoadingWeather(true);
       try {
-        const data = await getWeather(targetCity, controller.signal);
+        const query = (Array.isArray(destinationCoords) && destinationCoords.length >= 2 && typeof destinationCoords[0] === 'number' && typeof destinationCoords[1] === 'number')
+          ? { city: targetCity, lat: destinationCoords[0], lon: destinationCoords[1] }
+          : targetCity;
+        const data = await getWeather(query, controller.signal);
         
         if (!active) return;
         
@@ -60,7 +63,7 @@ export default function WeatherInfo({ weather, destination }) {
       setLoadingWeather(false);
       controller.abort();
     };
-  }, [targetCity]);
+  }, [targetCity, destinationCoords?.[0], destinationCoords?.[1]]);
 
   const hasValidWeather = liveWeather && typeof liveWeather.temp === 'string' && liveWeather.temp.trim() !== '';
 
@@ -116,8 +119,8 @@ export default function WeatherInfo({ weather, destination }) {
         
         {/* Rain Alert flag / Status banner */}
         {weatherError ? (
-          <div className="bg-slate-800/60 border border-white/10 text-slate-400 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase">
-            <span>Offline</span>
+          <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase">
+            <span>Estimated Climate</span>
           </div>
         ) : typeof liveWeather.rainAlert === 'string' && !/\b0%/.test(liveWeather.rainAlert) && !/\bno\b/i.test(liveWeather.rainAlert) ? (
           <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase animate-pulse">
@@ -126,7 +129,7 @@ export default function WeatherInfo({ weather, destination }) {
           </div>
         ) : (
           <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase">
-            <span>Clear Sky</span>
+            <span>Live Forecast</span>
           </div>
         )}
       </div>
@@ -139,9 +142,15 @@ export default function WeatherInfo({ weather, destination }) {
             {getWeatherIcon(liveWeather.condition)}
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 uppercase font-semibold block">Destination</span>
-            <span className="text-2xl font-bold font-mono text-white leading-none block my-0.5">{liveWeather.temp}</span>
-            <span className="text-xs text-slate-300 font-medium block">{liveWeather.condition}</span>
+            <span className="text-[10px] text-slate-500 uppercase font-semibold block">
+              Destination {weatherError ? '(Estimated)' : ''}
+            </span>
+            <span className="text-2xl font-bold font-mono text-white leading-none block my-0.5">
+              {weatherError ? `~${liveWeather.temp.replace(/^~/, '')}` : liveWeather.temp}
+            </span>
+            <span className="text-xs text-slate-300 font-medium block">
+              {weatherError ? `${liveWeather.condition} (Regional Estimate)` : liveWeather.condition}
+            </span>
           </div>
         </div>
 
@@ -153,7 +162,7 @@ export default function WeatherInfo({ weather, destination }) {
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <Thermometer className="w-4 h-4 text-purple-400" />
-            <span>Condition: {weatherError ? 'Estimated' : 'Reported'}</span>
+            <span>Source: {weatherError ? 'Regional Climate Estimate' : 'OpenWeather Live Station'}</span>
           </div>
         </div>
 

@@ -116,11 +116,21 @@ export const generateTripSchema = z.object({
 
 // ─── 2. Weather Query Schema (/api/weather) ─────────────────────
 export const weatherQuerySchema = z.object({
-  city: z.string({ required_error: 'City parameter is required' })
+  city: z.string()
     .trim()
     .min(1, 'City name cannot be empty')
     .max(100, 'City name cannot exceed 100 characters')
     .regex(SAFE_LOCATION_REGEX, 'City name contains invalid or malformed characters')
+    .optional(),
+  lat: z.coerce.number().min(-90, 'Latitude must be >= -90').max(90, 'Latitude must be <= 90').optional(),
+  lon: z.coerce.number().min(-180, 'Longitude must be >= -180').max(180, 'Longitude must be <= 180').optional()
+}).refine(data => {
+  const hasCoords = typeof data.lat === 'number' && !isNaN(data.lat) && typeof data.lon === 'number' && !isNaN(data.lon);
+  const hasCity = typeof data.city === 'string' && data.city.trim().length > 0;
+  return hasCoords || hasCity;
+}, {
+  message: 'Either city name or both lat and lon coordinates must be provided',
+  path: ['city']
 });
 
 // ─── 3. Save Trip Schema (/api/trips) ───────────────────────────
@@ -167,6 +177,9 @@ export const saveTripSchema = z.object({
   roadTripDetails: z.record(z.any()).optional(),
   weather: z.record(z.any()).optional(),
   tripDays: z.coerce.number().int().min(1).max(30).optional(),
+  transportMode: z.enum(['flight', 'train', 'bus', 'cab', 'own']).optional().default('flight'),
+  canonicalLocations: z.record(z.any()).optional(),
+  routeDetails: z.record(z.any()).optional(),
   isAIGenerated: z.boolean().optional(),
   generationSource: z.string().max(50).optional(),
   generationNotice: z.string().max(500).optional().nullable(),
@@ -180,6 +193,22 @@ export const saveTripSchema = z.object({
 }, {
   message: 'Return date cannot be earlier than departure date',
   path: ['returnDate']
+});
+
+// ─── 3b. Geocode Query Schema (/api/geo/geocode) ─────────────────
+export const geocodeQuerySchema = z.object({
+  q: z.string({ required_error: 'Query parameter q is required' })
+    .trim()
+    .min(1, 'Query parameter cannot be empty')
+    .max(100, 'Query parameter cannot exceed 100 characters')
+    .regex(SAFE_LOCATION_REGEX, 'Query contains invalid characters')
+});
+
+// ─── 3c. Route Request Schema (/api/geo/route) ───────────────────
+export const routeBodySchema = z.object({
+  origin: z.array(z.number()).length(2, 'Origin must be a [latitude, longitude] pair'),
+  destination: z.array(z.number()).length(2, 'Destination must be a [latitude, longitude] pair'),
+  mode: z.enum(['driving', 'flight', 'train', 'bus', 'cab', 'own']).optional().default('driving')
 });
 
 // ─── 4. Trip ID Route Parameter Schema (/api/trips/:id) ─────────

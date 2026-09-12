@@ -6,7 +6,7 @@ import { validateQuery, weatherQuerySchema } from '../validators.js';
 const router = express.Router();
 
 router.get('/weather', weatherLimiter, validateQuery(weatherQuerySchema), asyncHandler(async (req, res) => {
-  const result = await weatherService.getWeather(req.validatedQuery.city);
+  const result = await weatherService.getWeather(req.validatedQuery);
   res.json(result);
 }));
 

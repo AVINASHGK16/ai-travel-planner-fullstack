@@ -1,17 +1,25 @@
+import { geocodeLocation } from './geoService.js';
+
 const sanitize = (str, maxLen = 500) => (typeof str === 'string' ? str.trim().slice(0, maxLen) : '');
 
 export const generateTrip = async ({ from, to, date, returnDate, travelers, budget, preferredMode }, user = null) => {
   const keyToUse = process.env.GEMINI_API_KEY;
 
   if (!keyToUse) {
-    const err = new Error('Gemini AI service is not configured on the server. Please set GEMINI_API_KEY in server environment.');
+    const err = new Error('Gemini AI service is not configured on the server. Please verify server configuration.');
     err.statusCode = 503;
     err.code = 'AI_UNCONFIGURED';
     throw err;
   }
 
-  const sanitizedFrom = from;
-  const sanitizedTo = to;
+  // Canonicalize origin and destination prior to AI prompt generation
+  const [fromGeo, toGeo] = await Promise.all([
+    geocodeLocation(from),
+    geocodeLocation(to)
+  ]);
+
+  const sanitizedFrom = (fromGeo.status === 'GEOCODED' && fromGeo.formattedAddress) ? fromGeo.formattedAddress : from;
+  const sanitizedTo = (toGeo.status === 'GEOCODED' && toGeo.formattedAddress) ? toGeo.formattedAddress : to;
   const sanitizedDate = date;
   const sanitizedReturnDate = returnDate || '';
   const sanitizedTravelers = travelers;
@@ -158,6 +166,24 @@ export const generateTrip = async ({ from, to, date, returnDate, travelers, budg
       err.statusCode = 502;
       err.code = 'AI_INCOMPLETE_RESPONSE';
       throw err;
+    }
+
+    // Boundaries: AI provides narrative itinerary, but cannot fabricate or overwrite coordinates or distance
+    delete parsed.coordinates;
+    delete parsed.distance;
+    delete parsed.canonicalLocations;
+    delete parsed.routeDetails;
+
+    if (fromGeo.status === 'GEOCODED' && toGeo.status === 'GEOCODED') {
+      parsed.canonicalLocations = {
+        from: fromGeo,
+        to: toGeo
+      };
+      parsed.coordinates = {
+        from: [fromGeo.latitude, fromGeo.longitude],
+        to: [toGeo.latitude, toGeo.longitude],
+        mid: [(fromGeo.latitude + toGeo.latitude) / 2, (fromGeo.longitude + toGeo.longitude) / 2]
+      };
     }
 
     return {

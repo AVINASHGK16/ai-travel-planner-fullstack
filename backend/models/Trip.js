@@ -21,6 +21,9 @@ const TripSchema = new mongoose.Schema({
   roadTripDetails: mongoose.Schema.Types.Mixed,
   weather: mongoose.Schema.Types.Mixed,
   tripDays: Number,
+  transportMode: { type: String, default: 'flight' },
+  canonicalLocations: mongoose.Schema.Types.Mixed,
+  routeDetails: mongoose.Schema.Types.Mixed,
   isAIGenerated: Boolean,
   generationSource: String,
   generationNotice: String

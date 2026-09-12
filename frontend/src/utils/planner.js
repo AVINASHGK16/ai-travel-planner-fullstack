@@ -1,89 +1,202 @@
-// AI Travel Planner Utility for Data Generation and API Integration
+// AI Travel Planner Utility for Data Generation, Transport Domain & Mode-Aware Budgets
 import { generateTrip, generateTripPlan, sendChatMessage } from '../services/aiService.js';
+import { KNOWN_CITIES, geocodeCity, calculateRoute, calculateHaversine, isValidCoords, normalizeKey } from '../services/geoService.js';
 
-// Local coordinates database for drawing beautiful Leaflet routes
-export const cityCoordinates = {
-  bangalore: [12.9716, 77.5946],
-  bengaluru: [12.9716, 77.5946],
-  hyderabad: [17.3850, 78.4867],
-  chennai: [13.0827, 80.2707],
-  mumbai: [19.0760, 72.8777],
-  delhi: [28.6139, 77.2090],
-  newdelhi: [28.6139, 77.2090],
-  pune: [18.5204, 73.8567],
-  goa: [15.2993, 74.1240],
-  kolkata: [22.5726, 88.3639],
-  kochi: [9.9312, 76.2673],
-  jaipur: [26.9124, 75.7873],
-  agra: [27.1767, 78.0081],
-  newyork: [40.7128, -74.0060],
-  london: [51.5074, -0.1278],
-  paris: [48.8566, 2.3522],
-  tokyo: [35.6762, 139.6503],
-  sydney: [-33.8688, 151.2093]
-};
+// Re-export verified cities database
+export const cityCoordinates = Object.fromEntries(
+  Object.entries(KNOWN_CITIES).map(([k, v]) => [k, [v.lat, v.lon]])
+);
 
-// Fallback coordinate generator based on city name hash
+/**
+ * Authoritative coordinate resolver.
+ * Never fabricates coordinates using ASCII hashing.
+ * Returns [lat, lon] if known, or null if unverified.
+ */
 export function getCoordinates(cityName) {
-  if (!cityName) return [20.5937, 78.9629]; // Center of India
-  const norm = cityName.toLowerCase().trim().replace(/\s+/g, '');
-  if (cityCoordinates[norm]) return cityCoordinates[norm];
-  
-  // Hash function to generate semi-realistic but deterministic coords within India bounds
-  let hash1 = 0;
-  let hash2 = 0;
-  for (let i = 0; i < norm.length; i++) {
-    hash1 = norm.charCodeAt(i) + ((hash1 << 5) - hash1);
-    hash2 = norm.charCodeAt(i) + ((hash2 << 7) - hash2);
+  if (!cityName || typeof cityName !== 'string') return null;
+  const norm = normalizeKey(cityName);
+  if (KNOWN_CITIES[norm]) {
+    return [KNOWN_CITIES[norm].lat, KNOWN_CITIES[norm].lon];
   }
-  
-  // Map hashes to India bounds roughly: Lat [10, 30], Lng [72, 85]
-  const lat = 12 + Math.abs(hash1 % 18);
-  const lng = 73 + Math.abs(hash2 % 12);
-  return [lat, lng];
+  return null;
 }
 
-// Generate complete mock travel data if API keys aren't available
-export function generateMockData(from, to, date, returnDate, travelers, budget) {
-  const travelersCount = parseInt(travelers) || 1;
+/**
+ * Pure mode-aware budget calculation engine.
+ * Ensures strict mutual exclusivity across transportation modes:
+ * - FLIGHT: ticket cost only (zero fuel, zero road tolls, zero parking).
+ * - TRAIN: ticket cost only (zero fuel, zero road tolls, zero parking).
+ * - BUS: ticket cost only (zero fuel, zero road tolls, zero parking).
+ * - CAB: ticket/fare only (zero personal fuel, zero road tolls, zero parking).
+ * - OWN VEHICLE: fuel + toll + parking only (zero ticket cost).
+ */
+export function calculateModeBudget(mode, {
+  flightCost = 0,
+  trainCost = 0,
+  busCost = 0,
+  cabCost = 0,
+  fuelCost = 0,
+  tollCost = 0,
+  parkingCost = 0,
+  hotelCost = 0,
+  foodCost = 0,
+  miscCost = 0
+} = {}) {
+  const m = (mode || 'flight').toLowerCase();
+  let tickets = 0;
+  let fuel = 0;
+  let toll = 0;
+  let parking = 0;
+
+  if (m === 'flight') {
+    tickets = flightCost;
+    fuel = 0;
+    toll = 0;
+    parking = 0;
+  } else if (m === 'train') {
+    tickets = trainCost;
+    fuel = 0;
+    toll = 0;
+    parking = 0;
+  } else if (m === 'bus') {
+    tickets = busCost;
+    fuel = 0;
+    toll = 0;
+    parking = 0;
+  } else if (m === 'cab') {
+    tickets = cabCost;
+    fuel = 0;
+    toll = 0;
+    parking = 0;
+  } else if (m === 'own') {
+    tickets = 0;
+    fuel = fuelCost;
+    toll = tollCost;
+    parking = parkingCost;
+  }
+
+  const total = tickets + fuel + toll + parking + hotelCost + foodCost + miscCost;
+
+  return {
+    mode: m,
+    tickets,
+    fuel,
+    toll,
+    parking,
+    hotel: hotelCost,
+    food: foodCost,
+    misc: miscCost,
+    total
+  };
+}
+
+/**
+ * Resolves both endpoints authoritatively and calculates real road distance.
+ * Returns { fromLocation, toLocation, routeDetails } or throws error if geocoding fails.
+ */
+export async function resolveTripGeography(from, to, signal = null) {
+  const [fromLoc, toLoc] = await Promise.all([
+    geocodeCity(from, signal),
+    geocodeCity(to, signal)
+  ]);
+
+  if (fromLoc.status === 'FAILED_TO_GEOCODE') {
+    const err = new Error(fromLoc.error || `Could not find location: "${from}".`);
+    err.code = 'FAILED_TO_GEOCODE';
+    err.failedLocation = from;
+    throw err;
+  }
+
+  if (toLoc.status === 'FAILED_TO_GEOCODE') {
+    const err = new Error(toLoc.error || `Could not find location: "${to}".`);
+    err.code = 'FAILED_TO_GEOCODE';
+    err.failedLocation = to;
+    throw err;
+  }
+
+  const fromCoords = [fromLoc.latitude, fromLoc.longitude];
+  const toCoords = [toLoc.latitude, toLoc.longitude];
+
+  const routeDetails = await calculateRoute(fromCoords, toCoords, 'driving', signal);
+
+  return {
+    fromLocation: fromLoc,
+    toLocation: toLoc,
+    fromCoords,
+    toCoords,
+    routeDetails
+  };
+}
+
+/**
+ * Generate complete deterministic travel plan with authoritative geography,
+ * normalized transport options, and mode-aware budget.
+ */
+export function generateMockData(from, to, date, returnDate, travelers, budget, preferredMode = 'flight', geoData = null) {
+  const travelersCount = parseInt(travelers, 10) || 1;
   const budgetValue = parseFloat(budget) || 1500;
-  
-  const fromCoords = getCoordinates(from);
-  const toCoords = getCoordinates(to);
-  
-  // Calculate relative distance estimation
-  const latDiff = toCoords[0] - fromCoords[0];
-  const lngDiff = toCoords[1] - fromCoords[1];
-  const estDistance = Math.round(Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 111); // 1 deg ~ 111km
-  const distance = Math.max(estDistance, 50); // Min 50km
-  
-  // Travel times
-  const flightTime = `${Math.floor(distance / 500)}h ${Math.round((distance % 500) / 8.3)}m`.replace('0h ', '');
-  const trainTime = `${Math.floor(distance / 60)}h ${Math.round((distance % 60))}m`;
-  const busTime = `${Math.floor(distance / 50)}h ${Math.round((distance % 50))}m`;
-  const cabTime = `${Math.floor(distance / 65)}h ${Math.round((distance % 65))}m`;
-  
-  // Price factors based on budget tier (100 to 5000+)
+
+  // Resolve coordinates
+  let fromCoords = geoData?.fromCoords || getCoordinates(from);
+  let toCoords = geoData?.toCoords || getCoordinates(to);
+
+  // If coordinates are unresolvable, throw an explicit error rather than fabricating fake coordinates
+  if (!fromCoords || !isValidCoords(fromCoords)) {
+    throw new Error(`Location "${from}" could not be geocoded. Please check city name.`);
+  }
+  if (!toCoords || !isValidCoords(toCoords)) {
+    throw new Error(`Location "${to}" could not be geocoded. Please check city name.`);
+  }
+
+  // Distance calculation: use real route distance if available, otherwise spherical Haversine road estimation
+  let distance = geoData?.routeDetails?.distanceKm;
+  if (typeof distance !== 'number' || distance <= 0) {
+    const haversine = calculateHaversine(fromCoords[0], fromCoords[1], toCoords[0], toCoords[1]);
+    distance = Math.max(Math.round(haversine * 1.25), 30);
+  }
+
+  const routeDetails = geoData?.routeDetails || {
+    distanceKm: distance,
+    durationMinutes: Math.round((distance / 60) * 60),
+    geometry: null,
+    source: 'haversine_estimate',
+    status: 'estimated',
+    isRoadRoute: false,
+    fetchedAt: new Date().toISOString()
+  };
+
+  // Realistic travel times based on road distance
+  const flightMinutes = Math.max(45, Math.round(distance / 8));
+  const flightHours = Math.floor(flightMinutes / 60);
+  const flightRemMins = flightMinutes % 60;
+  const flightTime = flightHours > 0 ? `${flightHours}h ${flightRemMins}m` : `${flightRemMins}m`;
+
+  const trainMinutes = Math.round((distance / 65) * 60);
+  const trainTime = `${Math.floor(trainMinutes / 60)}h ${trainMinutes % 60}m`;
+
+  const busMinutes = Math.round((distance / 50) * 60);
+  const busTime = `${Math.floor(busMinutes / 60)}h ${busMinutes % 60}m`;
+
+  const cabMinutes = routeDetails.durationMinutes || Math.round((distance / 60) * 60);
+  const cabTime = `${Math.floor(cabMinutes / 60)}h ${cabMinutes % 60}m`;
+
+  // Price tiering
   let budgetTier = 'Standard';
   if (budgetValue < 1000) budgetTier = 'Budget';
   else if (budgetValue > 3500) budgetTier = 'Premium';
-  
   const priceMultiplier = budgetTier === 'Budget' ? 0.75 : budgetTier === 'Premium' ? 1.5 : 1.0;
-  
-  // Individual options costs
+
+  // Cost components per unit
   const flightCost = Math.round((1800 + distance * 3.5) * priceMultiplier * travelersCount);
   const train3ACost = Math.round((450 + distance * 1.1) * priceMultiplier * travelersCount);
   const trainSLCost = Math.round((180 + distance * 0.4) * priceMultiplier * travelersCount);
   const busCost = Math.round((350 + distance * 0.9) * priceMultiplier * travelersCount);
-  const cabCost = Math.round((distance * 13) * priceMultiplier);
-  const ownFuelCost = Math.round((distance * 7));
-  const tollCost = Math.round((distance * 1.25));
-  
-  const selectedHotelCost = Math.round((1200 + (budgetValue / 5)) * priceMultiplier);
-  
-  // Midpoint coordinate for weather & stops
-  const midCoords = [(fromCoords[0] + toCoords[0]) / 2, (fromCoords[1] + toCoords[1]) / 2];
+  const cabCost = Math.round((distance * 14) * priceMultiplier);
+  const ownFuelCost = Math.round(distance * 7);
+  const tollCost = Math.round(distance * 1.25);
+  const parkingCostPerDay = 300;
 
+  // Duration calculation
   let tripDays = 2;
   if (date && returnDate) {
     try {
@@ -97,19 +210,205 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
   }
 
   const hotelDays = Math.max(1, tripDays - 1);
+  const selectedHotelCost = Math.round((1200 + (budgetValue / 5)) * priceMultiplier);
   const totalHotelCost = selectedHotelCost * hotelDays;
   const totalFoodCost = 600 * tripDays * travelersCount;
+  const totalParkingCost = parkingCostPerDay * hotelDays;
+  const totalMiscCost = 800 * tripDays;
 
-  // Build day-by-day itinerary matching duration
+  // Midpoint coordinate
+  const midCoords = [(fromCoords[0] + toCoords[0]) / 2, (fromCoords[1] + toCoords[1]) / 2];
+
+  // Raw cost components
+  const costComponents = {
+    flightCost,
+    trainCost: train3ACost,
+    busCost,
+    cabCost,
+    fuelCost: ownFuelCost,
+    tollCost,
+    parkingCost: totalParkingCost,
+    hotelCost: totalHotelCost,
+    foodCost: totalFoodCost,
+    miscCost: totalMiscCost
+  };
+
+  // Determine active mode (if flights are unavailable on short corridors, default to own or train)
+  const canFly = distance >= 200;
+  let effectiveMode = preferredMode;
+  if (effectiveMode === 'any' || !effectiveMode) {
+    effectiveMode = canFly ? 'flight' : 'own';
+  } else if (effectiveMode === 'flight' && !canFly) {
+    effectiveMode = 'own';
+  }
+
+  // Calculate truthful mode-aware budget
+  const budgetDetails = calculateModeBudget(effectiveMode, costComponents);
+
+  // Normalized transport options with full provenance
+  const nowIso = new Date().toISOString();
+
+  // Flights: strictly unavailable on short corridors (<200 km)
+  // When available, labeled as explicit estimate rather than fabricated live airline inventory
+  const flightOptions = canFly ? [
+    {
+      id: `fl_est_${distance}_1`,
+      mode: 'flight',
+      airline: 'Estimated Regular Flight',
+      provider: null,
+      depart: '06:15',
+      arrive: '07:45',
+      duration: flightTime,
+      price: flightCost,
+      stops: 0,
+      rating: 4.2,
+      source: 'estimate',
+      status: 'estimated',
+      currency: 'INR',
+      isEstimated: true,
+      fetchedAt: nowIso
+    },
+    {
+      id: `fl_est_${distance}_2`,
+      mode: 'flight',
+      airline: 'Estimated Saver Flight',
+      provider: null,
+      depart: '14:20',
+      arrive: '15:55',
+      duration: flightTime,
+      price: Math.round(flightCost * 1.18),
+      stops: 0,
+      rating: 4.0,
+      source: 'estimate',
+      status: 'estimated',
+      currency: 'INR',
+      isEstimated: true,
+      fetchedAt: nowIso
+    }
+  ] : [];
+
+  const trainOptions = [
+    {
+      id: `tr_${distance}_1`,
+      mode: 'train',
+      name: 'SuperFast Express',
+      number: '12839',
+      depart: '19:15',
+      arrive: '05:30',
+      duration: trainTime,
+      price: train3ACost,
+      tier: '3AC',
+      avail: 34,
+      source: 'estimate',
+      status: 'estimated',
+      currency: 'INR',
+      fetchedAt: nowIso
+    },
+    {
+      id: `tr_${distance}_2`,
+      mode: 'train',
+      name: 'Express Train',
+      number: '15042',
+      depart: '08:00',
+      arrive: '19:45',
+      duration: trainTime,
+      price: trainSLCost,
+      tier: 'Sleeper',
+      avail: 88,
+      source: 'estimate',
+      status: 'estimated',
+      currency: 'INR',
+      fetchedAt: nowIso
+    }
+  ];
+
+  const busOptions = [
+    {
+      id: `bus_${distance}_1`,
+      mode: 'bus',
+      name: 'Highway Travels (AC Sleeper)',
+      depart: '20:30',
+      arrive: '06:00',
+      duration: busTime,
+      price: busCost,
+      seats: 12,
+      rating: 4.3,
+      source: 'estimate',
+      status: 'estimated',
+      currency: 'INR',
+      fetchedAt: nowIso
+    },
+    {
+      id: `bus_${distance}_2`,
+      mode: 'bus',
+      name: 'State Express (Non-AC Seater)',
+      depart: '22:00',
+      arrive: '07:45',
+      duration: busTime,
+      price: Math.round(busCost * 0.7),
+      seats: 24,
+      rating: 3.9,
+      source: 'estimate',
+      status: 'estimated',
+      currency: 'INR',
+      fetchedAt: nowIso
+    }
+  ];
+
+  const cabOptions = [
+    {
+      id: `cab_${distance}_sedan`,
+      mode: 'cab',
+      name: 'Standard Sedan Cab',
+      time: cabTime,
+      price: cabCost,
+      type: 'Sedan',
+      distance: `${distance} km`,
+      source: 'estimate',
+      status: 'estimated',
+      currency: 'INR',
+      fetchedAt: nowIso
+    },
+    {
+      id: `cab_${distance}_suv`,
+      mode: 'cab',
+      name: 'Premium SUV Cab',
+      time: cabTime,
+      price: Math.round(cabCost * 1.4),
+      type: 'SUV (6 Seater)',
+      distance: `${distance} km`,
+      source: 'estimate',
+      status: 'estimated',
+      currency: 'INR',
+      fetchedAt: nowIso
+    }
+  ];
+
+  const ownOptions = {
+    mode: 'own',
+    distance: `${distance} km`,
+    time: cabTime,
+    tollInfo: `Estimated Toll: ₹${tollCost}`,
+    fuelEstimate: `Estimated Fuel: ₹${ownFuelCost}`,
+    roadCondition: distance > 300 ? 'National Highway 4-Lane' : 'State / Expressway Corridor',
+    source: 'estimate',
+    status: 'estimated',
+    routes: [
+      { name: 'Fastest Highway Route', distance: `${distance} km`, time: cabTime, tolls: tollCost, roadCondition: 'Good' },
+      { name: 'Alternative Scenic Route', distance: `${Math.round(distance * 1.12)} km`, time: `${Math.floor(distance * 1.12 / 55)}h ${Math.round((distance * 1.12) % 55)}m`, tolls: Math.round(tollCost * 0.5), roadCondition: 'Scenic' }
+    ]
+  };
+
+  // Build day-by-day itinerary
   const mockItinerary = [
     {
       day: 1,
-      title: 'Departure & Exploration',
+      title: 'Departure & Initial Exploration',
       activities: [
         { time: '06:00 AM', title: 'Assemble & Depart', desc: `Start from ${from}. Keep basic snacks and water handy.`, cost: 0, icon: 'Navigation' },
-        { time: '09:00 AM', title: 'Breakfast Highway Stop', desc: 'Stop at a high-rated vegetarian food court along the highway.', cost: 150 * travelersCount, icon: 'Utensils' },
-        { time: '01:30 PM', title: 'Mid-way Attractions Visit', desc: 'Visit popular sights or scenic viewpoints on the route.', cost: 50 * travelersCount, icon: 'MapPin' },
-        { time: '02:30 PM', title: 'Lunch Spot', desc: 'Enjoy local regional cuisine specialities.', cost: 250 * travelersCount, icon: 'Coffee' },
+        { time: '09:00 AM', title: 'Breakfast Stop', desc: 'Stop at a high-rated food stop along the route.', cost: 150 * travelersCount, icon: 'Utensils' },
+        { time: '01:30 PM', title: 'Scenic Point / Transit Break', desc: 'Visit popular sights or scenic viewpoints on the route.', cost: 50 * travelersCount, icon: 'MapPin' },
+        { time: '02:30 PM', title: 'Lunch Spot', desc: 'Enjoy local regional cuisine specialties.', cost: 250 * travelersCount, icon: 'Coffee' },
         { time: '06:00 PM', title: `Arrival at ${to}`, desc: 'Check in at the hotel and take a brief rest.', cost: 0, icon: 'Home' },
         { time: '07:30 PM', title: 'Evening Walk & Local Market', desc: 'Explore the main city square, try street foods, and capture night views.', cost: 200 * travelersCount, icon: 'Camera' }
       ]
@@ -120,11 +419,11 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
     if (d === tripDays && tripDays > 1) {
       mockItinerary.push({
         day: d,
-        title: 'Highlights, Souvenirs & Journey Home',
+        title: 'Highlights & Return Journey',
         activities: [
           { time: '08:30 AM', title: 'Farewell Breakfast & Checkout', desc: 'Pack luggage and prepare for the return trip.', cost: 0, icon: 'Home' },
-          { time: '10:30 AM', title: 'Local Artisan Bazaar & Gifts', desc: 'Pick up authentic local crafts and souvenirs.', cost: 400, icon: 'ShoppingBag' },
-          { time: '01:30 PM', title: 'Traditional Farewell Meal', desc: 'Enjoy authentic delicacies before heading back.', cost: 350 * travelersCount, icon: 'Utensils' },
+          { time: '10:30 AM', title: 'Local Artisan Bazaar & Souvenirs', desc: 'Pick up authentic local crafts and souvenirs.', cost: 400, icon: 'ShoppingBag' },
+          { time: '01:30 PM', title: 'Traditional Lunch', desc: 'Enjoy authentic delicacies before heading back.', cost: 350 * travelersCount, icon: 'Utensils' },
           { time: '04:00 PM', title: `Return Journey toward ${from}`, desc: 'Depart smoothly with memories captured.', cost: 0, icon: 'Navigation' }
         ]
       });
@@ -151,40 +450,25 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
     tripDays,
     travelers: travelersCount,
     budget: budgetValue,
+    transportMode: effectiveMode,
     distance,
     coordinates: {
       from: fromCoords,
       to: toCoords,
       mid: midCoords
     },
+    canonicalLocations: {
+      from: geoData?.fromLocation || { name: from, latitude: fromCoords[0], longitude: fromCoords[1] },
+      to: geoData?.toLocation || { name: to, latitude: toCoords[0], longitude: toCoords[1] }
+    },
+    routeDetails,
+    costComponents,
     options: {
-      bus: [
-        { name: 'RedLine Travels (AC Sleeper)', depart: '20:30', arrive: '06:00', duration: busTime, price: busCost, seats: 12, rating: 4.4 },
-        { name: 'GreenExpress (Non-AC Seater)', depart: '22:00', arrive: '07:45', duration: busTime, price: Math.round(busCost * 0.7), seats: 24, rating: 3.9 }
-      ],
-      flight: distance > 250 ? [
-        { airline: 'IndiGo', depart: '06:15', arrive: '07:45', duration: flightTime, price: flightCost, stops: 0, rating: 4.3 },
-        { airline: 'Air India', depart: '14:20', arrive: '15:55', duration: flightTime, price: Math.round(flightCost * 1.25), stops: 0, rating: 4.1 }
-      ] : [],
-      train: [
-        { name: 'SuperFast Express', number: '12839', depart: '19:15', arrive: '05:30', duration: trainTime, price: train3ACost, tier: '3AC', avail: 34 },
-        { name: 'Express Train', number: '15042', depart: '08:00', arrive: '19:45', duration: trainTime, price: trainSLCost, tier: 'Sleeper', avail: 88 }
-      ],
-      cab: [
-        { name: 'Ola Sedan', time: cabTime, price: cabCost, type: 'Sedan', distance: `${distance} km` },
-        { name: 'Uber SUV', time: cabTime, price: Math.round(cabCost * 1.4), type: 'SUV (6 Seater)', distance: `${distance} km` }
-      ],
-      own: {
-        distance: `${distance} km`,
-        time: cabTime,
-        tollInfo: `Estimated Toll: ₹${tollCost}`,
-        fuelEstimate: `Estimated Fuel: ₹${ownFuelCost}`,
-        roadCondition: distance > 300 ? 'Excellent NH 4-Lane' : 'Good Double-Lane State Highway',
-        routes: [
-          { name: 'National Highway (Fastest)', distance: `${distance} km`, time: cabTime, tolls: tollCost, roadCondition: 'Excellent' },
-          { name: 'State Highway (Scenic)', distance: `${Math.round(distance * 1.15)} km`, time: `${Math.floor(distance * 1.15 / 55)}h ${Math.round((distance * 1.15) % 55)}m`, tolls: Math.round(tollCost * 0.4), roadCondition: 'Good (some scenic points)' }
-        ]
-      }
+      bus: busOptions,
+      flight: flightOptions,
+      train: trainOptions,
+      cab: cabOptions,
+      own: ownOptions
     },
     suggestions: {
       cheapest: {
@@ -197,19 +481,19 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
       },
       fastest: {
         title: 'Fastest Option',
-        mode: distance > 250 ? 'Flight' : 'Cab/Car',
-        price: distance > 250 ? flightCost : cabCost,
-        icon: distance > 250 ? 'Plane' : 'Car',
+        mode: canFly ? 'Flight' : 'Cab / Road',
+        price: canFly ? flightCost : cabCost,
+        icon: canFly ? 'Plane' : 'Car',
         badge: 'Save Time',
-        desc: distance > 250 ? `Direct flight in just ${flightTime}` : `Direct road journey in ${cabTime}`
+        desc: canFly ? `Estimated flight in ${flightTime}` : `Direct road journey in ${cabTime}`
       },
       comfort: {
         title: 'Most Comfortable',
-        mode: distance > 250 ? 'Flight (Premium)' : 'Ola Sedan Cab',
-        price: distance > 250 ? Math.round(flightCost * 1.25) : cabCost,
-        icon: distance > 250 ? 'Plane' : 'Car',
+        mode: canFly ? 'Flight' : 'Sedan Cab',
+        price: canFly ? Math.round(flightCost * 1.18) : cabCost,
+        icon: canFly ? 'Plane' : 'Car',
         badge: 'Premium Travel',
-        desc: distance > 250 ? 'Air India flight with spacious seating' : 'Private Sedan door-to-door service'
+        desc: canFly ? 'Spacious flight travel' : 'Private Sedan door-to-door service'
       },
       value: {
         title: 'Best Value',
@@ -229,16 +513,7 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
       }
     },
     itinerary: mockItinerary,
-    budgetDetails: {
-      tickets: distance > 250 ? flightCost : train3ACost,
-      fuel: distance * 7,
-      hotel: totalHotelCost,
-      food: totalFoodCost,
-      toll: tollCost,
-      parking: 300 * hotelDays,
-      misc: 800 * tripDays,
-      total: (distance > 250 ? flightCost : train3ACost) + totalHotelCost + totalFoodCost + tollCost + (300 * hotelDays) + (800 * tripDays)
-    },
+    budgetDetails,
     roadTripDetails: {
       petrolPumps: ['Indian Oil Highway Outlet', 'Bharat Petroleum Highway Hub', 'Shell Fuel Station Point'],
       evStations: ['Tata Power EZ Charge Station', 'Fortum Charge Drive Hub', 'Zeon High Speed Charging Point'],
@@ -248,106 +523,47 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
         { name: 'Barbecue Highway grill', rating: 4.2, cuisine: 'Tandoori, North Indian', distance: `${Math.round(distance * 0.78)} km from start`, openingHours: '11:30 AM - 11:00 PM' }
       ],
       attractions: [
-        { name: 'Lepakshi Temple Heritage Site', description: 'Stunning 16th-century temple complex showcasing Vijayanagara architecture and the massive Nandi.', rating: 4.8, distance: `${Math.round(distance * 0.2)} km`, visitTime: '1.5 hrs', image: 'https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=600&q=80' },
-        { name: 'Penukonda Fort', description: 'Ancient fortress city containing interesting historical ruins and climbing points for valley views.', rating: 4.1, distance: `${Math.round(distance * 0.45)} km`, visitTime: '2 hrs', image: 'https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?auto=format&fit=crop&w=600&q=80' }
+        { name: 'Heritage Cultural Center', description: 'Historical site showcasing regional architecture and heritage monuments.', rating: 4.7, distance: `${Math.round(distance * 0.3)} km`, visitTime: '1.5 hrs', image: 'https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&w=600&q=80' },
+        { name: 'Valley Viewpoint & Nature Park', description: 'Scenic valley lookout offering panoramic landscape views and photography points.', rating: 4.3, distance: `${Math.round(distance * 0.6)} km`, visitTime: '1.5 hrs', image: 'https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?auto=format&fit=crop&w=600&q=80' }
       ],
       hotels: [
-        { name: 'Regency Grand Luxury Inn', price: selectedHotelCost, rating: 4.5, amenities: ['Free WiFi', 'Swimming Pool', 'Spa & Gym', 'Valet Parking'], image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=600&q=80' },
-        { name: 'Transit Express Stay', price: Math.round(selectedHotelCost * 0.55), rating: 3.8, amenities: ['Free Breakfast', 'AC Rooms', '24h Hot Water'], image: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=600&q=80' }
+        { name: 'City Center Grand Stay', price: selectedHotelCost, rating: 4.5, amenities: ['Free WiFi', 'Breakfast', 'Parking'], image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=600&q=80' },
+        { name: 'Transit Express Stay', price: Math.round(selectedHotelCost * 0.6), rating: 3.9, amenities: ['Free WiFi', 'AC Rooms'], image: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=600&q=80' }
       ],
       emergencies: {
-        hospitals: ['Sanjeevani Trauma Care Center', 'City General Hospital (NH 44 Hub)'],
-        police: ['Highway Patrol Station Sector 3', 'Rural Police Chowki'],
-        mechanics: ['Maruti Authorized Care', 'Express Garage & Towing Services']
+        hospitals: ['Trauma Care Emergency Center', 'City General Hospital Hub'],
+        police: ['Highway Patrol Station', 'City Police Chowki'],
+        mechanics: ['Authorized Vehicle Service Hub', 'Express 24x7 Towing Care']
       }
     },
     weather: {
-      temp: '32°C',
-      condition: 'Sunny & Warm',
-      windSpeed: '14 km/h',
+      temp: '28°C',
+      condition: 'Pleasant & Clear',
+      windSpeed: '12 km/h',
       rainAlert: '0% Probability of Rain',
+      source: 'estimate',
+      status: 'estimated',
       forecast: [
-        { stop: from, temp: '28°C', condition: 'Clear Sky' },
-        { stop: 'Midpoint Transit', temp: '34°C', condition: 'Hot & Dry' },
-        { stop: to, temp: '30°C', condition: 'Intermittent Clouds' }
+        { stop: from, temp: '26°C', condition: 'Clear' },
+        { stop: 'Transit Corridor', temp: '29°C', condition: 'Sunny' },
+        { stop: to, temp: '28°C', condition: 'Partly Cloudy' }
       ]
     }
   };
 }
 
-// Invoke the backend proxy to get AI-powered itineraries (delegated to aiService)
 export async function getAIGeneration(searchParams, externalSignal) {
-  return generateTrip(searchParams, externalSignal);
+  return generateTripPlan(searchParams, externalSignal);
 }
 
-
-// Generate the customized query for travel planning
 export function buildTripAIPrompt(from, to, date, returnDate, travelers, budget, mode) {
   return `
-    You are a professional travel coordinator. Generate a comprehensive travel plan for a trip from "${from}" to "${to}" on "${date}" ${returnDate ? `returning on "${returnDate}"` : ''} for ${travelers} travelers.
-    The budget is approximately INR/USD ${budget}. Preferred travel mode: ${mode || 'any'}.
+    You are a professional travel coordinator. Generate a narrative itinerary and sightseeing activity recommendations for a journey from "${from}" to "${to}" on "${date}" ${returnDate ? `returning on "${returnDate}"` : ''} for ${travelers} travelers with a budget of approximately ${budget}.
     
-    Return a JSON object matches the schema EXACTLY (no markdown blocks, just raw JSON):
-    {
-      "summary": "Short descriptive summary",
-      "cheapest": { "mode": "String", "price": number, "description": "String" },
-      "fastest": { "mode": "String", "price": number, "description": "String" },
-      "comfort": { "mode": "String", "price": number, "description": "String" },
-      "value": { "mode": "String", "price": number, "description": "String" },
-      "eco": { "mode": "String", "price": number, "description": "String" },
-      "itinerary": [
-        {
-          "day": number,
-          "title": "String",
-          "activities": [
-            { "time": "String", "title": "String", "desc": "String", "cost": number, "icon": "Utensils | Navigation | MapPin | Eye | Moon | Home | Coffee | ShoppingBag | Camera | Compass" }
-          ]
-        }
-      ],
-      "budgetDetails": {
-        "tickets": number,
-        "fuel": number,
-        "hotel": number,
-        "food": number,
-        "toll": number,
-        "parking": number,
-        "misc": number,
-        "total": number
-      },
-      "roadTripDetails": {
-        "petrolPumps": ["String"],
-        "evStations": ["String"],
-        "restaurants": [
-          { "name": "String", "rating": number, "cuisine": "String", "distance": "String", "openingHours": "String" }
-        ],
-        "attractions": [
-          { "name": "String", "description": "String", "rating": number, "distance": "String", "visitTime": "String", "image": "String (URL)" }
-        ],
-        "hotels": [
-          { "name": "String", "price": number, "rating": number, "amenities": ["String"], "image": "String (URL)" }
-        ],
-        "emergencies": {
-          "hospitals": ["String"],
-          "police": ["String"],
-          "mechanics": ["String"]
-        }
-      },
-      "weather": {
-        "temp": "String",
-        "condition": "String",
-        "windSpeed": "String",
-        "rainAlert": "String",
-        "forecast": [
-          { "stop": "String", "temp": "String", "condition": "String" }
-        ]
-      }
-    }
-    
-    Make sure the rates, distances, travel options, and suggestions are realistic for a journey between these two coordinates.
+    Provide realistic day-by-day sightseeing activities with descriptive notes and estimated activity entrance costs.
   `;
 }
 
-// Send chat message through backend proxy (delegated to aiService)
 export async function getAIChatResponse(chatHistory, userMessage, tripData, externalSignal = null) {
   return sendChatMessage({ message: userMessage, chatHistory, tripContext: tripData }, externalSignal);
 }
