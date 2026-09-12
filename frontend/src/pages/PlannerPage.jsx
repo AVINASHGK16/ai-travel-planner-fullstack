@@ -10,18 +10,27 @@ import ItineraryGenerator from '../components/ItineraryGenerator';
 import ChatAssistant from '../components/ChatAssistant';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { generateMockData, getAIGeneration } from '../utils/planner';
-import { useTrips } from '../context/TripsContext';
+import { useAuth } from '../context/AuthContext';
+import { storage, isValidTripsArray } from '../utils/storage';
+import { createTrip } from '../services/tripService';
 
 export default function PlannerPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { tripId } = useParams();
-  const { saveTrip, savingTrip, getTripById } = useTrips();
+  const { user, token, logout, openAuthModal } = useAuth();
 
   const [loading, setLoading] = useState(false);
+  const [savingTrip, setSavingTrip] = useState(false);
   const [activeTrip, setActiveTrip] = useState(null);
   const [activeMode, setActiveMode] = useState('flight');
   const searchControllerRef = useRef(null);
+
+  const getTripById = (id) => {
+    if (!id) return null;
+    const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
+    return localTrips.find(t => (t?._id === id || t?.id === id || String(t?._id) === String(id))) || null;
+  };
 
   // Normalize saved trip helper
   const normalizeSavedTrip = (trip) => {
@@ -228,6 +237,82 @@ export default function PlannerPage() {
     });
   };
 
+  const handleSaveActiveTrip = async () => {
+    if (savingTrip) return;
+
+    if (!user) {
+      alert('Please Sign In first to save your trip itinerary!');
+      openAuthModal();
+      return;
+    }
+
+    if (!activeTrip || !activeTrip.from || !activeTrip.to) {
+      alert('Cannot save incomplete trip. Please plan a trip first.');
+      return;
+    }
+
+    const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
+    const alreadySaved = localTrips.some(
+      t => t?.from === activeTrip.from && t?.to === activeTrip.to && t?.date === activeTrip.date
+    );
+
+    if (alreadySaved) {
+      alert('This trip plan is already saved in your dashboard history.');
+      return;
+    }
+
+    const tripToSave = {
+      ...activeTrip,
+      userEmail: user.email
+    };
+
+    setSavingTrip(true);
+    try {
+      const response = await createTrip(tripToSave, token);
+
+      if (response.ok) {
+        const savedData = response.data;
+        const effectiveTrip = savedData || { ...tripToSave, _id: `trip_${Date.now()}` };
+        storage.setJSON('savedTrips', [effectiveTrip, ...localTrips]);
+        alert('Trip itinerary successfully saved to your dashboard!');
+        return;
+      }
+
+      if (response.status === 400) {
+        let errorMsg = 'Invalid trip details. Please check your trip inputs.';
+        if (response.data?.error) errorMsg = response.data.error;
+        else if (response.data?.details?.[0]?.message) errorMsg = response.data.details[0].message;
+        alert(`Could not save trip: ${errorMsg}`);
+        return;
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        alert('Your session has expired. Please sign in again to save your trip.');
+        logout();
+        openAuthModal();
+        return;
+      }
+
+      if (response.status === 429) {
+        alert('Too many save requests. Please wait a moment before trying again.');
+        return;
+      }
+
+      throw new Error(`Server returned status ${response.status}`);
+    } catch (err) {
+      console.warn('Backend unavailable, saving trip locally:', err.message);
+      const localSavedTrip = {
+        ...tripToSave,
+        _id: `local_${Date.now()}`,
+        createdAt: new Date().toISOString()
+      };
+      storage.setJSON('savedTrips', [localSavedTrip, ...localTrips]);
+      alert('Trip itinerary saved locally (Offline Mode).');
+    } finally {
+      setSavingTrip(false);
+    }
+  };
+
   const handleBackToSearch = () => {
     if (searchControllerRef.current) {
       searchControllerRef.current.abort();
@@ -312,7 +397,7 @@ export default function PlannerPage() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => saveTrip(activeTrip)}
+              onClick={handleSaveActiveTrip}
               disabled={savingTrip}
               className={`flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 ${
                 savingTrip ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'

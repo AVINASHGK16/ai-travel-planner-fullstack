@@ -8,7 +8,6 @@ import PlannerPage from './pages/PlannerPage';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { TripsProvider } from './context/TripsContext';
 import { storage } from './utils/storage';
 
 export { storage };
@@ -88,16 +87,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <TripsProvider>
-          <AppLayout
-            theme={theme}
-            setTheme={setTheme}
-            settingsOpen={settingsOpen}
-            setSettingsOpen={setSettingsOpen}
-            settings={settings}
-            handleSaveSettings={handleSaveSettings}
-          />
-        </TripsProvider>
+        <AppLayout
+          theme={theme}
+          setTheme={setTheme}
+          settingsOpen={settingsOpen}
+          setSettingsOpen={setSettingsOpen}
+          settings={settings}
+          handleSaveSettings={handleSaveSettings}
+        />
       </AuthProvider>
     </BrowserRouter>
   );
