@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Star, HeartPulse, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
+import { Star, ExternalLink, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Card } from './ui/Card';
+import { Badge } from './ui/Badge';
 
 // Strict coordinate validator: prevents Leaflet unrecoverable NaN / invalid coordinate crashes
 export const isValidCoord = (coord) => {
@@ -47,10 +49,10 @@ export class MapErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-slate-900/60 rounded-xl border border-white/10 text-slate-300">
+        <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-700">
           <span className="text-3xl mb-2">🗺️</span>
-          <h4 className="font-semibold text-sm text-white">Interactive Map Unavailable</h4>
-          <p className="text-xs text-slate-400 mt-1 max-w-xs">
+          <h4 className="font-semibold text-sm text-slate-900">Interactive Map Unavailable</h4>
+          <p className="text-xs text-slate-500 mt-1 max-w-xs">
             Route coordinates could not be rendered. Detailed itinerary and stops are listed below.
           </p>
         </div>
@@ -78,14 +80,14 @@ function ChangeMapView({ center }) {
 
 // Generate custom SVG DivIcon for Leaflet markers
 const createCustomIcon = (iconHtml, color) => {
-  const safeColor = typeof color === 'string' && color.trim() ? color : '#3b82f6';
+  const safeColor = typeof color === 'string' && color.trim() ? color : '#2563eb';
   const safeHtml = typeof iconHtml === 'string' && iconHtml.trim() ? iconHtml : '📍';
   return L.divIcon({
-    html: `<div style="background-color: ${safeColor}; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); font-size: 16px;">${safeHtml}</div>`,
+    html: `<div style="background-color: ${safeColor}; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.25); font-size: 15px;">${safeHtml}</div>`,
     className: 'custom-leaflet-icon',
-    iconSize: [34, 34],
-    iconAnchor: [17, 34],
-    popupAnchor: [0, -34]
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
   });
 };
 
@@ -123,8 +125,8 @@ export default function RoadTripDetails({ tripData }) {
     const pins = [];
 
     // Start / End markers strictly using canonical locations
-    pins.push({ position: fromCoords, label: `Starting: ${tripData?.from || 'Origin'}`, iconHtml: '📍', color: '#3b82f6' });
-    pins.push({ position: toCoords,   label: `Destination: ${tripData?.to || 'Destination'}`, iconHtml: '🏁', color: '#ef4444' });
+    pins.push({ position: fromCoords, label: `Starting: ${tripData?.from || 'Origin'}`, iconHtml: '📍', color: '#2563eb' });
+    pins.push({ position: toCoords,   label: `Destination: ${tripData?.to || 'Destination'}`, iconHtml: '🏁', color: '#dc2626' });
 
     // Petrol stations
     if (selectedLayer === 'all' || selectedLayer === 'fuel') {
@@ -136,7 +138,7 @@ export default function RoadTripDetails({ tripData }) {
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 13) % 7) - 3) * 0.02,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 17) % 5) - 2) * 0.02
           ],
-          label: `${pumpName} (Petrol Pump)`, iconHtml: '⛽', color: '#f59e0b'
+          label: `${pumpName} (Petrol Pump)`, iconHtml: '⛽', color: '#d97706'
         });
       });
     }
@@ -179,7 +181,7 @@ export default function RoadTripDetails({ tripData }) {
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 5) % 11) - 5) * 0.03,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 13) % 9) - 4) * 0.03
           ],
-          label: `${att.name || 'Attraction'} ★ ${att.rating ?? 4.0}`, iconHtml: '🎡', color: '#8b5cf6'
+          label: `${att.name || 'Attraction'} ★ ${att.rating ?? 4.0}`, iconHtml: '🎡', color: '#7c3aed'
         });
       });
     }
@@ -223,201 +225,234 @@ export default function RoadTripDetails({ tripData }) {
   if (!own || !roadDetails) return null;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-slate-300">
+    <div className="space-y-6">
 
-      {/* ── Left pane: route selector + layer toggles ────────────── */}
-      <div className="lg:col-span-5 space-y-6">
+      {/* Top Section: Details & Interactive Map Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-        {/* Distance & Time summary */}
-        <div className="p-4 rounded-xl border border-white/10 bg-slate-900/30 grid grid-cols-2 gap-4">
-          <div className="text-center p-2 bg-white/5 rounded-lg">
-            <span className="text-[10px] text-slate-500 uppercase block font-medium">Distance</span>
-            <span className="text-lg font-bold text-white font-mono">
-              {tripData?.routeDetails?.distanceKm ? `${tripData.routeDetails.distanceKm} km` : (own.distance || 'N/A')}
-            </span>
-            {tripData?.routeDetails?.source === 'haversine_estimate' && (
-              <span className="text-[9px] text-amber-400 block font-sans">Est. straight-line</span>
-            )}
-            {tripData?.routeDetails?.source === 'osrm' && (
-              <span className="text-[9px] text-emerald-400 block font-sans">Highway road dist</span>
-            )}
-          </div>
-          <div className="text-center p-2 bg-white/5 rounded-lg">
-            <span className="text-[10px] text-slate-500 uppercase block font-medium">Est. Drive Time</span>
-            <span className="text-lg font-bold text-white font-mono">
-              {tripData?.routeDetails?.durationMinutes
-                ? (tripData.routeDetails.durationMinutes >= 60
-                    ? `${Math.floor(tripData.routeDetails.durationMinutes / 60)}h ${tripData.routeDetails.durationMinutes % 60}m`
-                    : `${tripData.routeDetails.durationMinutes}m`)
-                : (own.time || 'N/A')}
-            </span>
-          </div>
-        </div>
+        {/* Left pane: Route summary + Route selector + Layer toggles */}
+        <div className="lg:col-span-5 space-y-5">
 
-        {/* Route selectors */}
-        <div className="space-y-3">
-          <h4 className="font-display font-semibold text-sm text-slate-200">Select Route</h4>
-          <div className="space-y-2">
-            {own.routes?.filter(r => r && typeof r === 'object').map((route, idx) => (
-              <div
-                key={idx}
-                onClick={() => setActiveRoute(idx)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                  activeRoute === idx
-                    ? 'border-blue-500/50 bg-blue-500/5 text-white'
-                    : 'border-white/10 bg-slate-900/20 text-slate-400 hover:border-white/20'
-                }`}
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-semibold text-sm">{route.name || `Route ${idx + 1}`}</span>
-                  <span className="text-xs font-mono text-blue-400 font-bold">{route.distance || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span>Drive: {route.time || 'N/A'}</span>
-                  <span>Tolls: {typeof route.tolls === 'number' ? `₹${route.tolls}` : (route.tolls ? (String(route.tolls).startsWith('₹') ? route.tolls : `₹${route.tolls}`) : '₹0')}</span>
-                  <span className="bg-slate-800 px-2 py-0.5 rounded text-[10px]">{route.roadCondition || 'Standard'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Layer toggles */}
-        <div className="space-y-3">
-          <h4 className="font-display font-semibold text-sm text-slate-200">Toggle Map Pins</h4>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { id: 'all',          label: 'All',          icon: '📍' },
-              { id: 'fuel',         label: 'Petrol',       icon: '⛽' },
-              { id: 'ev',           label: 'EV Charge',    icon: '⚡' },
-              { id: 'restaurants',  label: 'Restaurants',  icon: '🍽️' },
-              { id: 'attractions',  label: 'Attractions',  icon: '🎡' },
-              { id: 'hotels',       label: 'Hotels',       icon: '🏨' },
-              { id: 'emergencies',  label: 'Emergency',    icon: '🏥' }
-            ].map((layer) => (
-              <button
-                key={layer.id}
-                onClick={() => setSelectedLayer(layer.id)}
-                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                  selectedLayer === layer.id
-                    ? 'bg-blue-600 text-white border-transparent shadow'
-                    : 'bg-slate-900/40 text-slate-400 border-white/5 hover:bg-slate-900/60'
-                }`}
-              >
-                <span className="mr-1">{layer.icon}</span>
-                {layer.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Right pane: interactive Leaflet map or controlled unavailable state ── */}
-      <div className="lg:col-span-7 h-[380px] lg:h-[480px] rounded-xl overflow-hidden border border-white/10 relative">
-        {!hasValidRouteCoords ? (
-          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-slate-900/60 text-slate-300">
-            <AlertTriangle className="w-8 h-8 text-amber-400 mb-3" />
-            <h4 className="font-semibold text-sm text-white">Route Map Unavailable</h4>
-            <p className="text-xs text-slate-400 mt-1 max-w-xs">
-              Authoritative route coordinates are missing or unverified. Fallback to arbitrary cities like Hyderabad is disabled.
-            </p>
-          </div>
-        ) : (
-          <MapErrorBoundary>
-            <MapContainer
-              center={mapCenter}
-              zoom={7}
-              className="w-full h-full"
-              scrollWheelZoom={false}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <ChangeMapView center={mapCenter} />
-
-              {/* Authentic OSRM road polyline (never synthetic triangles) */}
-              {hasRoadGeometry && activeRoute === 0 && (
-                <Polyline
-                  positions={routeGeometry}
-                  color="#3b82f6"
-                  weight={5}
-                  opacity={0.8}
-                />
+          {/* Distance & Time summary cards */}
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="p-4 text-center border-slate-200 shadow-xs bg-white">
+              <span className="text-[10px] text-slate-500 uppercase block font-semibold tracking-wider">
+                Road Distance
+              </span>
+              <span className="text-xl font-bold text-slate-900 font-mono mt-1 block">
+                {tripData?.routeDetails?.distanceKm ? `${tripData.routeDetails.distanceKm} km` : (own.distance || 'N/A')}
+              </span>
+              {tripData?.routeDetails?.source === 'haversine_estimate' ? (
+                <Badge variant="warning" size="sm" className="mt-1">Est. Haversine</Badge>
+              ) : (
+                <Badge variant="success" size="sm" className="mt-1">OSRM Highway</Badge>
               )}
+            </Card>
 
-              {/* Markers strictly verified against invalid or NaN coordinates */}
-              {markers
-                .filter(marker => marker && isValidCoord(marker.position))
-                .map((marker, index) => (
-                  <Marker
-                    key={index}
-                    position={marker.position}
-                    icon={createCustomIcon(marker.iconHtml, marker.color)}
+            <Card className="p-4 text-center border-slate-200 shadow-xs bg-white">
+              <span className="text-[10px] text-slate-500 uppercase block font-semibold tracking-wider">
+                Est. Drive Time
+              </span>
+              <span className="text-xl font-bold text-slate-900 font-mono mt-1 block">
+                {tripData?.routeDetails?.durationMinutes
+                  ? (tripData.routeDetails.durationMinutes >= 60
+                      ? `${Math.floor(tripData.routeDetails.durationMinutes / 60)}h ${tripData.routeDetails.durationMinutes % 60}m`
+                      : `${tripData.routeDetails.durationMinutes}m`)
+                  : (own.time || 'N/A')}
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-1">Non-stop driving</span>
+            </Card>
+          </div>
+
+          {/* Route options selection */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-xs text-slate-700 uppercase tracking-wider">
+                Select Route Option
+              </h4>
+              <span className="text-[11px] text-slate-400">
+                {own.routes?.length || 1} available
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {own.routes?.filter(r => r && typeof r === 'object').map((route, idx) => {
+                const isSelected = activeRoute === idx;
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => setActiveRoute(idx)}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-blue-600 bg-blue-50/50 shadow-xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
                   >
-                    <Popup>
-                      <div className="text-xs font-medium">{marker.label}</div>
-                    </Popup>
-                  </Marker>
-                ))}
-            </MapContainer>
-          </MapErrorBoundary>
-        )}
+                    <div className="flex justify-between items-center mb-1">
+                      <span className={`font-semibold text-sm ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>
+                        {route.name || `Route ${idx + 1}`}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-blue-600">
+                        {route.distance || 'N/A'}
+                      </span>
+                    </div>
 
-        {/* Informative provenance banner */}
-        {hasValidRouteCoords && (
-          isEstimatedRoute ? (
-            <div className="absolute top-3 left-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-amber-300 font-medium flex items-center gap-1.5 shadow-lg border border-amber-500/20 bg-amber-950/60 max-w-[85%]">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>Route geometry unavailable (Straight-line estimate only)</span>
+                    <div className="flex justify-between items-center text-xs text-slate-500">
+                      <span>Drive: {route.time || 'N/A'}</span>
+                      <span>Tolls: {typeof route.tolls === 'number' ? `₹${route.tolls}` : (route.tolls ? (String(route.tolls).startsWith('₹') ? route.tolls : `₹${route.tolls}`) : '₹0')}</span>
+                      <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-medium text-slate-700">
+                        {route.roadCondition || 'Standard'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Map Pin Layer Toggles */}
+          <div className="space-y-2">
+            <h4 className="font-semibold text-xs text-slate-700 uppercase tracking-wider">
+              Filter Route Amenities
+            </h4>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: 'all',          label: 'All',          icon: '📍' },
+                { id: 'fuel',         label: 'Petrol',       icon: '⛽' },
+                { id: 'ev',           label: 'EV Charge',    icon: '⚡' },
+                { id: 'restaurants',  label: 'Food',         icon: '🍽️' },
+                { id: 'attractions',  label: 'Sights',       icon: '🎡' },
+                { id: 'hotels',       label: 'Stays',        icon: '🏨' },
+                { id: 'emergencies',  label: 'Emergency',    icon: '🏥' }
+              ].map((layer) => (
+                <button
+                  key={layer.id}
+                  type="button"
+                  onClick={() => setSelectedLayer(layer.id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                    selectedLayer === layer.id
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                  }`}
+                >
+                  <span className="mr-1">{layer.icon}</span>
+                  {layer.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+        </div>
+
+        {/* Right pane: Leaflet interactive road route map */}
+        <div className="lg:col-span-7 h-[360px] lg:h-[420px] rounded-xl overflow-hidden border border-slate-200 shadow-xs relative bg-slate-100">
+          {!hasValidRouteCoords ? (
+            <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-slate-50 text-slate-700">
+              <AlertTriangle className="w-8 h-8 text-amber-600 mb-2" />
+              <h4 className="font-semibold text-sm text-slate-900">Route Map Unavailable</h4>
+              <p className="text-xs text-slate-500 mt-1 max-w-xs leading-relaxed">
+                Authoritative route coordinates are missing or unverified.
+              </p>
             </div>
           ) : (
-            <div className="absolute top-3 left-3 z-[1000] glass px-3 py-1.5 rounded-lg text-xs text-emerald-300 font-medium flex items-center gap-1.5 shadow-lg border border-emerald-500/20 bg-emerald-950/60 max-w-[85%]">
-              <span>🛣️ Authentic Highway Road Geometry</span>
-            </div>
-          )
-        )}
+            <MapErrorBoundary>
+              <MapContainer
+                center={mapCenter}
+                zoom={7}
+                className="w-full h-full"
+                scrollWheelZoom={false}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <ChangeMapView center={mapCenter} />
 
-        <div className="absolute bottom-3 left-3 z-[1000] glass px-3 py-1.5 rounded-lg text-[10px] text-slate-300 font-mono pointer-events-none">
-          OpenStreetMap · Leaflet
+                {/* Authentic OSRM road polyline in Roamly primary blue */}
+                {hasRoadGeometry && activeRoute === 0 && (
+                  <Polyline
+                    positions={routeGeometry}
+                    color="#2563eb"
+                    weight={5}
+                    opacity={0.85}
+                  />
+                )}
+
+                {/* Markers strictly verified against invalid or NaN coordinates */}
+                {markers
+                  .filter(marker => marker && isValidCoord(marker.position))
+                  .map((marker, index) => (
+                    <Marker
+                      key={index}
+                      position={marker.position}
+                      icon={createCustomIcon(marker.iconHtml, marker.color)}
+                    >
+                      <Popup>
+                        <div className="text-xs font-semibold text-slate-900">{marker.label}</div>
+                      </Popup>
+                    </Marker>
+                  ))}
+              </MapContainer>
+            </MapErrorBoundary>
+          )}
+
+          {/* Informative provenance banner */}
+          {hasValidRouteCoords && (
+            isEstimatedRoute ? (
+              <div className="absolute top-3 left-3 z-[1000] bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-lg text-xs text-amber-800 font-medium flex items-center gap-1.5 shadow-md border border-amber-200 max-w-[85%]">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>Route geometry estimated (Highway routing offline)</span>
+              </div>
+            ) : (
+              <div className="absolute top-3 left-3 z-[1000] bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-lg text-xs text-emerald-800 font-medium flex items-center gap-1.5 shadow-md border border-emerald-200 max-w-[85%]">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>Authentic OSRM Road Geometry</span>
+              </div>
+            )
+          )}
+
+          <div className="absolute bottom-3 left-3 z-[1000] bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-md text-[10px] text-slate-600 font-mono pointer-events-none border border-slate-200/80 shadow-xs">
+            OpenStreetMap · Leaflet
+          </div>
         </div>
+
       </div>
 
-      {/* ── Full-width POI cards ─────────────────────────────────── */}
-      <div className="lg:col-span-12 space-y-8 pt-4 border-t border-white/5">
+      {/* ── Route Amenities Sections (Restaurants, Attractions, Hotels) ── */}
+      <div className="space-y-6 pt-2 border-t border-slate-100">
 
         {/* Restaurants */}
         {roadDetails.restaurants?.length > 0 && (
           <div className="space-y-3">
-            <h4 className="font-display font-bold text-lg text-white flex items-center gap-2">
-              🍽️ Dine Spots Along Route
+            <h4 className="font-semibold text-sm text-slate-900 flex items-center gap-2">
+              <span>🍽️</span> Recommended Dining Along Route
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
               {(roadDetails.restaurants || []).filter(r => r && typeof r === 'object').map((rest, idx) => (
-                <div key={idx} className="p-4 rounded-xl border border-white/15 bg-slate-900/30 hover:border-orange-500/20 transition-all flex flex-col justify-between">
+                <Card key={idx} className="p-4 border-slate-200 shadow-xs bg-white flex flex-col justify-between hover:border-blue-300 transition-all">
                   <div>
-                    <div className="flex justify-between items-start gap-2 mb-1.5">
-                      <h5 className="font-semibold text-white text-sm">{rest.name || 'Dine Spot'}</h5>
-                      <span className="flex items-center gap-0.5 text-xs text-yellow-400 shrink-0 font-bold font-mono">
-                        <Star className="w-3.5 h-3.5 fill-current" />
+                    <div className="flex justify-between items-start gap-2 mb-1">
+                      <h5 className="font-semibold text-slate-900 text-sm">{rest.name || 'Dine Spot'}</h5>
+                      <span className="flex items-center gap-0.5 text-xs text-amber-600 shrink-0 font-bold font-mono">
+                        <Star className="w-3 h-3 fill-current" />
                         {rest.rating ?? 4.0}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400">Cuisine: {rest.cuisine || 'Local Cuisine'}</p>
-                    <p className="text-[10px] text-slate-500 mt-1 font-mono">{rest.openingHours || 'Open Daily'}</p>
+                    <p className="text-xs text-slate-500">Cuisine: {rest.cuisine || 'Local Cuisine'}</p>
+                    <p className="text-[10px] text-slate-400 mt-1 font-mono">{rest.openingHours || 'Open Daily'}</p>
                   </div>
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-white/5 text-[11px] text-slate-400">
+                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500">
                     <span className="font-mono">{rest.distance || 'En route'}</span>
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rest.name || 'Restaurant')}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-orange-400 hover:text-orange-300 font-semibold flex items-center gap-1"
+                      className="text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
                     >
                       Navigate <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
           </div>
@@ -426,128 +461,95 @@ export default function RoadTripDetails({ tripData }) {
         {/* Tourist Attractions */}
         {roadDetails.attractions?.length > 0 && (
           <div className="space-y-3">
-            <h4 className="font-display font-bold text-lg text-white flex items-center gap-2">
-              🎡 Sightseeing Attractions
+            <h4 className="font-semibold text-sm text-slate-900 flex items-center gap-2">
+              <span>🎡</span> Sightseeing &amp; Attractions Along Route
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {(roadDetails.attractions || []).filter(a => a && typeof a === 'object').map((att, idx) => (
-                <div key={idx} className="rounded-xl border border-white/15 bg-slate-900/30 overflow-hidden hover:border-purple-500/20 transition-all flex flex-col sm:flex-row">
+                <Card key={idx} className="border-slate-200 shadow-xs bg-white overflow-hidden hover:border-blue-300 transition-all flex flex-col sm:flex-row">
                   {att.image && (
                     <img
                       src={att.image}
                       alt={att.name || 'Attraction'}
-                      className="w-full sm:w-40 h-36 object-cover bg-slate-800 shrink-0"
+                      className="w-full sm:w-36 h-32 object-cover bg-slate-100 shrink-0"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                   )}
                   <div className="p-4 flex flex-col justify-between flex-grow">
                     <div>
                       <div className="flex justify-between items-start gap-2 mb-1">
-                        <h5 className="font-semibold text-white text-sm">{att.name || 'Attraction'}</h5>
-                        <span className="flex items-center gap-0.5 text-xs text-yellow-400 shrink-0 font-bold font-mono">
-                          <Star className="w-3.5 h-3.5 fill-current" /> {att.rating ?? 4.2}
+                        <h5 className="font-semibold text-slate-900 text-sm">{att.name || 'Attraction'}</h5>
+                        <span className="flex items-center gap-0.5 text-xs text-amber-600 shrink-0 font-bold font-mono">
+                          <Star className="w-3 h-3 fill-current" /> {att.rating ?? 4.2}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400 leading-normal line-clamp-2">{att.description || 'Popular sightseeing spot along the route.'}</p>
+                      <p className="text-xs text-slate-500 leading-normal line-clamp-2">
+                        {att.description || 'Popular sightseeing spot along the highway route.'}
+                      </p>
                     </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 mt-3 pt-2.5 border-t border-white/5 font-mono">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 mt-3 pt-2 border-t border-slate-100 font-mono">
                       <span>Dist: {att.distance || 'En route'}</span>
                       <span>Visit: {att.visitTime || '1-2 hrs'}</span>
                     </div>
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
           </div>
         )}
 
-        {/* Hotels */}
+        {/* Hotels & Stays */}
         {roadDetails.hotels?.length > 0 && (
           <div className="space-y-3">
-            <h4 className="font-display font-bold text-lg text-white flex items-center gap-2">
-              🏨 Hotels &amp; Stays
+            <h4 className="font-semibold text-sm text-slate-900 flex items-center gap-2">
+              <span>🏨</span> Hotels &amp; Accommodations
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {(roadDetails.hotels || []).filter(h => h && typeof h === 'object').map((hotel, idx) => (
-                <div key={idx} className="rounded-xl border border-white/15 bg-slate-900/30 overflow-hidden hover:border-pink-500/20 transition-all flex flex-col sm:flex-row">
-                  {hotel.image && (
-                    <img
-                      src={hotel.image}
-                      alt={hotel.name || 'Hotel'}
-                      className="w-full sm:w-40 h-40 object-cover bg-slate-800 shrink-0"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                  )}
-                  <div className="p-4 flex flex-col justify-between flex-grow">
-                    <div>
-                      <div className="flex justify-between items-start gap-2 mb-1">
-                        <h5 className="font-semibold text-white text-sm">{hotel.name || 'Hotel'}</h5>
-                        <span className="flex items-center gap-0.5 text-xs text-yellow-400 shrink-0 font-bold font-mono">
-                          <Star className="w-3.5 h-3.5 fill-current" /> {hotel.rating ?? 4.0}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {(hotel.amenities || []).map((amenity, amIdx) => (
-                          <span key={amIdx} className="bg-slate-800 text-[10px] text-slate-300 px-2 py-0.5 rounded border border-white/5">
-                            {amenity}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {(roadDetails.hotels || []).filter(h => h && typeof h === 'object').map((hotel, idx) => {
+                const hotelPrice = typeof hotel.price === 'number' ? `₹${hotel.price.toLocaleString()}` : (hotel.price ? `₹${hotel.price}` : 'N/A');
+                return (
+                  <Card key={idx} className="border-slate-200 shadow-xs bg-white overflow-hidden hover:border-blue-300 transition-all flex flex-col sm:flex-row">
+                    {hotel.image && (
+                      <img
+                        src={hotel.image}
+                        alt={hotel.name || 'Hotel'}
+                        className="w-full sm:w-36 h-32 object-cover bg-slate-100 shrink-0"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    )}
+                    <div className="p-4 flex flex-col justify-between flex-grow">
+                      <div>
+                        <div className="flex justify-between items-start gap-2 mb-1">
+                          <h5 className="font-semibold text-slate-900 text-sm">{hotel.name || 'Hotel'}</h5>
+                          <span className="text-xs font-bold text-slate-900 font-mono">
+                            {hotelPrice}/night
                           </span>
-                        ))}
+                        </div>
+                        <p className="text-xs text-slate-500 line-clamp-1">
+                          {hotel.amenities?.join(' · ') || 'Comfortable stay with modern amenities'}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-3 pt-2 border-t border-slate-100 font-mono">
+                        <span>{hotel.distance || 'Near destination'}</span>
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name || 'Hotel')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1 font-sans"
+                        >
+                          Details <ExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-xs mt-4 pt-2.5 border-t border-white/5">
-                      <div className="font-mono">
-                        <span className="text-[10px] text-slate-500 block">Per Night</span>
-                        <span className="text-sm font-bold text-emerald-400">
-                          {typeof hotel.price === 'number' && !Number.isNaN(hotel.price)
-                            ? `₹${hotel.price.toLocaleString()}`
-                            : (hotel.price ? (String(hotel.price).startsWith('₹') ? hotel.price : `₹${hotel.price}`) : 'N/A')}
-                        </span>
-                      </div>
-                      <a
-                        href="https://www.booking.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-1.5 bg-pink-600 hover:bg-pink-500 text-white font-medium text-xs rounded-lg transition-all"
-                      >
-                        Book Hotel
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                  </Card>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Emergency services */}
-        <div className="p-4 rounded-xl border border-red-500/10 bg-red-500/5">
-          <h4 className="font-display font-bold text-sm text-red-400 flex items-center gap-2 mb-3">
-            <HeartPulse className="w-4.5 h-4.5" />
-            Emergency Support Along the Route
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            <div>
-              <span className="font-semibold text-slate-300 uppercase block mb-1">Hospitals</span>
-              <ul className="space-y-1 text-slate-400 list-disc pl-4">
-                {roadDetails.emergencies?.hospitals?.map((item, idx) => <li key={idx}>{item}</li>)}
-              </ul>
-            </div>
-            <div>
-              <span className="font-semibold text-slate-300 uppercase block mb-1">Police Units</span>
-              <ul className="space-y-1 text-slate-400 list-disc pl-4">
-                {roadDetails.emergencies?.police?.map((item, idx) => <li key={idx}>{item}</li>)}
-              </ul>
-            </div>
-            <div>
-              <span className="font-semibold text-slate-300 uppercase block mb-1">Mechanics</span>
-              <ul className="space-y-1 text-slate-400 list-disc pl-4">
-                {roadDetails.emergencies?.mechanics?.map((item, idx) => <li key={idx}>{item}</li>)}
-              </ul>
-            </div>
-          </div>
-        </div>
-
       </div>
+
     </div>
   );
 }

@@ -577,10 +577,17 @@ export default function PlannerPage() {
           <div className="lg:col-span-8 space-y-6">
             
             {/* Travel Options Card */}
-            <div className="p-5 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-sm">
-              <h3 className="font-display font-bold text-lg text-white mb-4">
-                Compare & Book Transports
-              </h3>
+            <div className="p-5 sm:p-6 rounded-xl bg-white border border-slate-200/90 shadow-xs">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                <div>
+                  <h3 className="font-semibold text-lg text-slate-900 tracking-tight">
+                    Transport Options
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Compare flights, road routes, and ground transit for your journey.
+                  </p>
+                </div>
+              </div>
               <TravelOptions
                 from={activeTrip.from}
                 to={activeTrip.to}
