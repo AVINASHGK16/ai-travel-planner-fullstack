@@ -15,7 +15,7 @@ import SettingsPanel from './components/SettingsPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import { generateMockData, getAIGeneration } from './utils/planner';
 import { getCurrentUser, logout as apiLogout } from './services/authService';
-import { fetchTrips as apiFetchTrips, saveTrip as apiSaveTrip, deleteTrip as apiDeleteTrip } from './services/tripService';
+import { getTrips, createTrip, deleteTrip } from './services/tripService';
 
 // Robust LocalStorage Wrapper with quota error handling, safe parsing, and schema validation
 export const storage = {
@@ -159,7 +159,6 @@ export default function App() {
       active = false;
     };
   }, []);
-
   // Load saved trips when user authenticates
   useEffect(() => {
     let active = true;
@@ -169,7 +168,7 @@ export default function App() {
       if (auth.user && auth.token) {
         setLoadingTrips(true);
         try {
-          const response = await apiFetchTrips(auth.token, controller.signal);
+          const response = await getTrips(auth.token, controller.signal);
           if (!active) return;
 
           if (response.ok) {
@@ -426,7 +425,7 @@ export default function App() {
 
     setSavingTrip(true);
     try {
-      const response = await apiSaveTrip(tripToSave, auth.token);
+      const response = await createTrip(tripToSave, auth.token);
 
       if (response.ok) {
         const savedData = response.data;
@@ -510,7 +509,7 @@ export default function App() {
 
       // Backend trip: requires authenticated server confirmation
       try {
-        const response = await apiDeleteTrip(targetId, auth.token);
+        const response = await deleteTrip(targetId, auth.token);
 
         if (response.status === 401 || response.status === 403) {
           alert('Your session has expired. Please sign in again.');

@@ -1,5 +1,5 @@
 // AI Travel Planner Utility for Data Generation and API Integration
-import { generateTripPlan, sendChatMessage } from '../services/aiService.js';
+import { generateTrip, generateTripPlan, sendChatMessage } from '../services/aiService.js';
 
 // Local coordinates database for drawing beautiful Leaflet routes
 export const cityCoordinates = {
@@ -277,7 +277,7 @@ export function generateMockData(from, to, date, returnDate, travelers, budget) 
 
 // Invoke the backend proxy to get AI-powered itineraries (delegated to aiService)
 export async function getAIGeneration(searchParams, externalSignal) {
-  return generateTripPlan(searchParams, externalSignal);
+  return generateTrip(searchParams, externalSignal);
 }
 
 

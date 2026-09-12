@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Cloud, Sun, CloudRain, Wind, AlertTriangle, Thermometer, Loader2 } from 'lucide-react';
-import { fetchWeather } from '../services/weatherService';
+import { getWeather } from '../services/weatherService';
 
 export default function WeatherInfo({ weather, destination }) {
   const [liveWeather, setLiveWeather] = useState(weather);
@@ -23,25 +23,7 @@ export default function WeatherInfo({ weather, destination }) {
     const fetchLiveWeather = async () => {
       setLoadingWeather(true);
       try {
-        const res = await fetchWeather(targetCity, controller.signal);
-        
-        if (!res.ok) {
-          if (res.status === 404) {
-            throw new Error(`Weather station not found for "${targetCity}".`);
-          }
-          if (res.status === 429) {
-            throw new Error('Weather update rate limit reached. Please check back later.');
-          }
-          if (res.status === 503) {
-            throw new Error('Live weather service is not configured on the server.');
-          }
-          throw new Error(res.data?.error || 'Live weather service is temporarily unavailable.');
-        }
-
-        const data = res.data;
-        if (!data || typeof data.temp !== 'string' || !data.temp.trim()) {
-          throw new Error('Weather service returned incomplete information.');
-        }
+        const data = await getWeather(targetCity, controller.signal);
         
         if (!active) return;
         

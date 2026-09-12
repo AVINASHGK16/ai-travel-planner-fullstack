@@ -6,7 +6,7 @@ import { request } from './apiClient.js';
  * @param {AbortSignal} [signal]
  * @returns {Promise<Object>}
  */
-export const generateTripPlan = async (searchParams, signal = null) => {
+export const generateTrip = async (searchParams, signal = null) => {
   try {
     const body = {
       from: searchParams.from,
@@ -47,6 +47,9 @@ export const generateTripPlan = async (searchParams, signal = null) => {
     throw error;
   }
 };
+
+/** @alias generateTrip */
+export const generateTripPlan = generateTrip;
 
 /**
  * Send chat message to AI assistant backend proxy
@@ -100,3 +103,11 @@ export const sendChatMessage = async ({ message, chatHistory = [], tripContext =
     throw error;
   }
 };
+
+const aiService = {
+  generateTrip,
+  generateTripPlan,
+  sendChatMessage
+};
+
+export default aiService;
