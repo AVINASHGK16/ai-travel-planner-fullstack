@@ -4,37 +4,72 @@
 @import "leaflet/dist/leaflet.css";
 
 @theme {
-  --font-sans: 'Inter', sans-serif;
-  --font-display: 'Outfit', sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --color-primary: #2563EB;
+  --color-primary-hover: #1D4ED8;
+  --color-ai: #7C3AED;
+  --color-accent: #10B981;
+  --color-background: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-surface-subtle: #F1F5F9;
+  --color-border: #E2E8F0;
+  --color-heading: #0F172A;
+  --color-body: #334155;
+  --color-muted: #64748B;
+  --color-error: #DC2626;
+  --color-warning: #D97706;
+
+  --radius-input: 8px;
+  --radius-btn: 8px;
+  --radius-card: 12px;
+  --radius-hero: 16px;
 }
 
 :root {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   scroll-behavior: smooth;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-ai: #7c3aed;
+  --color-accent: #10b981;
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-heading: #0f172a;
+  --color-body: #334155;
+  --color-muted: #64748b;
+  --color-error: #dc2626;
+  --color-warning: #d97706;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #0b0f19;
-  color: #f3f4f6;
+  background-color: var(--color-background, #f8fafc);
+  color: var(--color-body, #334155);
+  font-family: var(--font-sans, 'Inter', sans-serif);
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom Scrollbar */
+/* Custom Clean Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #f1f5f9;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #cbd5e1;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #94a3b8;
 }
 
 /* Glassmorphism Classes */
