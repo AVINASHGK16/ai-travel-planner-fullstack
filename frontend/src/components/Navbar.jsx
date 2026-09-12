@@ -1,16 +1,25 @@
 import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Compass, Moon, Sun, Key, User, FolderHeart } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export default function Navbar({
   theme,
   setTheme,
   onOpenSettings,
-  auth,
-  setAuth,
-  setView,
-  view,
-  onLogout
+  auth: propAuth,
+  onLogout: propOnLogout
 }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const authContext = useAuth();
+
+  const user = propAuth?.user || authContext?.user;
+  const logout = propOnLogout || authContext?.logout;
+  const openAuthModal = authContext?.openAuthModal;
+
+  const isDashboard = location.pathname === '/dashboard';
+
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
@@ -18,12 +27,12 @@ export default function Navbar({
   };
 
   const handleAuthClick = () => {
-    if (auth?.user) {
+    if (user) {
       if (confirm('Are you sure you want to logout?')) {
-        if (onLogout) onLogout();
+        if (logout) logout();
       }
     } else {
-      setAuth({ ...auth, modalOpen: true });
+      if (openAuthModal) openAuthModal();
     }
   };
 
@@ -33,7 +42,7 @@ export default function Navbar({
         
         {/* Brand Logo */}
         <div 
-          onClick={() => setView('home')} 
+          onClick={() => navigate('/')} 
           className="flex items-center gap-2 cursor-pointer select-none group"
         >
           <div className="p-2 rounded-xl bg-blue-600 text-white group-hover:scale-110 transition-transform duration-300 shadow-md shadow-blue-500/20">
@@ -50,9 +59,9 @@ export default function Navbar({
           {/* Dashboard/Saved Trips */}
           <button
             type="button"
-            onClick={() => setView(view === 'dashboard' ? 'home' : 'dashboard')}
+            onClick={() => navigate(isDashboard ? '/' : '/dashboard')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all duration-300 border cursor-pointer ${
-              view === 'dashboard'
+              isDashboard
                 ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-transparent'
                 : 'text-slate-300 border-white/10 hover:bg-white/5'
             }`}
@@ -64,7 +73,10 @@ export default function Navbar({
           {/* Dev/API Keys Settings */}
           <button
             type="button"
-            onClick={onOpenSettings}
+            onClick={() => {
+              if (onOpenSettings) onOpenSettings();
+              else navigate('/settings');
+            }}
             title="Configure API Keys"
             className="p-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 transition-all duration-200 cursor-pointer"
           >
@@ -92,7 +104,7 @@ export default function Navbar({
           >
             <User className="w-4.5 h-4.5 text-blue-400" />
             <span className="text-sm font-medium">
-              {auth?.user ? (auth.user.name?.split(' ')[0] || auth.user.email?.split('@')[0] || 'User') : 'Sign In'}
+              {user ? (user.name?.split(' ')[0] || user.email?.split('@')[0] || 'User') : 'Sign In'}
             </span>
           </button>
 
