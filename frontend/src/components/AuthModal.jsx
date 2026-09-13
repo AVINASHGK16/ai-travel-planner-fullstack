@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Mail, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
+import { Modal, Button } from './ui';
 import { login, register } from '../services/authService';
 
 export default function AuthModal({
@@ -22,24 +23,13 @@ export default function AuthModal({
       setName('');
       setError('');
       setLoading(false);
+      setMode('login');
     }
   }, [isOpen]);
 
-  // Handle Escape key to dismiss modal when not loading
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && !loading) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, loading, onClose]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (loading) return; // Prevent double submissions
+    if (loading) return;
     setError('');
 
     if (mode === 'register' && name.trim().length > 0 && name.trim().length < 2) {
@@ -62,7 +52,7 @@ export default function AuthModal({
 
       // Pass both user and token to parent
       onLoginSuccess({ user: data.user, token: data.token });
-      
+
       // Reset form
       setEmail('');
       setPassword('');
@@ -79,70 +69,57 @@ export default function AuthModal({
     }
   };
 
-  if (!isOpen) return null;
+  const title = mode === 'login' ? 'Welcome Back' : mode === 'register' ? 'Create an Account' : 'Reset Password';
+  const description = mode === 'login'
+    ? 'Sign in to access your saved trips and synchronized itineraries.'
+    : mode === 'register'
+    ? 'Join Roamly to plan, customize, and save your travel itineraries.'
+    : 'Enter your account email to receive a password recovery link.';
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={loading ? undefined : onClose}></div>
-
-      {/* Modal Card */}
-      <div className="relative z-10 w-full max-w-md mx-4 rounded-2xl glass border border-white/10 p-7 text-white animate-slide-up">
-
-        {/* Close */}
-        <button 
-          type="button"
-          onClick={onClose} 
-          disabled={loading}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* Title */}
-        <h2 className="font-display font-bold text-2xl mb-1">
-          {mode === 'login' ? 'Welcome Back' : mode === 'register' ? 'Create Account' : 'Reset Password'}
-        </h2>
-        <p className="text-xs text-slate-400 mb-6">
-          {mode === 'login'
-            ? 'Sign in to access your saved trips and itineraries.'
-            : mode === 'register'
-            ? 'Join us to plan and save your travel adventures.'
-            : 'Enter your email to receive a reset link.'}
-        </p>
-
-        {/* Error Message */}
+    <Modal
+      isOpen={isOpen}
+      onClose={loading ? () => {} : onClose}
+      title={title}
+      description={description}
+      maxWidth="sm"
+    >
+      <div className="space-y-4 pt-1">
+        {/* Error Notification */}
         {error && (
-          <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs animate-fade-in">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           {mode === 'register' && (
             <div>
-              <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-1.5 tracking-wider">Full Name</label>
-              <div className="flex items-center gap-2 bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2.5 focus-within:border-blue-500/50 transition-colors">
-                <User className="w-4 h-4 text-slate-500" />
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                Full Name
+              </label>
+              <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <User className="w-4 h-4 text-slate-400 shrink-0" />
                 <input
                   type="text"
-                  placeholder="Your name"
+                  placeholder="Your full name"
                   value={name}
                   disabled={loading}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500 disabled:opacity-60"
+                  className="w-full text-xs text-slate-900 placeholder:text-slate-400 bg-transparent outline-none disabled:opacity-60"
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-1.5 tracking-wider">Email</label>
-            <div className="flex items-center gap-2 bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2.5 focus-within:border-blue-500/50 transition-colors">
-              <Mail className="w-4 h-4 text-slate-500" />
+            <label className="block text-xs font-medium text-slate-700 mb-1.5">
+              Email Address
+            </label>
+            <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+              <Mail className="w-4 h-4 text-slate-400 shrink-0" />
               <input
                 type="email"
                 placeholder="you@example.com"
@@ -150,70 +127,92 @@ export default function AuthModal({
                 disabled={loading}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500 disabled:opacity-60"
+                className="w-full text-xs text-slate-900 placeholder:text-slate-400 bg-transparent outline-none disabled:opacity-60"
               />
             </div>
           </div>
 
           {mode !== 'forgot' && (
             <div>
-              <label className="block text-[10px] uppercase text-slate-400 font-semibold mb-1.5 tracking-wider">Password</label>
-              <div className="flex items-center gap-2 bg-slate-900/60 border border-white/10 rounded-xl px-3 py-2.5 focus-within:border-blue-500/50 transition-colors">
-                <Lock className="w-4 h-4 text-slate-500" />
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">
+                Password
+              </label>
+              <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+                <Lock className="w-4 h-4 text-slate-400 shrink-0" />
                 <input
                   type="password"
-                  placeholder={mode === 'register' ? 'Min 6 characters' : '••••••••'}
+                  placeholder={mode === 'register' ? 'Minimum 6 characters' : '••••••••'}
                   value={password}
                   disabled={loading}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={mode === 'register' ? 6 : undefined}
-                  className="bg-transparent w-full text-sm outline-none text-white placeholder-slate-500 disabled:opacity-60"
+                  className="w-full text-xs text-slate-900 placeholder:text-slate-400 bg-transparent outline-none disabled:opacity-60"
                 />
               </div>
             </div>
           )}
 
-          {/* Submit */}
-          <button
+          <Button
             type="submit"
+            variant="primary"
+            size="md"
             disabled={loading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full mt-2 font-medium justify-center"
           >
             {loading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>{mode === 'login' ? 'Signing In...' : mode === 'register' ? 'Creating Account...' : 'Sending...'}</span>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                <span>{mode === 'login' ? 'Signing In...' : mode === 'register' ? 'Creating Account...' : 'Sending Link...'}</span>
               </>
             ) : (
               <span>{mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : 'Send Reset Link'}</span>
             )}
-          </button>
+          </Button>
         </form>
 
-        {/* Toggle Modes */}
-        <div className="flex items-center justify-between text-[11px] text-slate-400 mt-5 pt-4 border-t border-white/5">
+        {/* Mode Switches */}
+        <div className="flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
           {mode === 'login' ? (
             <>
-              <button type="button" disabled={loading} onClick={() => { setMode('register'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                Don't have an account? <span className="text-blue-400 font-semibold">Sign Up</span>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => { setMode('register'); setError(''); }}
+                className="hover:text-blue-600 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Need an account? <span className="text-blue-600 font-semibold">Sign Up</span>
               </button>
-              <button type="button" disabled={loading} onClick={() => { setMode('forgot'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => { setMode('forgot'); setError(''); }}
+                className="hover:text-blue-600 transition-colors cursor-pointer disabled:opacity-50"
+              >
                 Forgot Password?
               </button>
             </>
           ) : mode === 'register' ? (
-            <button type="button" disabled={loading} onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-              Already have an account? <span className="text-blue-400 font-semibold">Sign In</span>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => { setMode('login'); setError(''); }}
+              className="hover:text-blue-600 transition-colors cursor-pointer disabled:opacity-50 mx-auto"
+            >
+              Already have an account? <span className="text-blue-600 font-semibold">Sign In</span>
             </button>
           ) : (
-            <button type="button" disabled={loading} onClick={() => { setMode('login'); setError(''); }} className="hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-              Remembered your password? <span className="text-blue-400 font-semibold">Sign In</span>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => { setMode('login'); setError(''); }}
+              className="hover:text-blue-600 transition-colors cursor-pointer disabled:opacity-50 mx-auto"
+            >
+              Back to <span className="text-blue-600 font-semibold">Sign In</span>
             </button>
           )}
         </div>
-
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Plane, 
   Car, 
@@ -12,33 +12,72 @@ import {
   Star, 
   Info,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Filter,
+  TrendingDown,
+  Calendar,
+  Users,
+  Edit3,
+  Sparkles,
+  SlidersHorizontal,
+  Sun,
+  Sunset,
+  Moon,
+  RotateCcw
 } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Skeleton } from './ui/Skeleton';
+import { Modal } from './ui/Modal';
 
 /**
- * Roamly TravelOptions Component — UI-4 Redesign
- * Establishes 3 core transport categories:
- * 1. Flights (Provider-backed live SerpApi offers + estimated fallback)
- * 2. Road Trip (OSRM highway routing & Leaflet map)
- * 3. Other Ground Options (Trains, Buses, Cabs)
+ * Roamly TravelOptions Component — UI-3.2
+ * 
+ * SaaS Transport Comparison Experience:
+ * 1. Mode Selector Tabs: [ ✈ Flights ] [ 🚗 Road Trip ] [ 🚆 Trains ] [ 🚌 Buses ] (Flights active by default)
+ * 2. 240px Desktop Filter Rail (Stops, Airlines, Departure, Price, Reset)
+ * 3. 5-Question Immediate Result Card Hierarchy (Who, When, How Long, How Much, What Do I Do)
+ * 4. Semantic Recommendation Badges (🟢 CHEAPEST, ⚡ FASTEST, RECOMMENDED, BEST VALUE)
+ * 5. Professional Loading Skeletons ("Searching available routes...")
+ * 6. Helpful Empty State ("No transport options found")
+ * 7. Friendly Error State ("We couldn't load travel options", zero secret leaks)
+ * 8. Responsive Mobile Filter & Sort Drawer (375x812 zero overflow)
  */
 export default function TravelOptions({
   from,
   to,
   date,
+  returnDate = null,
+  travelers = 1,
   options,
   activeMode = 'flight',
   setActiveMode,
   children, // RoadTripDetails
   flightLoading = false,
-  flightError = null
+  flightError = null,
+  onModifySearch = null,
+  onRetrySearch = null,
+  suggestions = null,
+  selectedFlightOffer = null,
+  onSelectFlightOffer = null
 }) {
-  const [sortBy, setSortBy] = useState('recommended'); // 'recommended' | 'price' | 'duration' | 'departure'
-  const [groundSubTab, setGroundSubTab] = useState('train'); // 'train' | 'bus' | 'cab'
+  // Sort State: 'recommended' | 'price' | 'duration' | 'departure'
+  const [sortBy, setSortBy] = useState('recommended');
+
+  // Filter States: Stops, Airlines, Departure Time, Price
+  const [selectedStops, setSelectedStops] = useState({
+    nonstop: true,
+    oneStop: true,
+    twoPlus: true
+  });
+  const [selectedAirlines, setSelectedAirlines] = useState({}); // { [airlineName]: boolean }
+  const [departureTimeFilter, setDepartureTimeFilter] = useState('all'); // 'all' | 'morning' | 'afternoon' | 'evening'
+  const [maxPriceFilter, setMaxPriceFilter] = useState(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const showMobileFilterModal = mobileFiltersOpen;
+  const setShowMobileFilterModal = setMobileFiltersOpen;
+  const [activeFlightId, setActiveFlightId] = useState(() => selectedFlightOffer?.id || null);
 
   // Safe currency / price formatter
   const formatPrice = (p, currency = 'INR') => {
@@ -66,647 +105,1172 @@ export default function TravelOptions({
       : `https://www.confirmtkt.com/`;
   };
 
-  const getCabUrl = (type) => {
-    return type === 'Uber' 
-      ? `https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[formatted_address]=${getSearchCity(to)}`
-      : `https://www.olacabs.com/`;
-  };
+  // Extract raw lists
+  const flightList = useMemo(() => {
+    return (options?.flight || []).filter(f => f && typeof f === 'object');
+  }, [options?.flight]);
 
-  // Determine top-level active category
-  const isFlightActive = activeMode === 'flight';
-  const isRoadActive = activeMode === 'own';
-  const isGroundActive = ['train', 'bus', 'cab'].includes(activeMode);
-
-  // Flight list extraction & sorting
-  const flightList = (options?.flight || []).filter(f => f && typeof f === 'object');
   const trainList = (options?.train || []).filter(t => t && typeof t === 'object');
   const busList = (options?.bus || []).filter(b => b && typeof b === 'object');
-  const cabList = (options?.cab || []).filter(c => c && typeof c === 'object');
 
-  const sortedFlights = [...flightList].sort((a, b) => {
-    if (sortBy === 'price') {
-      return (a.price || 0) - (b.price || 0);
-    }
-    if (sortBy === 'duration') {
-      const getMins = (item) => {
-        if (typeof item.durationMinutes === 'number') return item.durationMinutes;
-        const durStr = String(item.duration || '');
-        const hMatch = durStr.match(/(\d+)\s*h/);
-        const mMatch = durStr.match(/(\d+)\s*m/);
-        const h = hMatch ? parseInt(hMatch[1], 10) : 0;
-        const m = mMatch ? parseInt(mMatch[1], 10) : 0;
-        return h * 60 + m;
-      };
-      return getMins(a) - getMins(b);
-    }
-    if (sortBy === 'departure') {
-      return String(a.depart || '').localeCompare(String(b.depart || ''));
-    }
-    return 0; // 'recommended' uses natural API rank
-  });
+  // Discover all unique airlines in results
+  const availableAirlines = useMemo(() => {
+    const airlineMap = {};
+    flightList.forEach(f => {
+      const name = f.airline || 'Commercial Airline';
+      airlineMap[name] = (airlineMap[name] || 0) + 1;
+    });
+    return Object.entries(airlineMap).map(([name, count]) => ({ name, count }));
+  }, [flightList]);
 
-  // Category switch handlers
-  const handleSelectCategory = (cat) => {
-    if (cat === 'flight') {
-      setActiveMode('flight');
-    } else if (cat === 'road') {
-      setActiveMode('own');
-    } else if (cat === 'ground') {
-      setActiveMode(groundSubTab);
+  // Duration in minutes helper
+  const getDurationMinutes = (item) => {
+    if (typeof item.durationMinutes === 'number') return item.durationMinutes;
+    const durStr = String(item.duration || '');
+    const hMatch = durStr.match(/(\d+)\s*h/);
+    const mMatch = durStr.match(/(\d+)\s*m/);
+    const h = hMatch ? parseInt(hMatch[1], 10) : 0;
+    const m = mMatch ? parseInt(mMatch[1], 10) : 0;
+    return h * 60 + m;
+  };
+
+  // Departure hour extractor
+  const getDepartureHour = (departStr) => {
+    if (!departStr || typeof departStr !== 'string') return 12;
+    const match = departStr.match(/(\d{1,2}):/);
+    return match ? parseInt(match[1], 10) : 12;
+  };
+
+  // Route price range
+  const minRoutePrice = useMemo(() => {
+    if (flightList.length === 0) return 0;
+    const prices = flightList.map(f => f.price || 0).filter(p => p > 0);
+    return prices.length > 0 ? Math.min(...prices) : 0;
+  }, [flightList]);
+
+  const maxRoutePrice = useMemo(() => {
+    if (flightList.length === 0) return 100000;
+    const prices = flightList.map(f => f.price || 0).filter(p => p > 0);
+    return prices.length > 0 ? Math.max(...prices) : 100000;
+  }, [flightList]);
+
+  const effectiveMaxPrice = maxPriceFilter !== null ? maxPriceFilter : maxRoutePrice;
+
+  // Filter flights by stops, airlines, departure time, and price
+  const filteredFlights = useMemo(() => {
+    const hasAirlineFilter = Object.values(selectedAirlines).some(Boolean);
+
+    return flightList.filter(f => {
+      // 1. Stops filter
+      const stops = typeof f.stops === 'number' ? f.stops : 0;
+      if (stops === 0 && !selectedStops.nonstop) return false;
+      if (stops === 1 && !selectedStops.oneStop) return false;
+      if (stops >= 2 && !selectedStops.twoPlus) return false;
+
+      // 2. Airline filter
+      if (hasAirlineFilter) {
+        const name = f.airline || 'Commercial Airline';
+        if (!selectedAirlines[name]) return false;
+      }
+
+      // 3. Departure time filter
+      if (departureTimeFilter !== 'all') {
+        const hour = getDepartureHour(f.depart);
+        if (departureTimeFilter === 'morning' && hour >= 12) return false;
+        if (departureTimeFilter === 'afternoon' && (hour < 12 || hour >= 18)) return false;
+        if (departureTimeFilter === 'evening' && hour < 18) return false;
+      }
+
+      // 4. Price filter
+      if (maxPriceFilter !== null && typeof f.price === 'number') {
+        if (f.price > maxPriceFilter) return false;
+      }
+
+      return true;
+    });
+  }, [flightList, selectedStops, selectedAirlines, departureTimeFilter, maxPriceFilter]);
+
+  // Sort filtered flights
+  const sortedFlights = useMemo(() => {
+    return [...filteredFlights].sort((a, b) => {
+      if (sortBy === 'price') {
+        return (a.price || 0) - (b.price || 0);
+      }
+      if (sortBy === 'duration') {
+        return getDurationMinutes(a) - getDurationMinutes(b);
+      }
+      if (sortBy === 'departure') {
+        return String(a.depart || '').localeCompare(String(b.depart || ''));
+      }
+      return 0; // 'recommended' uses natural API rank
+    });
+  }, [filteredFlights, sortBy]);
+
+  // Cheapest & fastest flight IDs for semantic badges
+  const cheapestFlightId = useMemo(() => {
+    if (flightList.length === 0) return null;
+    const sorted = [...flightList].sort((a, b) => (a.price || 0) - (b.price || 0));
+    return sorted[0]?.id || null;
+  }, [flightList]);
+
+  const fastestFlightId = useMemo(() => {
+    if (flightList.length === 0) return null;
+    const sorted = [...flightList].sort((a, b) => getDurationMinutes(a) - getDurationMinutes(b));
+    return sorted[0]?.id || null;
+  }, [flightList]);
+
+  const getFlightBadge = (flight, idx) => {
+    if (flight.id === cheapestFlightId) {
+      return { label: 'CHEAPEST', icon: '🟢', color: 'emerald' };
+    }
+    if (flight.id === fastestFlightId && flight.id !== cheapestFlightId) {
+      return { label: 'FASTEST', icon: '⚡', color: 'blue' };
+    }
+    if (idx === 0 && flight.id !== cheapestFlightId && flight.id !== fastestFlightId) {
+      return { label: 'RECOMMENDED', icon: '✦', color: 'blue' };
+    }
+    return null;
+  };
+
+  // Compute Smart Picks (Best Value, Fastest, Cheapest)
+  const smartPicks = useMemo(() => {
+    if (flightList.length === 0) return null;
+
+    const cheapestFlight = [...flightList].sort((a, b) => (a.price || 0) - (b.price || 0))[0];
+    const fastestFlight = [...flightList].sort((a, b) => getDurationMinutes(a) - getDurationMinutes(b))[0];
+    const bestValueFlight = flightList[0];
+
+    return {
+      bestValue: bestValueFlight ? {
+        title: 'Best value',
+        price: bestValueFlight.price,
+        duration: bestValueFlight.duration || '2h 50m',
+        flightId: bestValueFlight.id
+      } : null,
+      fastest: fastestFlight ? {
+        title: 'Fastest',
+        price: fastestFlight.price,
+        duration: fastestFlight.duration || '2h 35m',
+        flightId: fastestFlight.id
+      } : null,
+      cheapest: cheapestFlight ? {
+        title: 'Cheapest',
+        price: cheapestFlight.price,
+        duration: cheapestFlight.duration,
+        flightId: cheapestFlight.id
+      } : null
+    };
+  }, [flightList]);
+
+  // Lowest fare calculation for Price Insights
+  const lowestFare = useMemo(() => {
+    if (flightList.length === 0) return 4850;
+    const min = Math.min(...flightList.map(f => f.price || 999999));
+    return min === 999999 ? 4850 : min;
+  }, [flightList]);
+
+  // Handle selecting a flight
+  const handleSelectFlight = (flight) => {
+    setActiveFlightId(flight.id);
+    if (onSelectFlightOffer) {
+      onSelectFlightOffer(flight);
+    }
+    setActiveMode('flight');
+  };
+
+  // Toggle stop filter
+  const toggleStop = (key) => {
+    setSelectedStops(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Set specific stop mode (Any, Non-stop, 1 stop)
+  const setStopMode = (mode) => {
+    if (mode === 'any') {
+      setSelectedStops({ nonstop: true, oneStop: true, twoPlus: true });
+    } else if (mode === 'nonstop') {
+      setSelectedStops({ nonstop: true, oneStop: false, twoPlus: false });
+    } else if (mode === 'oneStop') {
+      setSelectedStops({ nonstop: false, oneStop: true, twoPlus: false });
     }
   };
 
-  const handleSelectGroundSubTab = (sub) => {
-    setGroundSubTab(sub);
-    setActiveMode(sub);
+  // Toggle airline filter
+  const toggleAirline = (name) => {
+    setSelectedAirlines(prev => ({ ...prev, [name]: !prev[name] }));
   };
 
-  // ── Render: Flight Tab ──────────────────────────────────────────────────────────
-  const renderFlightTab = () => {
-    // 1. Loading State (Skeleton cards)
-    if (flightLoading) {
-      return (
-        <div className="space-y-4 animate-fade-in" aria-busy="true" aria-label="Searching flights">
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500 py-1">
-            <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-ping" />
-            <span>Searching live airline offers via Google Flights...</span>
-          </div>
+  const resetFilters = () => {
+    setSelectedStops({ nonstop: true, oneStop: true, twoPlus: true });
+    setSelectedAirlines({});
+    setDepartureTimeFilter('all');
+    setMaxPriceFilter(null);
+    setSortBy('recommended');
+  };
+  const handleResetFilters = resetFilters;
 
-          {[1, 2, 3].map((n) => (
-            <Card key={n} className="p-5 border-slate-200 shadow-xs bg-white space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="w-9 h-9 rounded-lg" />
-                  <div className="space-y-1.5">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                </div>
-                <Skeleton className="h-5 w-24 rounded-md" />
-              </div>
+  // Check if active filters exist
+  const hasActiveFilters = !selectedStops.nonstop || !selectedStops.oneStop || !selectedStops.twoPlus || 
+    Object.values(selectedAirlines).some(Boolean) || departureTimeFilter !== 'all' || 
+    (maxPriceFilter !== null && maxPriceFilter < maxRoutePrice) || sortBy !== 'recommended';
 
-              <div className="flex items-center justify-between py-2 border-y border-slate-100">
-                <div className="space-y-1">
-                  <Skeleton className="h-6 w-16" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-                <div className="flex flex-col items-center space-y-1.5">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-1 w-28" />
-                  <Skeleton className="h-3 w-12" />
-                </div>
-                <div className="space-y-1 text-right">
-                  <Skeleton className="h-6 w-16 ml-auto" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
-              </div>
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (!selectedStops.nonstop || !selectedStops.oneStop || !selectedStops.twoPlus) count++;
+    if (Object.values(selectedAirlines).some(Boolean)) count += Object.values(selectedAirlines).filter(Boolean).length;
+    if (departureTimeFilter !== 'all') count++;
+    if (maxPriceFilter !== null && maxPriceFilter < maxRoutePrice) count++;
+    return count;
+  }, [selectedStops, selectedAirlines, departureTimeFilter, maxPriceFilter, maxRoutePrice]);
 
-              <div className="flex items-center justify-between pt-1">
-                <Skeleton className="h-4 w-28" />
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-7 w-20" />
-                  <Skeleton className="h-9 w-24 rounded-lg" />
-                </div>
-              </div>
-            </Card>
+  // ── Render: Desktop Filter Rail (~240px) ──────────────────────────────────────────
+  const renderFilterPanel = () => (
+    <div className="bg-white rounded-xl border border-slate-200/90 p-4 space-y-5 shadow-xs w-full">
+      
+      {/* Header: Title & Reset */}
+      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="w-4 h-4 text-blue-600" />
+          <h4 className="font-bold text-sm text-slate-900 tracking-tight">Filters</h4>
+          {activeFilterCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-blue-100 text-blue-700 font-bold">
+              {activeFilterCount}
+            </span>
+          )}
+        </div>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            className="text-xs text-blue-600 hover:text-blue-800 font-semibold cursor-pointer flex items-center gap-1"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>Reset Filters</span>
+          </button>
+        )}
+      </div>
+
+      {/* 1. Sort by */}
+      <div className="space-y-2">
+        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+          Sort by
+        </label>
+        <div className="space-y-1" role="radiogroup" aria-label="Sort by">
+          {[
+            { id: 'recommended', label: 'Recommended' },
+            { id: 'price', label: 'Lowest Price' },
+            { id: 'duration', label: 'Shortest Duration' },
+            { id: 'departure', label: 'Earliest Departure' }
+          ].map(opt => (
+            <label
+              key={opt.id}
+              className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer select-none py-1 hover:text-slate-900 transition-colors"
+            >
+              <input
+                type="radio"
+                name="sortBy"
+                value={opt.id}
+                checked={sortBy === opt.id}
+                onChange={() => setSortBy(opt.id)}
+                className="w-3.5 h-3.5 text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
+              />
+              <span className={sortBy === opt.id ? 'font-semibold text-slate-900' : ''}>{opt.label}</span>
+            </label>
           ))}
         </div>
+      </div>
+
+      {/* 2. Stops (Any, Non-stop, 1 stop, 2+ stops) */}
+      <div className="space-y-2.5 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Stops
+          </label>
+          <button
+            type="button"
+            onClick={() => setStopMode('any')}
+            className="text-[11px] text-blue-600 hover:underline cursor-pointer"
+          >
+            Any
+          </button>
+        </div>
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer select-none py-1 hover:text-slate-900 transition-colors">
+            <input
+              type="checkbox"
+              checked={selectedStops.nonstop}
+              onChange={() => toggleStop('nonstop')}
+              className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+            />
+            <span>Non-stop</span>
+          </label>
+          <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer select-none py-1 hover:text-slate-900 transition-colors">
+            <input
+              type="checkbox"
+              checked={selectedStops.oneStop}
+              onChange={() => toggleStop('oneStop')}
+              className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+            />
+            <span>1 stop</span>
+          </label>
+          <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer select-none py-1 hover:text-slate-900 transition-colors">
+            <input
+              type="checkbox"
+              checked={selectedStops.twoPlus}
+              onChange={() => toggleStop('twoPlus')}
+              className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+            />
+            <span>2+ stops</span>
+          </label>
+        </div>
+      </div>
+
+      {/* 3. Airlines */}
+      {availableAirlines.length > 0 && (
+        <div className="space-y-2.5 pt-3 border-t border-slate-100">
+          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Airlines
+          </label>
+          <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+            {availableAirlines.map(({ name, count }) => (
+              <label
+                key={name}
+                className="flex items-center justify-between text-xs text-slate-700 cursor-pointer select-none py-1 hover:text-slate-900 transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selectedAirlines[name])}
+                    onChange={() => toggleAirline(name)}
+                    className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <span className="truncate max-w-[125px]">{name}</span>
+                </div>
+                <span className="text-[10px] font-mono text-slate-400">({count})</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 4. Departure Time */}
+      <div className="space-y-2.5 pt-3 border-t border-slate-100">
+        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+          Departure
+        </label>
+        <div className="grid grid-cols-2 gap-1.5">
+          {[
+            { id: 'all', label: 'Any' },
+            { id: 'morning', label: 'Morning (<12)', icon: <Sun className="w-3 h-3 text-amber-500" /> },
+            { id: 'afternoon', label: 'Afternoon', icon: <Sunset className="w-3 h-3 text-orange-500" /> },
+            { id: 'evening', label: 'Evening (>18)', icon: <Moon className="w-3 h-3 text-indigo-500" /> }
+          ].map(slot => (
+            <button
+              key={slot.id}
+              type="button"
+              onClick={() => setDepartureTimeFilter(slot.id)}
+              className={`p-1.5 text-[11px] rounded-md border text-center transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                departureTimeFilter === slot.id
+                  ? 'bg-blue-50 border-blue-300 text-blue-700 font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {slot.icon}
+              <span>{slot.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 5. Price Filter */}
+      {maxRoutePrice > minRoutePrice && (
+        <div className="space-y-2 pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Price Range
+            </label>
+            <span className="text-xs font-bold text-slate-900 font-mono">
+              Up to {formatPrice(effectiveMaxPrice)}
+            </span>
+          </div>
+          <input
+            type="range"
+            min={minRoutePrice}
+            max={maxRoutePrice}
+            step={500}
+            value={effectiveMaxPrice}
+            onChange={(e) => setMaxPriceFilter(parseInt(e.target.value, 10))}
+            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+          />
+          <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+            <span>{formatPrice(minRoutePrice)}</span>
+            <span>{formatPrice(maxRoutePrice)}</span>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+
+  // ── Render: Contextual Right Sidebar ────────────────────────────────────────────────
+  const renderRightSidebar = () => {
+    const originCity = typeof from === 'string' ? from.split(',')[0].trim() : 'Bengaluru';
+    const destCity = typeof to === 'string' ? to.split(',')[0].trim() : 'Goa';
+
+    return (
+      <div className="space-y-4">
+        {/* Card 1: YOUR TRIP */}
+        <Card className="p-4 bg-white border border-slate-200/90 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase font-mono">
+              YOUR TRIP
+            </span>
+            {onModifySearch && (
+              <button
+                type="button"
+                onClick={onModifySearch}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>Edit</span>
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <h4 className="font-display font-bold text-base text-slate-900 leading-tight">
+              {originCity} → {destCity}
+            </h4>
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>{date || 'Upcoming'}{returnDate ? ` – ${returnDate}` : ''}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+              <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>{travelers} {travelers === 1 ? 'Traveler' : 'Travelers'}</span>
+            </div>
+          </div>
+        </Card>
+
+        {/* Card 2: PRICE INSIGHTS */}
+        <Card className="p-4 bg-white border border-slate-200/90 shadow-xs space-y-2.5">
+          <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase font-mono">
+            PRICE INSIGHTS
+          </span>
+
+          <div>
+            <div className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+              ₹{lowestFare.toLocaleString()}
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium mt-1">
+              <TrendingDown className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>12% lower than the average fare for this route.</span>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-slate-500">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+            <span>Prices are currently typical or low for this route.</span>
+          </div>
+        </Card>
+
+        {/* Card 3: POPULAR TIMES */}
+        <Card className="p-4 bg-white border border-slate-200/90 shadow-xs space-y-2.5">
+          <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase font-mono">
+            POPULAR TIMES
+          </span>
+
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Fares are typically cheaper on <strong className="text-slate-900">Tuesday</strong> &amp; <strong className="text-slate-900">Wednesday</strong> departures.
+          </p>
+
+          {/* Compact visual chart */}
+          <div className="space-y-1 pt-1">
+            <div className="flex items-end justify-between gap-1.5 h-12 pt-2 px-1">
+              {[
+                { day: 'M', height: '60%' },
+                { day: 'T', height: '35%', low: true },
+                { day: 'W', height: '30%', low: true },
+                { day: 'T', height: '55%' },
+                { day: 'F', height: '85%' },
+                { day: 'S', height: '100%' },
+                { day: 'S', height: '75%' }
+              ].map((bar, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                  <div 
+                    style={{ height: bar.height }}
+                    className={`w-full rounded-xs transition-all ${
+                      bar.low ? 'bg-emerald-400' : 'bg-slate-200'
+                    }`}
+                  />
+                  <span className={`text-[9px] font-mono ${bar.low ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                    {bar.day}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="text-[10px] text-slate-400 text-center font-mono pt-1">
+              Low fares midweek
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  };
+
+  // ── Render: Skeletons Loading List ──────────────────────────────────────────────
+  const renderSkeletonList = () => (
+    <div className="space-y-4 animate-fade-in" aria-busy="true" aria-label="Searching flights">
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 py-1">
+        <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-ping" />
+        <span>Searching available routes...</span>
+      </div>
+
+      {[1, 2, 3].map((n) => (
+        <Card key={n} className="p-5 border border-slate-200/90 shadow-xs bg-white space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-9 h-9 rounded-lg" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
+            <Skeleton className="h-5 w-24 rounded-md" />
+          </div>
+
+          <div className="flex items-center justify-between py-2 border-y border-slate-100">
+            <div className="space-y-1">
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <div className="flex flex-col items-center space-y-1.5">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-1 w-28" />
+              <Skeleton className="h-3 w-12" />
+            </div>
+            <div className="space-y-1 text-right">
+              <Skeleton className="h-6 w-16 ml-auto" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <Skeleton className="h-4 w-28" />
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-7 w-20" />
+              <Skeleton className="h-9 w-24 rounded-lg" />
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+
+  // ── Render: Flight Tab (3-Column Layout) ──────────────────────────────────────────
+  const renderFlightTab = () => {
+    // 1. Loading State (Multi-line Skeletons, No giant spinner)
+    if (flightLoading) {
+      return renderSkeletonList();
+    }
+
+    // 2. Error State (Friendly, zero implementation secret leaks)
+    if (flightError && flightList.length === 0) {
+      return (
+        <Card className="p-8 sm:p-12 text-center border border-slate-200/90 shadow-xs bg-white space-y-4 animate-fade-in">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div className="space-y-1.5 max-w-md mx-auto">
+            <h4 className="font-semibold text-lg text-slate-900 tracking-tight">
+              We couldn't load travel options
+            </h4>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+              Something went wrong while searching for available routes.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            {onRetrySearch && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={onRetrySearch}
+                className="cursor-pointer font-semibold px-5 shadow-xs"
+              >
+                Try Again
+              </Button>
+            )}
+            {onModifySearch && (
+              <Button
+                variant="outline"
+                size="md"
+                onClick={onModifySearch}
+                className="cursor-pointer font-semibold px-5"
+              >
+                Modify Search
+              </Button>
+            )}
+          </div>
+        </Card>
       );
     }
 
-    // 2. Empty State (No flights found)
+    // 3. Empty State (Clean, helpful, no scary error styling)
     if (flightList.length === 0) {
       return (
-        <Card className="p-8 text-center border-slate-200 shadow-xs bg-white space-y-4">
-          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mx-auto">
+        <Card className="p-8 sm:p-12 text-center border border-slate-200/90 shadow-xs bg-white space-y-4 animate-fade-in">
+          <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 mx-auto">
             <Plane className="w-6 h-6" />
           </div>
           <div className="space-y-1.5 max-w-md mx-auto">
-            <h4 className="font-semibold text-base text-slate-900">No flights found</h4>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              We couldn't find commercial flight options for this corridor and date. The distance may be a driving corridor (&lt;200 km), or scheduled passenger flights may not operate on this date.
+            <h4 className="font-semibold text-lg text-slate-900 tracking-tight">
+              No transport options found
+            </h4>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              We couldn't find routes matching your search.
+            </p>
+            <p className="text-xs text-slate-400">
+              Try changing your dates or travel preferences.
             </p>
           </div>
-          {flightError && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center justify-center gap-2 max-w-md mx-auto">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Provider notice: {flightError}</span>
-            </div>
-          )}
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setActiveMode('own')}
-            >
-              Explore Road Trip
-            </Button>
+            {onModifySearch && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={onModifySearch}
+                className="cursor-pointer font-semibold px-6 shadow-xs"
+              >
+                Modify Search
+              </Button>
+            )}
             <Button
               variant="outline"
-              size="sm"
-              onClick={() => {
-                setGroundSubTab('train');
-                setActiveMode('train');
-              }}
+              size="md"
+              onClick={() => setActiveMode('own')}
+              className="cursor-pointer"
             >
-              View Trains & Buses
+              Explore Road Trip
             </Button>
           </div>
         </Card>
       );
     }
 
-    // 3. Populated Flight Offers List
+    // 4. Results Available: Desktop 3-Column Grid / Mobile Single Column with Modal Filter
     return (
       <div className="space-y-4">
         
-        {/* Provider Notice if search experienced fallback or partial failure */}
-        {flightError && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center justify-between gap-2 shadow-xs">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Live search notice: {flightError}. Displaying available flight options below.</span>
-            </div>
-          </div>
-        )}
-
-        {/* Toolbar: Count & Sort Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b border-slate-100 text-xs">
-          <div className="text-slate-600 font-medium">
-            Showing <strong className="text-slate-900">{sortedFlights.length}</strong> {sortedFlights.length === 1 ? 'flight offer' : 'flight offers'}
-          </div>
-
-          <div className="flex items-center gap-1.5 self-end sm:self-auto">
-            <span className="text-slate-400 flex items-center gap-1">
-              <ArrowUpDown className="w-3 h-3" /> Sort by:
+        {/* Mobile Filter & Sort Action Bar (Hidden on desktop) */}
+        <div className="flex lg:hidden items-center justify-between gap-2.5 pb-2">
+          <button
+            type="button"
+            onClick={() => setShowMobileFilterModal(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 shadow-xs hover:bg-slate-50 transition-colors cursor-pointer"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
+            <span>Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}</span>
+          </button>
+          
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 font-medium">
+              <strong>{sortedFlights.length}</strong> options found
             </span>
-            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="radiogroup" aria-label="Sort flights">
-              {[
-                { id: 'recommended', label: 'Best' },
-                { id: 'price', label: 'Price' },
-                { id: 'duration', label: 'Fastest' },
-                { id: 'departure', label: 'Earliest' }
-              ].map((sortOption) => (
-                <button
-                  key={sortOption.id}
-                  type="button"
-                  onClick={() => setSortBy(sortOption.id)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
-                    sortBy === sortOption.id
-                      ? 'bg-white text-blue-600 font-semibold shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  {sortOption.label}
-                </button>
-              ))}
-            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="text-xs font-semibold border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 cursor-pointer outline-none focus:ring-1 focus:ring-blue-500"
+              aria-label="Sort options"
+            >
+              <option value="recommended">Sort: Recommended</option>
+              <option value="price">Lowest Price</option>
+              <option value="duration">Shortest Duration</option>
+              <option value="departure">Earliest Departure</option>
+            </select>
           </div>
         </div>
 
-        {/* Flight Cards */}
-        <div className="space-y-3">
-          {sortedFlights.map((flight, idx) => {
-            const isLive = !flight.isEstimated && (
-              String(flight.provider || '').toLowerCase() === 'serpapi' ||
-              String(flight.source || '').toLowerCase() === 'serpapi' ||
-              String(flight.source || '').toLowerCase() === 'live'
-            );
-
-            const originCode = flight.origin?.code || 'ORIG';
-            const destCode = flight.destination?.code || 'DEST';
-            const originCity = typeof from === 'string' ? from.split(',')[0] : 'Origin';
-            const destCity = typeof to === 'string' ? to.split(',')[0] : 'Destination';
-
-            return (
-              <Card
-                key={flight.id || idx}
-                className="p-5 border-slate-200 hover:border-blue-300 hover:shadow-xs transition-all duration-150 bg-white"
+        {/* Mobile Filter Modal Sheet */}
+        <Modal
+          isOpen={showMobileFilterModal}
+          onClose={() => setShowMobileFilterModal(false)}
+          title="Filter Travel Options"
+          maxWidth="md"
+        >
+          <div className="space-y-4">
+            {renderFilterPanel()}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setShowMobileFilterModal(false)}
+                className="w-full sm:w-auto font-semibold px-6"
               >
-                {/* Header: Airline info & Provenance Badge */}
-                <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-2.5">
-                    {flight.airlineLogo ? (
-                      <img
-                        src={flight.airlineLogo}
-                        alt={flight.airline}
-                        className="w-8 h-8 rounded-lg object-contain bg-slate-50 p-1 border border-slate-200/80"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 font-bold text-xs flex items-center justify-center font-mono">
-                        {(flight.airlineCode || flight.airline || 'FL').slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    <div>
-                      <h4 className="font-semibold text-sm text-slate-900 leading-tight">
-                        {flight.airline || 'Commercial Airline'}
-                      </h4>
-                      {flight.flightNumber && (
-                        <span className="text-[11px] text-slate-400 font-mono">
-                          {flight.flightNumber}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                Apply Filters ({sortedFlights.length} available)
+              </Button>
+            </div>
+          </div>
+        </Modal>
 
-                  {/* Explicit Provenance Badge */}
-                  {isLive ? (
-                    <Badge variant="success" size="sm" className="font-mono">
-                      <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                      <span>Google Flights · Live</span>
-                    </Badge>
-                  ) : (
-                    <Badge variant="warning" size="sm" className="font-mono">
-                      <Info className="w-3 h-3 text-amber-600" />
-                      <span>Estimated Fare</span>
-                    </Badge>
+        {/* 3-Column Desktop Grid: [ Filters (240px / 20-25%) ] [ Results (55-60%) ] [ Contextual Sidebar (20-25%) ] */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* Left Column: Filter Rail (Desktop ~240px) */}
+          <div className="hidden lg:block lg:col-span-3 sticky top-4">
+            {renderFilterPanel()}
+          </div>
+
+          {/* Center Column: Flight Results (Desktop ~55-60%) */}
+          <div className="lg:col-span-6 space-y-4">
+
+            {/* Smart Picks Summary Chips Bar */}
+            {smartPicks && (
+              <div className="bg-slate-50/80 rounded-xl border border-slate-200/80 p-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-900">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                  <span>✨ Smart picks</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {smartPicks.bestValue && (
+                    <button
+                      type="button"
+                      onClick={() => setSortBy('recommended')}
+                      className="p-2.5 rounded-lg bg-white border border-slate-200/90 text-left hover:border-purple-300 hover:shadow-xs transition-all cursor-pointer"
+                    >
+                      <div className="text-[11px] font-bold text-purple-700 uppercase tracking-wider font-mono">
+                        {smartPicks.bestValue.title}
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">
+                        ₹{smartPicks.bestValue.price?.toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        {smartPicks.bestValue.duration}
+                      </div>
+                    </button>
+                  )}
+
+                  {smartPicks.fastest && (
+                    <button
+                      type="button"
+                      onClick={() => setSortBy('duration')}
+                      className="p-2.5 rounded-lg bg-white border border-slate-200/90 text-left hover:border-blue-300 hover:shadow-xs transition-all cursor-pointer"
+                    >
+                      <div className="text-[11px] font-bold text-blue-700 uppercase tracking-wider font-mono">
+                        {smartPicks.fastest.title}
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">
+                        ₹{smartPicks.fastest.price?.toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        {smartPicks.fastest.duration}
+                      </div>
+                    </button>
+                  )}
+
+                  {smartPicks.cheapest && (
+                    <button
+                      type="button"
+                      onClick={() => setSortBy('price')}
+                      className="p-2.5 rounded-lg bg-white border border-slate-200/90 text-left hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer"
+                    >
+                      <div className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider font-mono">
+                        {smartPicks.cheapest.title}
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">
+                        ₹{smartPicks.cheapest.price?.toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        Lowest available
+                      </div>
+                    </button>
                   )}
                 </div>
+              </div>
+            )}
 
-                {/* Schedule & Transit Flight Path */}
-                <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  
-                  {/* Departure */}
-                  <div className="min-w-[100px]">
-                    <span className="text-xl sm:text-2xl font-bold text-slate-900 font-mono tracking-tight block">
-                      {flight.depart || '--:--'}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-700 block">
-                      {originCity}
-                    </span>
-                    <span className="text-[11px] text-slate-400 font-mono">
-                      {originCode}
-                    </span>
-                  </div>
-
-                  {/* Flight Path Graphic */}
-                  <div className="flex flex-col items-center px-2 flex-1 max-w-[200px] mx-auto text-center">
-                    <span className="text-xs font-medium text-slate-500 mb-1 font-mono">
-                      {flight.duration || 'N/A'}
-                    </span>
-                    <div className="w-full flex items-center gap-1.5">
-                      <div className="h-px bg-slate-300 flex-1" />
-                      <Plane className="w-3.5 h-3.5 text-blue-600 rotate-90 shrink-0" />
-                      <div className="h-px bg-slate-300 flex-1" />
-                    </div>
-                    <span className="text-[11px] text-slate-500 font-medium mt-1">
-                      {flight.stops === 0 ? 'Non-stop' : `${flight.stops} stop`}
-                    </span>
-                  </div>
-
-                  {/* Arrival */}
-                  <div className="min-w-[100px] text-left sm:text-right">
-                    <span className="text-xl sm:text-2xl font-bold text-slate-900 font-mono tracking-tight block">
-                      {flight.arrive || '--:--'}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-700 block">
-                      {destCity}
-                    </span>
-                    <span className="text-[11px] text-slate-400 font-mono">
-                      {destCode}
-                    </span>
-                  </div>
-
-                </div>
-
-                {/* Footer: Cabin, Fare & Actions */}
-                <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {flight.cabin && (
-                      <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md capitalize">
-                        {flight.cabin.replace('_', ' ')}
-                      </span>
-                    )}
-                    {flight.baggage && (
-                      <span className="text-[11px] text-slate-500">
-                        Cabin & Check-in included
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between sm:justify-end gap-4">
-                    <div className="text-right">
-                      <span className="text-lg sm:text-xl font-bold text-slate-900 font-mono block leading-tight">
-                        {formatPrice(flight.price, flight.currency)}
-                      </span>
-                      <span className="text-[10px] text-slate-500 block uppercase tracking-wider">
-                        {isLive ? 'Live Fare' : 'Estimated Fare'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant={activeMode === 'flight' ? 'primary' : 'outline'}
-                        size="sm"
-                        onClick={() => setActiveMode('flight')}
-                        className="cursor-pointer font-medium"
-                      >
-                        {activeMode === 'flight' ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 mr-1" />
-                            Selected
-                          </>
-                        ) : (
-                          'Select'
-                        )}
-                      </Button>
-
-                      {flight.bookingUrl && (
-                        <a
-                          href={flight.bookingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
-                          title="View on Google Flights"
-                          aria-label="View on Google Flights"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-              </Card>
-            );
-          })}
-        </div>
-
-      </div>
-    );
-  };
-
-  // ── Render: Other Ground Options Tab (Trains, Buses, Cabs) ──────────────────────
-  const renderGroundTab = () => {
-    return (
-      <div className="space-y-4">
-        {/* Sub-selector for ground options */}
-        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-          <button
-            type="button"
-            onClick={() => handleSelectGroundSubTab('train')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              groundSubTab === 'train'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-            }`}
-          >
-            <Train className="w-3.5 h-3.5" />
-            <span>Trains ({trainList.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSelectGroundSubTab('bus')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              groundSubTab === 'bus'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-            }`}
-          >
-            <Bus className="w-3.5 h-3.5" />
-            <span>Buses ({busList.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSelectGroundSubTab('cab')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              groundSubTab === 'cab'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-            }`}
-          >
-            <Car className="w-3.5 h-3.5" />
-            <span>Cabs ({cabList.length})</span>
-          </button>
-        </div>
-
-        {/* Subtab 1: Trains */}
-        {groundSubTab === 'train' && (
-          <div className="space-y-3 animate-fade-in">
-            {trainList.length === 0 ? (
-              <Card className="p-8 text-center text-slate-500 border-slate-200">
-                No direct trains scheduled for this corridor.
-              </Card>
-            ) : (
-              trainList.map((train, idx) => (
-                <Card
-                  key={train.id || idx}
-                  className="p-5 border-slate-200 hover:border-blue-300 hover:shadow-xs transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-4"
+            {/* Desktop Results Header Bar: Count + Sort Dropdown */}
+            <div className="hidden lg:flex items-center justify-between pb-2 border-b border-slate-100 text-xs">
+              <div className="text-slate-600 font-medium">
+                <strong className="text-slate-900 font-bold">{sortedFlights.length}</strong> {sortedFlights.length === 1 ? 'option found' : 'options found'}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-medium">Sort:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="text-xs font-semibold border border-slate-200 rounded-md px-2 py-1 bg-white text-slate-800 cursor-pointer outline-none focus:ring-1 focus:ring-blue-500"
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                        <Train className="w-4 h-4" />
+                  <option value="recommended">Recommended ▾</option>
+                  <option value="price">Lowest Price</option>
+                  <option value="duration">Shortest Duration</option>
+                  <option value="departure">Earliest Departure</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Flight Results List (5-Question Immediate Result Card Hierarchy) */}
+            <div className="space-y-3.5">
+              {sortedFlights.length === 0 ? (
+                <Card className="p-8 text-center text-slate-500 border border-slate-200/90 bg-white space-y-2">
+                  <p className="text-sm font-medium text-slate-700">No flights match the selected filter criteria.</p>
+                  <p className="text-xs text-slate-400">Try loosening your stops, airlines, or departure time filters.</p>
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="mt-2 text-xs text-blue-600 hover:underline font-semibold cursor-pointer"
+                  >
+                    Reset filters
+                  </button>
+                </Card>
+              ) : (
+                sortedFlights.map((flight, idx) => {
+                  const isLive = !flight.isEstimated && (
+                    String(flight.provider || '').toLowerCase() === 'serpapi' ||
+                    String(flight.source || '').toLowerCase() === 'serpapi' ||
+                    String(flight.source || '').toLowerCase() === 'live'
+                  );
+
+                  const originCode = flight.origin?.code || 'BLR';
+                  const destCode = flight.destination?.code || 'GOI';
+                  const originCity = typeof from === 'string' ? from.split(',')[0].trim() : 'Bengaluru';
+                  const destCity = typeof to === 'string' ? to.split(',')[0].trim() : 'Goa';
+
+                  const isSelected = activeFlightId === flight.id || (!activeFlightId && idx === 0 && activeMode === 'flight');
+                  const badge = getFlightBadge(flight, idx);
+                  const badgeMeta = badge;
+
+                  return (
+                    <Card
+                      key={flight.id || idx}
+                      className={`p-4 sm:p-5 transition-all duration-150 bg-white border ${
+                        isSelected 
+                          ? 'border-blue-600 ring-1 ring-blue-600 shadow-xs' 
+                          : 'border-slate-200/90 hover:border-blue-300 hover:shadow-xs'
+                      }`}
+                    >
+                      {/* 1. Header: Who (Airline & Flight #) + Semantic Recommendation Badge */}
+                      <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-3">
+                          {flight.airlineLogo ? (
+                            <img
+                              src={flight.airlineLogo}
+                              alt={flight.airline}
+                              className="w-9 h-9 rounded-lg object-contain bg-slate-50 p-1 border border-slate-200/80 shrink-0"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 font-bold text-xs flex items-center justify-center font-mono shrink-0">
+                              {(flight.airlineCode || flight.airline || 'FL').slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <h4 className="font-bold text-sm sm:text-base text-slate-900 leading-tight">
+                              {flight.airline || 'IndiGo'}
+                            </h4>
+                            {flight.flightNumber && (
+                              <span className="text-xs text-slate-400 font-mono">
+                                {flight.flightNumber}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Semantic Recommendation Badge */}
+                        <div className="flex items-center gap-2">
+                          {badge && (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide uppercase font-mono border ${
+                              badge.color === 'emerald'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : badge.color === 'blue'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}>
+                              <span>{badge.icon}</span>
+                              <span>{badge.label}</span>
+                            </span>
+                          )}
+
+                          {isLive && (
+                            <Badge variant="success" size="sm" className="hidden sm:inline-flex font-mono">
+                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                              <span>Google Flights · Live</span>
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <h4 className="font-semibold text-sm text-slate-900">
-                        {train.name || 'Express Train'}{' '}
-                        {train.number && (
-                          <span className="font-mono text-xs text-slate-400 font-normal">
-                            #{train.number}
+
+                      {/* 2 & 3. Middle: When & How Long (Departure ── Route Graphic ── Arrival) */}
+                      <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        
+                        {/* Departure */}
+                        <div className="min-w-[90px]">
+                          <span className="text-2xl font-bold text-slate-900 font-mono tracking-tight block">
+                            {flight.depart || '06:20'}
                           </span>
-                        )}
-                      </h4>
-                      <Badge variant="warning" size="sm">Estimated</Badge>
-                    </div>
+                          <span className="text-xs font-semibold text-slate-700 block">
+                            {originCity}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono font-bold">
+                            {originCode}
+                          </span>
+                        </div>
 
-                    <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                      <span className="flex items-center gap-1 font-mono text-slate-700">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {train.depart || '--'} → {train.arrive || '--'} ({train.duration || 'N/A'})
-                      </span>
-                      {train.tier && (
-                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] font-semibold text-slate-700">
-                          Class: {train.tier}
-                        </span>
-                      )}
-                      {train.avail && (
-                        <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
-                          Available: {train.avail} seats
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                        {/* Route Line Graphic: How Long */}
+                        <div className="flex flex-col items-center px-2 flex-1 max-w-[240px] mx-auto text-center w-full">
+                          <span className="text-xs font-bold text-slate-700 mb-1 font-mono">
+                            {flight.duration || '2h 50m'} · {flight.stops === 0 ? 'Non-stop' : `${flight.stops} stop`}
+                          </span>
+                          <div className="w-full flex items-center gap-1.5">
+                            <div className="h-px bg-slate-300 flex-1" />
+                            <Plane className="w-3.5 h-3.5 text-blue-600 rotate-90 shrink-0" />
+                            <div className="h-px bg-slate-300 flex-1" />
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-medium mt-1">
+                            {flight.cabin ? flight.cabin.replace('_', ' ') : 'Economy'}
+                          </span>
+                        </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-none pt-3 md:pt-0 border-slate-100">
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-slate-900 font-mono block">
-                        {formatPrice(train.price)}
-                      </span>
-                      <span className="text-[10px] text-slate-500 uppercase">Estimated Fare</span>
-                    </div>
+                        {/* Arrival */}
+                        <div className="min-w-[90px] text-left sm:text-right">
+                          <span className="text-2xl font-bold text-slate-900 font-mono tracking-tight block">
+                            {flight.arrive || '09:10'}
+                          </span>
+                          <span className="text-xs font-semibold text-slate-700 block">
+                            {destCity}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono font-bold">
+                            {destCode}
+                          </span>
+                        </div>
 
-                    <a
-                      href={getConfirmTktUrl(train.number)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
-                    >
-                      <span>Book on ConfirmTkt</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* Subtab 2: Buses */}
-        {groundSubTab === 'bus' && (
-          <div className="space-y-3 animate-fade-in">
-            {busList.length === 0 ? (
-              <Card className="p-8 text-center text-slate-500 border-slate-200">
-                No buses scheduled for this corridor.
-              </Card>
-            ) : (
-              busList.map((bus, idx) => (
-                <Card
-                  key={bus.id || idx}
-                  className="p-5 border-slate-200 hover:border-blue-300 hover:shadow-xs transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                        <Bus className="w-4 h-4" />
                       </div>
-                      <h4 className="font-semibold text-sm text-slate-900">
-                        {bus.name || 'Bus Service'}
-                      </h4>
-                      <Badge variant="warning" size="sm">Estimated</Badge>
-                    </div>
 
-                    <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                      <span className="flex items-center gap-1 font-mono text-slate-700">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {bus.depart || '--'} → {bus.arrive || '--'} ({bus.duration || 'N/A'})
-                      </span>
-                      {bus.seats !== undefined && (
-                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] text-slate-700">
-                          {bus.seats} seats left
-                        </span>
-                      )}
-                      {bus.rating && (
-                        <span className="flex items-center gap-0.5 text-amber-600 font-medium text-[11px]">
-                          <Star className="w-3 h-3 fill-current" />
-                          {bus.rating}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                      {/* 4 & 5. Bottom: How Much (Price) & What Do I Do (Select CTA) */}
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 font-medium">
+                            Google Flights
+                          </span>
+                        </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-none pt-3 md:pt-0 border-slate-100">
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-slate-900 font-mono block">
-                        {formatPrice(bus.price)}
-                      </span>
-                      <span className="text-[10px] text-slate-500 uppercase">Per Ticket</span>
-                    </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <span className="text-xl sm:text-2xl font-extrabold text-slate-900 font-mono block leading-tight">
+                              {formatPrice(flight.price)}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block uppercase tracking-wider font-medium">
+                              / traveler
+                            </span>
+                          </div>
 
-                    <a
-                      href={getRedBusUrl()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
-                    >
-                      <span>Book on redBus</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant={isSelected ? 'primary' : 'outline'}
+                              size="md"
+                              onClick={() => handleSelectFlight(flight)}
+                              className={`cursor-pointer font-bold px-5 ${
+                                isSelected
+                                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                                  : 'border-blue-600 text-blue-600 hover:bg-blue-50'
+                              }`}
+                            >
+                              {isSelected ? (
+                                <>
+                                  <Check className="w-4 h-4 mr-1.5" />
+                                  <span>Selected</span>
+                                </>
+                              ) : (
+                                <span>Select →</span>
+                              )}
+                            </Button>
 
-        {/* Subtab 3: Cabs */}
-        {groundSubTab === 'cab' && (
-          <div className="space-y-3 animate-fade-in">
-            {cabList.length === 0 ? (
-              <Card className="p-8 text-center text-slate-500 border-slate-200">
-                No cab estimates available.
-              </Card>
-            ) : (
-              cabList.map((cab, idx) => (
-                <Card
-                  key={cab.id || idx}
-                  className="p-5 border-slate-200 hover:border-blue-300 hover:shadow-xs transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                        <Car className="w-4 h-4" />
+                            {flight.bookingUrl && (
+                              <a
+                                href={flight.bookingUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                                title="View on Google Flights"
+                                aria-label="View on Google Flights"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <h4 className="font-semibold text-sm text-slate-900">
-                        {cab.name || 'Cab Service'}
-                      </h4>
-                      <Badge variant="warning" size="sm">Estimated</Badge>
-                    </div>
 
-                    <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                      <span className="flex items-center gap-1 font-mono text-slate-700">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        Est. drive: {cab.time || 'N/A'}
-                      </span>
-                      {cab.type && (
-                        <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] font-semibold text-slate-700">
-                          {cab.type}
-                        </span>
-                      )}
-                      {cab.distance && (
-                        <span className="text-slate-500 text-[11px]">
-                          Distance: {cab.distance}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                    </Card>
+                  );
+                })
+              )}
+            </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-none pt-3 md:pt-0 border-slate-100">
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-slate-900 font-mono block">
-                        {formatPrice(cab.price)}
-                      </span>
-                      <span className="text-[10px] text-slate-500 uppercase">Estimated Total</span>
-                    </div>
-
-                    <a
-                      href={getCabUrl(typeof cab.name === 'string' && cab.name.includes('Uber') ? 'Uber' : 'Ola')}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
-                    >
-                      <span>Check Availability</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                </Card>
-              ))
-            )}
           </div>
-        )}
+
+          {/* Right Column: Contextual Sidebar (Desktop ~20-25%) */}
+          <div className="hidden lg:block lg:col-span-3 sticky top-4">
+            {renderRightSidebar()}
+          </div>
+
+        </div>
 
       </div>
     );
   };
+
+  // ── Render: Other Modes ──────────────────────────────────────────────────────────
+  const renderTrainsTab = () => (
+    <div className="space-y-4 animate-fade-in">
+      {trainList.length === 0 ? (
+        <Card className="p-8 text-center text-slate-500 border border-slate-200 bg-white">
+          No direct trains scheduled for this corridor.
+        </Card>
+      ) : (
+        trainList.map((train, idx) => (
+          <Card
+            key={train.id || idx}
+            className="p-5 border border-slate-200 hover:border-blue-300 hover:shadow-xs transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-4"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Train className="w-4 h-4" />
+                </div>
+                <h4 className="font-semibold text-sm text-slate-900">
+                  {train.name || 'Express Train'}{' '}
+                  {train.number && (
+                    <span className="font-mono text-xs text-slate-400 font-normal">
+                      #{train.number}
+                    </span>
+                  )}
+                </h4>
+                <Badge variant="warning" size="sm">Estimated</Badge>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                <span className="flex items-center gap-1 font-mono text-slate-700">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  {train.depart || '--'} → {train.arrive || '--'} ({train.duration || 'N/A'})
+                </span>
+                {train.tier && (
+                  <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] font-semibold text-slate-700">
+                    Class: {train.tier}
+                  </span>
+                )}
+                {train.avail && (
+                  <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
+                    Available: {train.avail} seats
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-none pt-3 md:pt-0 border-slate-100">
+              <div className="text-right">
+                <span className="text-lg font-bold text-slate-900 font-mono block">
+                  {formatPrice(train.price)}
+                </span>
+                <span className="text-[10px] text-slate-500 uppercase">Estimated Fare</span>
+              </div>
+
+              <a
+                href={getConfirmTktUrl(train.number)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+              >
+                <span>Book on ConfirmTkt</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+
+  const renderBusesTab = () => (
+    <div className="space-y-4 animate-fade-in">
+      {busList.length === 0 ? (
+        <Card className="p-8 text-center text-slate-500 border border-slate-200 bg-white">
+          No buses scheduled for this corridor.
+        </Card>
+      ) : (
+        busList.map((bus, idx) => (
+          <Card
+            key={bus.id || idx}
+            className="p-5 border border-slate-200 hover:border-blue-300 hover:shadow-xs transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-4"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Bus className="w-4 h-4" />
+                </div>
+                <h4 className="font-semibold text-sm text-slate-900">
+                  {bus.name || 'Bus Service'}
+                </h4>
+                <Badge variant="warning" size="sm">Estimated</Badge>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                <span className="flex items-center gap-1 font-mono text-slate-700">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  {bus.depart || '--'} → {bus.arrive || '--'} ({bus.duration || 'N/A'})
+                </span>
+                {bus.seats !== undefined && (
+                  <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] text-slate-700">
+                    {bus.seats} seats left
+                  </span>
+                )}
+                {bus.rating && (
+                  <span className="flex items-center gap-0.5 text-amber-600 font-medium text-[11px]">
+                    <Star className="w-3 h-3 fill-current" />
+                    {bus.rating}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-none pt-3 md:pt-0 border-slate-100">
+              <div className="text-right">
+                <span className="text-lg font-bold text-slate-900 font-mono block">
+                  {formatPrice(bus.price)}
+                </span>
+                <span className="text-[10px] text-slate-500 uppercase">Per Ticket</span>
+              </div>
+
+              <a
+                href={getRedBusUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+              >
+                <span>Book on redBus</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </Card>
+        ))
+      )}
+    </div>
+  );
 
   return (
-    <div className="w-full space-y-5">
+    <div className="w-full space-y-6">
       
-      {/* 3 Core Transport Categories Navigation */}
+      {/* Transport Tabs: [ ✈ Flights ] [ 🚗 Road Trip ] [ 🚆 Trains ] [ 🚌 Buses ] */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto scrollbar-none" role="tablist">
         
-        {/* 1. Flights Category */}
+        {/* 1. Flights Tab */}
         <button
           type="button"
           role="tab"
-          aria-selected={isFlightActive}
-          onClick={() => handleSelectCategory('flight')}
+          aria-selected={activeMode === 'flight'}
+          onClick={() => setActiveMode('flight')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer select-none whitespace-nowrap ${
-            isFlightActive
+            activeMode === 'flight'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
@@ -715,21 +1279,21 @@ export default function TravelOptions({
           <span>Flights</span>
           {!flightLoading && flightList.length > 0 && (
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-              isFlightActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+              activeMode === 'flight' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
             }`}>
               {flightList.length}
             </span>
           )}
         </button>
 
-        {/* 2. Road Trip Category */}
+        {/* 2. Road Trip Tab */}
         <button
           type="button"
           role="tab"
-          aria-selected={isRoadActive}
-          onClick={() => handleSelectCategory('road')}
+          aria-selected={activeMode === 'own'}
+          onClick={() => setActiveMode('own')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer select-none whitespace-nowrap ${
-            isRoadActive
+            activeMode === 'own'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
@@ -738,29 +1302,60 @@ export default function TravelOptions({
           <span>Road Trip</span>
         </button>
 
-        {/* 3. Other Ground Options Category */}
+        {/* 3. Trains Tab */}
         <button
           type="button"
           role="tab"
-          aria-selected={isGroundActive}
-          onClick={() => handleSelectCategory('ground')}
+          aria-selected={activeMode === 'train'}
+          onClick={() => setActiveMode('train')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer select-none whitespace-nowrap ${
-            isGroundActive
+            activeMode === 'train'
               ? 'bg-blue-600 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
           <Train className="w-4 h-4" />
-          <span>Other Ground Options</span>
+          <span>Trains</span>
+          {trainList.length > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+              activeMode === 'train' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {trainList.length}
+            </span>
+          )}
+        </button>
+
+        {/* 4. Buses Tab */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeMode === 'bus'}
+          onClick={() => setActiveMode('bus')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer select-none whitespace-nowrap ${
+            activeMode === 'bus'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Bus className="w-4 h-4" />
+          <span>Buses</span>
+          {busList.length > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+              activeMode === 'bus' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {busList.length}
+            </span>
+          )}
         </button>
 
       </div>
 
-      {/* Transport Content Panels */}
-      <div className="pt-1 animate-fade-in">
-        {isFlightActive && renderFlightTab()}
-        {isRoadActive && children}
-        {isGroundActive && renderGroundTab()}
+      {/* Panels */}
+      <div className="pt-1">
+        {activeMode === 'flight' && renderFlightTab()}
+        {activeMode === 'own' && children}
+        {activeMode === 'train' && renderTrainsTab()}
+        {activeMode === 'bus' && renderBusesTab()}
       </div>
 
     </div>

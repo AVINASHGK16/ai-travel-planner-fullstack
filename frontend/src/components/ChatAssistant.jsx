@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Compass, Sparkles, Smile } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles } from 'lucide-react';
 import { getAIChatResponse } from '../utils/planner';
 
 // Safe markdown-bold renderer — strictly prevents XSS without dangerouslySetInnerHTML
@@ -8,7 +8,7 @@ export const renderMessageText = (text) => {
   const parts = text.split(/(\*\*.*?\*\*)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
+      return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>;
     }
     return part;
   });
@@ -126,7 +126,7 @@ export default function ChatAssistant({ tripData }) {
     abortControllerRef.current = controller;
 
     try {
-      // Call backend AI proxy (Gemini key is kept server-side)
+      // Call backend AI proxy
       const reply = await getAIChatResponse(updatedHistory, boundedText, tripData, controller.signal);
       if (isMounted.current && !controller.signal.aborted) {
         setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
@@ -174,24 +174,23 @@ export default function ChatAssistant({ tripData }) {
       
       {/* Expanded Chat Pane */}
       {isOpen && (
-        <div className="w-[340px] sm:w-[400px] h-[520px] rounded-2xl glass border border-white/15 shadow-2xl flex flex-col overflow-hidden text-slate-200 animate-slide-up mb-4">
+        <div className="w-[340px] sm:w-[400px] h-[520px] rounded-2xl bg-white border border-slate-200/90 shadow-2xl flex flex-col overflow-hidden text-slate-800 animate-slide-up mb-4">
           
           {/* Header */}
-          <div className="p-4 bg-gradient-to-r from-blue-600/30 via-indigo-600/30 to-purple-600/30 border-b border-white/10 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-blue-500 text-white shrink-0">
-                <Compass className="w-4.5 h-4.5 animate-spin-slow" />
+          <div className="px-4 py-3.5 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="font-display font-bold text-sm text-white flex items-center gap-1.5">
-                  Travel Assistant
-                  <span className="flex h-2 w-2 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <h4 className="font-semibold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
+                  AI Travel Guide
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Online
                   </span>
                 </h4>
-                <p className="text-[9px] text-emerald-400 font-mono">
-                  AI Travel Guide · Online
+                <p className="text-[11px] text-slate-500">
+                  Instant route & destination answers
                 </p>
               </div>
             </div>
@@ -199,14 +198,15 @@ export default function ChatAssistant({ tripData }) {
             <button 
               type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="p-1 rounded-lg hover:bg-slate-200/60 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              aria-label="Close chat assistant"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Messages list area */}
-          <div className="flex-grow p-4 overflow-y-auto space-y-3.5 custom-scrollbar">
+          <div className="flex-grow p-4 overflow-y-auto space-y-3.5 custom-scrollbar bg-slate-50/50">
             {messages.map((msg, idx) => (
               <div
                 key={idx}
@@ -215,8 +215,8 @@ export default function ChatAssistant({ tripData }) {
                 <div
                   className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed ${
                     msg.sender === 'user'
-                      ? 'bg-blue-600 text-white rounded-tr-none'
-                      : 'bg-slate-900/60 border border-white/10 text-slate-300 rounded-tl-none'
+                      ? 'bg-blue-600 text-white rounded-tr-none shadow-xs'
+                      : 'bg-white border border-slate-200/80 text-slate-700 rounded-tl-none shadow-xs'
                   }`}
                   style={{ whiteSpace: 'pre-line' }}
                 >
@@ -227,7 +227,7 @@ export default function ChatAssistant({ tripData }) {
             
             {/* Typing Loader */}
             {loading && (
-              <div className="flex items-center gap-1.5 p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-slate-400 text-xs w-20 rounded-tl-none animate-pulse">
+              <div className="flex items-center gap-1.5 p-3 rounded-2xl bg-white border border-slate-200/80 text-slate-500 text-xs w-20 rounded-tl-none shadow-xs">
                 <span>typing</span>
                 <span className="flex gap-0.5 mt-1">
                   <span className="h-1 w-1 bg-slate-400 rounded-full animate-bounce delay-75"></span>
@@ -241,15 +241,17 @@ export default function ChatAssistant({ tripData }) {
           </div>
 
           {/* Quick Prompts list */}
-          <div className="p-2 bg-slate-950/20 border-t border-white/5 flex gap-1.5 overflow-x-auto scrollbar-none whitespace-nowrap select-none">
+          <div className="p-2 bg-slate-50 border-t border-slate-200/80 flex gap-1.5 overflow-x-auto scrollbar-none whitespace-nowrap select-none">
             {quickPrompts.map((qp, idx) => (
               <button
                 key={idx}
                 type="button"
                 disabled={loading}
                 onClick={() => { if (!loading) handleSendMessage(qp.text); }}
-                className={`px-2.5 py-1.5 bg-slate-900/70 border border-white/5 rounded-lg text-[10px] font-semibold transition-all ${
-                  loading ? 'opacity-50 cursor-not-allowed text-slate-500' : 'hover:border-blue-500/30 text-slate-300 hover:text-white cursor-pointer'
+                className={`px-2.5 py-1.5 bg-white border border-slate-200/80 rounded-lg text-[11px] font-medium transition-colors ${
+                  loading
+                    ? 'opacity-50 cursor-not-allowed text-slate-400'
+                    : 'text-slate-700 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 cursor-pointer shadow-xs'
                 }`}
               >
                 {qp.label}
@@ -258,7 +260,7 @@ export default function ChatAssistant({ tripData }) {
           </div>
 
           {/* Input Box Footer */}
-          <div className="p-3 border-t border-white/10 bg-slate-900/40 flex items-center gap-2">
+          <div className="p-3 border-t border-slate-200/80 bg-white flex items-center gap-2">
             <input
               type="text"
               value={inputText}
@@ -267,7 +269,7 @@ export default function ChatAssistant({ tripData }) {
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder={loading ? 'Waiting for assistant...' : 'Ask travel advice...'}
-              className={`flex-grow px-3 py-2 bg-slate-950/40 border border-white/10 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs text-white placeholder-slate-500 ${
+              className={`flex-grow px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 placeholder:text-slate-400 transition-all ${
                 loading ? 'opacity-60 cursor-not-allowed' : ''
               }`}
             />
@@ -275,9 +277,10 @@ export default function ChatAssistant({ tripData }) {
               type="button"
               onClick={() => handleSendMessage()}
               disabled={loading || !inputText.trim()}
-              className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors shrink-0 shadow-md shadow-blue-500/10 cursor-pointer"
+              aria-label="Send message"
+              className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors shrink-0 shadow-xs cursor-pointer"
             >
-              <Send className="w-4.5 h-4.5" />
+              <Send className="w-4 h-4" />
             </button>
           </div>
 
@@ -288,9 +291,10 @@ export default function ChatAssistant({ tripData }) {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="p-4 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white hover:from-blue-500 hover:to-purple-500 shadow-xl shadow-blue-500/20 transition-all duration-300 active:scale-90 hover:scale-105 shrink-0 z-50 flex items-center justify-center cursor-pointer"
+        aria-label={isOpen ? 'Close chat assistant' : 'Open chat assistant'}
+        className="p-3.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20 transition-all duration-200 active:scale-95 hover:scale-105 shrink-0 z-50 flex items-center justify-center cursor-pointer"
       >
-        {isOpen ? <X className="w-6 h-6" /> : <MessageSquare className="w-6 h-6 animate-pulse" />}
+        {isOpen ? <X className="w-5 h-5" /> : <MessageSquare className="w-5 h-5" />}
       </button>
 
     </div>

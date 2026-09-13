@@ -63,16 +63,17 @@ function AppLayout({ settingsOpen, setSettingsOpen, settings, handleSaveSettings
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState({
-    googleMapsKey: storage.get('googleMapsKey', '')
+    currency: storage.get('pref_currency', 'INR'),
+    travelers: storage.get('pref_travelers', '1'),
+    preferredMode: storage.get('pref_mode', 'any')
   });
 
   const handleSaveSettings = (newSettings) => {
-    const key = newSettings?.googleMapsKey || '';
-    setSettings({ googleMapsKey: key });
-    storage.set('googleMapsKey', key);
+    setSettings(newSettings);
+    // Clean up legacy keys if any existed
+    storage.remove('googleMapsKey');
     storage.remove('geminiKey');
     storage.remove('openWeatherKey');
-    alert('Settings successfully updated!');
   };
 
   return (

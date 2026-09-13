@@ -72,19 +72,18 @@ body {
   background: #94a3b8;
 }
 
-/* Glassmorphism Classes */
+/* Light Card Utility & Glass Classes */
 .glass {
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
 }
 
 .glass-light {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
 }
 
 /* Leaflet Map Styles */
@@ -92,34 +91,37 @@ body {
   width: 100%;
   height: 100%;
   border-radius: 12px;
-  background-color: #0f172a;
+  background-color: #f1f5f9;
   z-index: 1;
 }
 
 .leaflet-bar {
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  background-color: #1e293b !important;
+  border: 1px solid #e2e8f0 !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
 }
 
 .leaflet-bar a {
-  background-color: #1e293b !important;
-  color: #f3f4f6 !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-bottom: 1px solid #e2e8f0 !important;
 }
 
 .leaflet-bar a:hover {
-  background-color: #334155 !important;
+  background-color: #f8fafc !important;
+  color: #2563eb !important;
 }
 
 .leaflet-popup-content-wrapper {
-  background: #1e293b !important;
-  color: #f3f4f6 !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0;
   border-radius: 8px !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
 }
 
 .leaflet-popup-tip {
-  background: #1e293b !important;
+  background: #ffffff !important;
 }
 
 /* Glow effects */

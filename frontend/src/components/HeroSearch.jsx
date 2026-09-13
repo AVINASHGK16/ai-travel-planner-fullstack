@@ -42,7 +42,6 @@ export default function HeroSearch({ onSearch, loading = false }) {
 
     recognition.onresult = (event) => {
       const speechToText = event.results[0][0].transcript;
-      // Clean up string (e.g. remove trailing periods)
       const cleanText = speechToText.replace(/\.$/g, '');
       if (field === 'from') setFrom(cleanText);
       if (field === 'to') setTo(cleanText);
@@ -87,68 +86,71 @@ export default function HeroSearch({ onSearch, loading = false }) {
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 py-8 md:py-16">
+    <div className="w-full">
       
       {/* Dynamic Title Hero */}
-      <div className="text-center mb-10">
-        <h1 className="font-display font-extrabold text-4xl md:text-6xl text-white tracking-tight leading-none">
-          Plan Your Next <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400">Adventure</span> with AI
+      <div className="text-center mb-8">
+        <h1 className="font-semibold text-3xl sm:text-5xl text-slate-900 tracking-tight leading-tight">
+          Plan Your Next Journey with{' '}
+          <span className="text-blue-600 font-bold">
+            Intelligent AI
+          </span>
         </h1>
-        <p className="mt-4 text-base md:text-lg text-slate-400 max-w-xl mx-auto">
-          Compare flights, trains, buses, cabs, and road trips. Get tailored itineraries and budget recommendations instantly.
+        <p className="mt-3 text-sm sm:text-base text-slate-600 max-w-xl mx-auto leading-relaxed">
+          Compare live flights, trains, buses, cabs, and road trips. Generate tailored itineraries and real-time budget insights.
         </p>
       </div>
 
       {/* Main Search Panel */}
       <form 
         onSubmit={handleSubmit} 
-        className="w-full rounded-2xl glass border border-white/10 shadow-2xl p-6 md:p-8 space-y-6 animate-fade-in text-slate-200"
+        className="w-full bg-white rounded-2xl border border-slate-200/90 shadow-md p-6 sm:p-8 space-y-5 text-slate-800"
       >
-        
         {/* From & To inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Starting Location */}
-          <div className="relative">
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Starting Location
             </label>
             <div className="relative">
-              <span className="absolute left-4 top-3.5 text-blue-400">
-                <MapPin className="w-5 h-5" />
+              <span className="absolute left-3.5 top-3 text-blue-600">
+                <MapPin className="w-4.5 h-4.5" />
               </span>
               <input
                 type="text"
                 required
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
-                placeholder="e.g. Bangalore, IN"
-                className="w-full pl-12 pr-12 py-3 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-slate-500"
+                placeholder="e.g. Bengaluru, IN"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-sm text-slate-900 placeholder:text-slate-400 transition-all"
               />
               <button
                 type="button"
                 disabled={loading}
                 onClick={() => handleVoiceSearch('from')}
-                className={`absolute right-3.5 top-3 p-1 rounded-lg transition-colors ${
-                  loading ? 'opacity-50 cursor-not-allowed text-slate-500' :
+                className={`absolute right-3 top-2.5 p-1 rounded-lg transition-colors ${
+                  loading ? 'opacity-50 cursor-not-allowed text-slate-400' :
                   listeningField === 'from' 
-                    ? 'bg-red-500/20 text-red-400 animate-pulse' 
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-red-50 text-red-600 animate-pulse' 
+                    : 'text-slate-400 hover:text-slate-700'
                 }`}
                 title="Voice Search"
+                aria-label="Voice search for starting location"
               >
-                {listeningField === 'from' ? <MicOff className="w-4.5 h-4.5" /> : <Mic className="w-4.5 h-4.5" />}
+                {listeningField === 'from' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
           {/* Destination */}
-          <div className="relative">
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Destination
             </label>
             <div className="relative">
-              <span className="absolute left-4 top-3.5 text-indigo-400">
-                <Navigation className="w-5 h-5" />
+              <span className="absolute left-3.5 top-3 text-indigo-600">
+                <Navigation className="w-4.5 h-4.5" />
               </span>
               <input
                 type="text"
@@ -156,21 +158,22 @@ export default function HeroSearch({ onSearch, loading = false }) {
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
                 placeholder="e.g. Hyderabad, IN"
-                className="w-full pl-12 pr-12 py-3 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-white placeholder-slate-500"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-sm text-slate-900 placeholder:text-slate-400 transition-all"
               />
               <button
                 type="button"
                 disabled={loading}
                 onClick={() => handleVoiceSearch('to')}
-                className={`absolute right-3.5 top-3 p-1 rounded-lg transition-colors ${
-                  loading ? 'opacity-50 cursor-not-allowed text-slate-500' :
+                className={`absolute right-3 top-2.5 p-1 rounded-lg transition-colors ${
+                  loading ? 'opacity-50 cursor-not-allowed text-slate-400' :
                   listeningField === 'to' 
-                    ? 'bg-red-500/20 text-red-400 animate-pulse' 
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-red-50 text-red-600 animate-pulse' 
+                    : 'text-slate-400 hover:text-slate-700'
                 }`}
                 title="Voice Search"
+                aria-label="Voice search for destination"
               >
-                {listeningField === 'to' ? <MicOff className="w-4.5 h-4.5" /> : <Mic className="w-4.5 h-4.5" />}
+                {listeningField === 'to' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
             </div>
           </div>
@@ -181,12 +184,12 @@ export default function HeroSearch({ onSearch, loading = false }) {
           
           {/* Departure Date */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Departure Date
             </label>
             <div className="relative">
               <span className="absolute left-3.5 top-3 text-slate-400">
-                <Calendar className="w-4.5 h-4.5" />
+                <Calendar className="w-4 h-4" />
               </span>
               <input
                 type="date"
@@ -200,38 +203,38 @@ export default function HeroSearch({ onSearch, loading = false }) {
                     setReturnDate('');
                   }
                 }}
-                className="w-full pl-10 pr-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white dark:[color-scheme:dark]"
+                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 transition-all"
               />
             </div>
           </div>
 
           {/* Return Date (Optional) */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Return Date (Optional)
             </label>
             <div className="relative">
               <span className="absolute left-3.5 top-3 text-slate-400">
-                <Calendar className="w-4.5 h-4.5" />
+                <Calendar className="w-4 h-4" />
               </span>
               <input
                 type="date"
                 min={date || todayLocalStr}
                 value={returnDate}
                 onChange={(e) => setReturnDate(e.target.value)}
-                className="w-full pl-10 pr-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white dark:[color-scheme:dark]"
+                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 transition-all"
               />
             </div>
           </div>
 
           {/* Number of Travelers */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Travelers
             </label>
             <div className="relative">
               <span className="absolute left-3.5 top-3 text-slate-400">
-                <Users className="w-4.5 h-4.5" />
+                <Users className="w-4 h-4" />
               </span>
               <input
                 type="number"
@@ -247,20 +250,20 @@ export default function HeroSearch({ onSearch, loading = false }) {
                   if (!travelers || travelers < 1) setTravelers(1);
                   else if (travelers > 50) setTravelers(50);
                 }}
-                className="w-full pl-10 pr-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white"
+                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 transition-all"
               />
             </div>
           </div>
 
           {/* Preferred Mode Selection */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Travel Mode
             </label>
             <select
               value={preferredMode}
               onChange={(e) => setPreferredMode(e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white"
+              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 transition-all cursor-pointer"
             >
               <option value="any">Compare All Modes</option>
               <option value="flight">Flights Only</option>
@@ -273,13 +276,13 @@ export default function HeroSearch({ onSearch, loading = false }) {
         </div>
 
         {/* Budget Slider */}
-        <div className="p-4 bg-slate-900/35 border border-white/5 rounded-xl">
+        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
           <div className="flex justify-between items-center mb-2">
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-              Approximate Budget
+            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <DollarSign className="w-4 h-4 text-emerald-600" />
+              Estimated Budget
             </label>
-            <span className="text-sm font-semibold text-emerald-400 font-mono bg-emerald-500/10 px-2.5 py-1 rounded-lg">
+            <span className="text-xs font-semibold text-emerald-700 font-mono bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
               ₹{budget.toLocaleString()} / USD ${(Math.round(budget/80))}
             </span>
           </div>
@@ -290,7 +293,7 @@ export default function HeroSearch({ onSearch, loading = false }) {
             step="250"
             value={budget}
             onChange={(e) => setBudget(parseInt(e.target.value))}
-            className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
           />
           <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-1.5">
             <span>₹500 (Economy)</span>
@@ -304,19 +307,19 @@ export default function HeroSearch({ onSearch, loading = false }) {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full md:w-auto px-8 py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium text-base rounded-xl transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 group ${
+            className={`w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-xl transition-all shadow-sm shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer ${
               loading ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'
             }`}
           >
             {loading ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Planning Trip...</span>
               </>
             ) : (
               <>
-                <Search className="w-5 h-5 group-hover:scale-115 transition-transform" />
-                <span>Plan Trip</span>
+                <Search className="w-4 h-4" />
+                <span>Plan Trip →</span>
               </>
             )}
           </button>

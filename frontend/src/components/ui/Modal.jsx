@@ -1,6 +1,30 @@
 import React, { useEffect, useRef, useId } from 'react';
 import { X } from 'lucide-react';
 
+const TABBABLE_SELECTOR = [
+  'button:not([disabled])',
+  '[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+  'summary',
+  'iframe',
+  '[contenteditable]:not([contenteditable="false"])'
+].join(', ');
+
+/**
+ * Returns all active, reachable tabbable elements in container
+ * @param {HTMLElement} container
+ * @returns {HTMLElement[]}
+ */
+export function getTabbableElements(container) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll(TABBABLE_SELECTOR)).filter(
+    (el) => el.tabIndex >= 0 && (el.offsetParent !== null || el.getClientRects().length > 0)
+  );
+}
+
 /**
  * Roamly Modal Primitive
  * Accessible dialog with focus trapping, focus restoration, and Escape key handling.
@@ -8,6 +32,7 @@ import { X } from 'lucide-react';
  * @param {boolean} props.isOpen
  * @param {() => void} props.onClose
  * @param {string} [props.title]
+ * @param {string} [props.ariaLabel]
  * @param {string} [props.description]
  * @param {'sm'|'md'|'lg'|'xl'} [props.maxWidth='md']
  */
@@ -15,6 +40,7 @@ export function Modal({
   isOpen,
   onClose,
   title,
+  ariaLabel,
   description,
   children,
   maxWidth = 'md',
@@ -35,12 +61,7 @@ export function Modal({
     // Focus into dialog on open
     const dialogNode = dialogRef.current;
     if (dialogNode) {
-      const focusable = Array.from(
-        dialogNode.querySelectorAll(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-      ).filter(el => el.offsetParent !== null || el.getClientRects().length > 0);
-
+      const focusable = getTabbableElements(dialogNode);
       if (focusable.length > 0) {
         focusable[0].focus();
       } else {
@@ -58,11 +79,7 @@ export function Modal({
         const dialogNode = dialogRef.current;
         if (!dialogNode) return;
 
-        const focusable = Array.from(
-          dialogNode.querySelectorAll(
-            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-        ).filter(el => el.offsetParent !== null || el.getClientRects().length > 0);
+        const focusable = getTabbableElements(dialogNode);
 
         if (focusable.length === 0) {
           e.preventDefault();
@@ -128,6 +145,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-label={!title ? (ariaLabel || 'Dialog') : undefined}
         aria-describedby={descId}
       >
         {/* Header */}

@@ -1,128 +1,343 @@
-import React, { useState, useEffect } from 'react';
-import { X, ShieldAlert, Sparkles, CloudSun, Map } from 'lucide-react';
+import React, { useState } from 'react';
+import { 
+  User, 
+  ShieldCheck, 
+  Sliders, 
+  Bell, 
+  Sparkles, 
+  Plane, 
+  CloudSun, 
+  Lock, 
+  Check 
+} from 'lucide-react';
+import { Modal } from './ui/Modal';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { useAuth } from '../context/AuthContext';
+import { storage } from '../utils/storage';
 
 export default function SettingsPanel({
   isOpen,
-  onClose,
-  settings,
-  onSaveSettings
+  onClose
 }) {
-  const [googleMapsKey, setGoogleMapsKey] = useState(settings?.googleMapsKey || '');
+  const { user, token, openAuthModal } = useAuth();
 
-  useEffect(() => {
-    setGoogleMapsKey(settings?.googleMapsKey || '');
-  }, [settings?.googleMapsKey]);
+  // User preferences stored in local storage
+  const [currency, setCurrency] = useState(() => storage.get('pref_currency', 'INR'));
+  const [travelers, setTravelers] = useState(() => parseInt(storage.get('pref_travelers', '1'), 10) || 1);
+  const [preferredMode, setPreferredMode] = useState(() => storage.get('pref_mode', 'any'));
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  // Notification preferences
+  const [notifications, setNotifications] = useState(() => ({
+    tripUpdates: storage.get('notify_trip_updates', 'true') === 'true',
+    priceAlerts: storage.get('notify_price_alerts', 'true') === 'true',
+    weatherAlerts: storage.get('notify_weather_alerts', 'true') === 'true'
+  }));
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSaveSettings({ googleMapsKey: (googleMapsKey || '').trim() });
-    onClose();
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const toggleNotification = (key) => {
+    setNotifications((prev) => {
+      const updated = { ...prev, [key]: !prev[key] };
+      storage.set(`notify_${key.replace(/([A-Z])/g, '_$1').toLowerCase()}`, String(updated[key]));
+      return updated;
+    });
   };
 
-  if (!isOpen) return null;
+  const handleSavePreferences = (e) => {
+    e.preventDefault();
+    storage.set('pref_currency', currency);
+    storage.set('pref_travelers', String(travelers));
+    storage.set('pref_mode', preferredMode);
+    setSavedSuccess(true);
+    setTimeout(() => {
+      setSavedSuccess(false);
+      onClose();
+    }, 1200);
+  };
 
   return (
-    <div 
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Settings"
+      description="Manage your account and Roamly preferences."
+      maxWidth="lg"
     >
-      <div 
-        onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg overflow-hidden rounded-2xl glass border border-white/15 shadow-2xl p-6 text-slate-200"
-      >
+      <div className="space-y-6 text-slate-800">
         
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-blue-400" />
-            <h3 className="font-display font-bold text-lg text-white">Developer Settings</h3>
+        {/* Section 1: Account */}
+        <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-blue-600" />
+              <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">Account</h4>
+            </div>
+            {!token && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  openAuthModal();
+                }}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+              >
+                Sign In
+              </button>
+            )}
           </div>
-          <button 
-            type="button"
-            onClick={onClose} 
-            className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Security Notice Callout */}
-        <div className="mt-4 p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-3">
-          <ShieldAlert className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-emerald-200/90 leading-normal">
-            <span className="font-semibold block text-emerald-400 mb-0.5">Zero-Exposure Server Architecture</span>
-            Production API keys (<code className="bg-black/30 px-1 py-0.5 rounded text-emerald-300">GEMINI_API_KEY</code> and <code className="bg-black/30 px-1 py-0.5 rounded text-emerald-300">WEATHER_API_KEY</code>) are securely managed on the backend server. They are never entered, stored, or exposed in your browser.
-          </div>
-        </div>
-
-        {/* Server Service Badges */}
-        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 flex items-center gap-2.5">
-            <Sparkles className="w-4 h-4 text-purple-400" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div>
-              <p className="font-medium text-white">Gemini AI</p>
-              <p className="text-[10px] text-slate-400">Server-side proxy</p>
+              <span className="text-[10px] uppercase text-slate-400 font-semibold block">Your Name</span>
+              <span className="font-medium text-slate-900 mt-0.5 block">
+                {user?.name || (token ? 'Authenticated User' : 'Explorer (Guest)')}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase text-slate-400 font-semibold block">Email</span>
+              <span className="font-medium text-slate-900 mt-0.5 block">
+                {user?.email || (token ? 'account@roamly.com' : 'guest@roamly.com')}
+              </span>
             </div>
           </div>
-          <div className="p-3 rounded-xl bg-slate-900/60 border border-white/10 flex items-center gap-2.5">
-            <CloudSun className="w-4 h-4 text-blue-400" />
-            <div>
-              <p className="font-medium text-white">OpenWeather</p>
-              <p className="text-[10px] text-slate-400">Server-side proxy</p>
-            </div>
+
+          <div className="flex items-center justify-between pt-1 text-xs">
+            <span className="text-slate-500">Authentication</span>
+            {token ? (
+              <Badge variant="success" size="sm">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Active (JWT)</span>
+              </Badge>
+            ) : (
+              <Badge variant="default" size="sm">Guest Session</Badge>
+            )}
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+        {/* Section 2: Preferences Form */}
+        <form onSubmit={handleSavePreferences} className="space-y-4">
+          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-200/60">
+              <Sliders className="w-4 h-4 text-slate-700" />
+              <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">Preferences</h4>
+            </div>
 
-          {/* Google Maps Key */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5 flex items-center gap-2">
-              <Map className="w-4 h-4 text-emerald-400" />
-              Google Maps API Key
-            </label>
-            <input
-              type="password"
-              value={googleMapsKey}
-              onChange={(e) => setGoogleMapsKey(e.target.value)}
-              placeholder="Interactive Google Maps fallback..."
-              className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-slate-500"
-            />
-            <p className="text-[10px] text-slate-400 mt-1">
-              If left blank, the app will render the beautiful Leaflet OSM interface.
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label htmlFor="modal-pref-currency" className="block text-xs font-medium text-slate-700 mb-1">
+                  Default Currency
+                </label>
+                <select
+                  id="modal-pref-currency"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="INR">INR ₹ (Rupee)</option>
+                  <option value="USD">USD $ (Dollar)</option>
+                  <option value="EUR">EUR € (Euro)</option>
+                  <option value="GBP">GBP £ (Pound)</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="modal-pref-travelers" className="block text-xs font-medium text-slate-700 mb-1">
+                  Default Travelers
+                </label>
+                <select
+                  id="modal-pref-travelers"
+                  value={travelers}
+                  onChange={(e) => setTravelers(parseInt(e.target.value, 10) || 1)}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="1">1 Traveler</option>
+                  <option value="2">2 Travelers</option>
+                  <option value="3">3 Travelers</option>
+                  <option value="4">4 Travelers</option>
+                  <option value="5">5+ Travelers</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="modal-pref-mode" className="block text-xs font-medium text-slate-700 mb-1">
+                  Preferred Mode
+                </label>
+                <select
+                  id="modal-pref-mode"
+                  value={preferredMode}
+                  onChange={(e) => setPreferredMode(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="any">Compare All</option>
+                  <option value="flight">Flights</option>
+                  <option value="train">Trains</option>
+                  <option value="bus">Buses</option>
+                  <option value="own">Road Trip</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Notifications */}
+          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-200/60">
+              <Bell className="w-4 h-4 text-amber-600" />
+              <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">Notifications</h4>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between py-1">
+                <div>
+                  <span className="font-medium text-slate-900 block">Trip updates</span>
+                  <span className="text-[11px] text-slate-500">Schedule changes & reminders</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleNotification('tripUpdates')}
+                  className={`px-2.5 py-0.5 rounded text-xs font-semibold cursor-pointer ${
+                    notifications.tripUpdates
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {notifications.tripUpdates ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-t border-slate-200/60">
+                <div>
+                  <span className="font-medium text-slate-900 block">Price alerts</span>
+                  <span className="text-[11px] text-slate-500">Significant fare drops</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleNotification('priceAlerts')}
+                  className={`px-2.5 py-0.5 rounded text-xs font-semibold cursor-pointer ${
+                    notifications.priceAlerts
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {notifications.priceAlerts ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-t border-slate-200/60">
+                <div>
+                  <span className="font-medium text-slate-900 block">Weather alerts</span>
+                  <span className="text-[11px] text-slate-500">Severe climate shifts</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleNotification('weatherAlerts')}
+                  className={`px-2.5 py-0.5 rounded text-xs font-semibold cursor-pointer ${
+                    notifications.weatherAlerts
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {notifications.weatherAlerts ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Application / Services */}
+          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-200/60">
+              <Sparkles className="w-4 h-4 text-purple-600" />
+              <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">Application & Services</h4>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between py-1">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                  <span className="text-slate-800">AI itinerary generation</span>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Enabled
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-t border-slate-200/60">
+                <div className="flex items-center gap-2">
+                  <Plane className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-slate-800">Live flight search</span>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Enabled
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between py-1 border-t border-slate-200/60">
+                <div className="flex items-center gap-2">
+                  <CloudSun className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="text-slate-800">Weather information</span>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Enabled
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-slate-500 pt-1">
+              These services are securely configured by Roamly.
             </p>
           </div>
 
-          {/* Submit */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-medium hover:bg-white/5 border border-white/10 rounded-xl transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4.5 py-2 text-sm font-medium bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl transition-all shadow-md shadow-blue-500/20"
-            >
-              Save Credentials
-            </button>
+          {/* Section 5: Security */}
+          <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-2 text-xs">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-200/60">
+              <Lock className="w-4 h-4 text-emerald-600" />
+              <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">Security</h4>
+            </div>
+            <div className="flex items-center justify-between py-1">
+              <span className="text-slate-700">JWT authentication</span>
+              <Badge variant="success" size="sm">Active</Badge>
+            </div>
+            <div className="flex items-center justify-between py-1 border-t border-slate-200/60">
+              <span className="text-slate-700">Server-side API protection</span>
+              <Badge variant="success" size="sm">Active</Badge>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+            {savedSuccess ? (
+              <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                <Check className="w-3.5 h-3.5" />
+                Settings saved!
+              </span>
+            ) : <span />}
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onClose}
+              >
+                Close
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+              >
+                Save Preferences
+              </Button>
+            </div>
           </div>
 
         </form>
+
       </div>
-    </div>
+    </Modal>
   );
 }
+

@@ -1,108 +1,379 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Sparkles, ShieldAlert, CloudSun, Map, Save } from 'lucide-react';
+import { 
+  ChevronLeft, 
+  User, 
+  ShieldCheck, 
+  Sliders, 
+  Bell, 
+  Sparkles, 
+  Plane, 
+  CloudSun, 
+  Lock, 
+  Check 
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { storage } from '../utils/storage';
+import { Card } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const [googleMapsKey, setGoogleMapsKey] = useState(() => storage.get('googleMapsKey', ''));
-  const [savedNotice, setSavedNotice] = useState(false);
+  const { user, token, openAuthModal } = useAuth();
 
-  const handleSubmit = (e) => {
+  // User preferences stored in local storage
+  const [currency, setCurrency] = useState(() => storage.get('pref_currency', 'INR'));
+  const [travelers, setTravelers] = useState(() => parseInt(storage.get('pref_travelers', '1'), 10) || 1);
+  const [preferredMode, setPreferredMode] = useState(() => storage.get('pref_mode', 'any'));
+
+  // Notification preferences
+  const [notifications, setNotifications] = useState(() => ({
+    tripUpdates: storage.get('notify_trip_updates', 'true') === 'true',
+    priceAlerts: storage.get('notify_price_alerts', 'true') === 'true',
+    weatherAlerts: storage.get('notify_weather_alerts', 'true') === 'true'
+  }));
+
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const toggleNotification = (key) => {
+    setNotifications((prev) => {
+      const updated = { ...prev, [key]: !prev[key] };
+      storage.set(`notify_${key.replace(/([A-Z])/g, '_$1').toLowerCase()}`, String(updated[key]));
+      return updated;
+    });
+  };
+
+  const handleSavePreferences = (e) => {
     e.preventDefault();
-    storage.set('googleMapsKey', (googleMapsKey || '').trim());
-    storage.remove('geminiKey');
-    storage.remove('openWeatherKey');
-    setSavedNotice(true);
-    setTimeout(() => setSavedNotice(false), 3000);
+    storage.set('pref_currency', currency);
+    storage.set('pref_travelers', String(travelers));
+    storage.set('pref_mode', preferredMode);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2500);
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-10 space-y-6">
-      {/* Back link */}
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      
+      {/* Back to previous route link */}
       <button
         type="button"
-        onClick={() => navigate('/')}
-        className="flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 font-semibold transition-colors cursor-pointer"
+        onClick={() => navigate(-1)}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
       >
         <ChevronLeft className="w-4 h-4" />
-        <span>Back to Home</span>
+        <span>Back to Plan</span>
       </button>
 
-      {/* Main card */}
-      <div className="rounded-2xl glass border border-white/15 p-8 shadow-2xl space-y-6 text-slate-200">
-        <div className="flex items-center gap-3 pb-4 border-b border-white/10">
-          <div className="p-2.5 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30">
-            <Sparkles className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="font-display font-bold text-2xl text-white">Application Settings</h2>
-            <p className="text-xs text-slate-400">Configure client options and view system architecture details</p>
-          </div>
-        </div>
+      {/* Page Heading & Subtitle */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Settings</h1>
+        <p className="text-sm text-slate-500 mt-1">Manage your account and Roamly preferences.</p>
+      </div>
 
-        {/* Security Notice Callout */}
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-3.5">
-          <ShieldAlert className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-emerald-200/90 leading-relaxed">
-            <span className="font-semibold block text-emerald-400 mb-1">Zero-Exposure Server Architecture</span>
-            Production API keys (<code className="bg-black/30 px-1 py-0.5 rounded text-emerald-300">GEMINI_API_KEY</code> and <code className="bg-black/30 px-1 py-0.5 rounded text-emerald-300">WEATHER_API_KEY</code>) are securely managed on the backend server. They are never entered, stored, or exposed in your browser.
-          </div>
-        </div>
-
-        {/* Server Service Badges */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/10 flex items-center gap-3">
-            <Sparkles className="w-5 h-5 text-purple-400" />
-            <div>
-              <p className="font-medium text-white">Gemini AI</p>
-              <p className="text-[11px] text-slate-400">Secure server-side proxy</p>
+      <div className="space-y-6">
+        
+        {/* Section 1: Account */}
+        <Card className="p-6 bg-white border-slate-200/90 shadow-xs space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <User className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-sm text-slate-900">Account</h2>
+                <p className="text-xs text-slate-500">Your profile credentials and authentication status</p>
+              </div>
             </div>
-          </div>
-          <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/10 flex items-center gap-3">
-            <CloudSun className="w-5 h-5 text-blue-400" />
-            <div>
-              <p className="font-medium text-white">OpenWeather</p>
-              <p className="text-[11px] text-slate-400">Secure server-side proxy</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Settings Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1.5 flex items-center gap-2">
-              <Map className="w-4 h-4 text-emerald-400" />
-              Google Maps API Key (Optional)
-            </label>
-            <input
-              type="password"
-              value={googleMapsKey}
-              onChange={(e) => setGoogleMapsKey(e.target.value)}
-              placeholder="Interactive Google Maps fallback..."
-              className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white placeholder-slate-500 text-sm"
-            />
-            <p className="text-[11px] text-slate-500 mt-1">
-              Used only for optional Google Maps tile rendering fallback. Leaflet OpenStreetMap is used by default.
-            </p>
+            {!token && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openAuthModal}
+                className="text-xs font-semibold"
+              >
+                Sign In
+              </Button>
+            )}
           </div>
 
-          <div className="flex items-center justify-between pt-2">
-            {savedNotice ? (
-              <span className="text-xs font-semibold text-emerald-400 animate-pulse">
-                ✓ Settings successfully saved!
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200/80">
+              <span className="text-[11px] font-medium text-slate-500 block uppercase tracking-wider">
+                Your Name
               </span>
-            ) : <span />}
+              <span className="text-sm font-semibold text-slate-900 mt-0.5 block">
+                {user?.name || (token ? 'Authenticated User' : 'Explorer (Guest)')}
+              </span>
+            </div>
 
-            <button
-              type="submit"
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer"
-            >
-              <Save className="w-4 h-4" />
-              <span>Save Settings</span>
-            </button>
+            <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200/80">
+              <span className="text-[11px] font-medium text-slate-500 block uppercase tracking-wider">
+                Email Address
+              </span>
+              <span className="text-sm font-semibold text-slate-900 mt-0.5 block">
+                {user?.email || (token ? 'account@roamly.com' : 'guest@roamly.com')}
+              </span>
+            </div>
           </div>
-        </form>
+
+          <div className="flex items-center justify-between pt-1 text-xs">
+            <span className="text-slate-600">Authentication</span>
+            {token ? (
+              <Badge variant="success" size="sm">
+                <ShieldCheck className="w-3 h-3" />
+                <span>JWT Authenticated</span>
+              </Badge>
+            ) : (
+              <Badge variant="default" size="sm">
+                <span>Guest Session (Local Storage)</span>
+              </Badge>
+            )}
+          </div>
+        </Card>
+
+        {/* Section 2: Preferences */}
+        <Card className="p-6 bg-white border-slate-200/90 shadow-xs space-y-5">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
+                <Sliders className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-sm text-slate-900">Preferences</h2>
+                <p className="text-xs text-slate-500">Configure your default search parameters</p>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSavePreferences} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              
+              <div>
+                <label htmlFor="settings-currency" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Default Currency
+                </label>
+                <select
+                  id="settings-currency"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                >
+                  <option value="INR">INR ₹ (Indian Rupee)</option>
+                  <option value="USD">USD $ (US Dollar)</option>
+                  <option value="EUR">EUR € (Euro)</option>
+                  <option value="GBP">GBP £ (British Pound)</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="settings-travelers" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Default Travelers
+                </label>
+                <select
+                  id="settings-travelers"
+                  value={travelers}
+                  onChange={(e) => setTravelers(parseInt(e.target.value, 10) || 1)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                >
+                  <option value="1">1 Traveler (Solo)</option>
+                  <option value="2">2 Travelers (Couple)</option>
+                  <option value="3">3 Travelers</option>
+                  <option value="4">4 Travelers (Family)</option>
+                  <option value="5">5+ Travelers</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="settings-mode" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Preferred Travel Mode
+                </label>
+                <select
+                  id="settings-mode"
+                  value={preferredMode}
+                  onChange={(e) => setPreferredMode(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600"
+                >
+                  <option value="any">Compare All Modes</option>
+                  <option value="flight">Flights First</option>
+                  <option value="train">Trains First</option>
+                  <option value="bus">Buses First</option>
+                  <option value="own">Road Trip</option>
+                </select>
+              </div>
+
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              {savedSuccess ? (
+                <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  Preferences updated
+                </span>
+              ) : <span />}
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                className="cursor-pointer font-semibold"
+              >
+                Save Preferences
+              </Button>
+            </div>
+          </form>
+        </Card>
+
+        {/* Section 3: Notifications */}
+        <Card className="p-6 bg-white border-slate-200/90 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Bell className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-sm text-slate-900">Notifications</h2>
+              <p className="text-xs text-slate-500">Alert preferences for your active journeys</p>
+            </div>
+          </div>
+
+          <div className="space-y-3 divide-y divide-slate-100 text-xs">
+            
+            <div className="flex items-center justify-between pt-2">
+              <div>
+                <span className="font-medium text-slate-900 block">Trip updates</span>
+                <span className="text-slate-500">Schedule changes, itinerary reminders, and booking notifications</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleNotification('tripUpdates')}
+                className={`px-3 py-1 rounded-md font-semibold text-xs transition-colors cursor-pointer ${
+                  notifications.tripUpdates
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                {notifications.tripUpdates ? 'ON' : 'OFF'}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between pt-3">
+              <div>
+                <span className="font-medium text-slate-900 block">Price alerts</span>
+                <span className="text-slate-500">Notifications for major flight fare dips and saver seat openings</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleNotification('priceAlerts')}
+                className={`px-3 py-1 rounded-md font-semibold text-xs transition-colors cursor-pointer ${
+                  notifications.priceAlerts
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                {notifications.priceAlerts ? 'ON' : 'OFF'}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between pt-3">
+              <div>
+                <span className="font-medium text-slate-900 block">Weather alerts</span>
+                <span className="text-slate-500">Severe rain alerts and temperature shifts on your transit corridor</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleNotification('weatherAlerts')}
+                className={`px-3 py-1 rounded-md font-semibold text-xs transition-colors cursor-pointer ${
+                  notifications.weatherAlerts
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                {notifications.weatherAlerts ? 'ON' : 'OFF'}
+              </button>
+            </div>
+
+          </div>
+        </Card>
+
+        {/* Section 4: Application / Services Status */}
+        <Card className="p-6 bg-white border-slate-200/90 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+            <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-sm text-slate-900">Application & Services</h2>
+              <p className="text-xs text-slate-500">Real-time status of connected intelligence and transit services</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            
+            <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/70 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                <span className="text-xs font-semibold text-slate-900">AI itinerary generation</span>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Enabled
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/70 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Plane className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-semibold text-slate-900">Live flight search</span>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Enabled
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/70 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <CloudSun className="w-4 h-4 text-amber-500" />
+                <span className="text-xs font-semibold text-slate-900">Weather information</span>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Enabled
+              </span>
+            </div>
+
+          </div>
+
+          <p className="text-[11px] text-slate-500 pt-1">
+            These services are securely configured by Roamly.
+          </p>
+        </Card>
+
+        {/* Section 5: Security */}
+        <Card className="p-6 bg-white border-slate-200/90 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-sm text-slate-900">Security</h2>
+              <p className="text-xs text-slate-500">Security protocols and session guarantees</p>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-100 text-xs">
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-slate-700 font-medium">JWT authentication</span>
+              <Badge variant="success" size="sm">Active</Badge>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-slate-700 font-medium">Server-side API protection</span>
+              <Badge variant="success" size="sm">Active</Badge>
+            </div>
+          </div>
+        </Card>
+
       </div>
     </div>
   );
