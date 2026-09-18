@@ -1,19 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Compass, Sparkles, AlertTriangle, Loader2, Edit3, ChevronDown, ChevronUp } from 'lucide-react';
+import { Compass, Sparkles, AlertTriangle, Loader2, Plane, ArrowLeft, ArrowRight, Check, AlertCircle, Info, X } from 'lucide-react';
 import { 
   PlannerHeader, 
   TripConfigurationCard, 
   QuickStartSuggestions, 
   TripSummaryBar,
-  TravelFeatureStrip
+  TravelFeatureStrip,
+  TripOverview
 } from '../components/planner';
-import SmartSuggestions from '../components/SmartSuggestions';
 import TravelOptions from '../components/TravelOptions';
 import RoadTripDetails from '../components/RoadTripDetails';
-import WeatherInfo from '../components/WeatherInfo';
-import BudgetCalculator from '../components/BudgetCalculator';
-import ItineraryGenerator from '../components/ItineraryGenerator';
 import ChatAssistant from '../components/ChatAssistant';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { Card } from '../components/ui/Card';
@@ -70,8 +67,29 @@ export default function PlannerPage() {
     return storage.getJSON('activePlan', null);
   });
   const [activeMode, setActiveMode] = useState('flight');
+  const [activeView, setActiveView] = useState(() => (tripId ? 'overview' : 'transport'));
   const [suggestedValues, setSuggestedValues] = useState(null);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [saveNotification, setSaveNotification] = useState(null);
+  const saveNotifyTimeoutRef = useRef(null);
+
+  const showNotification = (type, message) => {
+    if (saveNotifyTimeoutRef.current) {
+      clearTimeout(saveNotifyTimeoutRef.current);
+    }
+    setSaveNotification({ type, message });
+    saveNotifyTimeoutRef.current = setTimeout(() => {
+      setSaveNotification(null);
+    }, 4500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (saveNotifyTimeoutRef.current) {
+        clearTimeout(saveNotifyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Memoized initial values for editing search parameters to prevent clobbering user edits
   const modifyInitialValues = useMemo(() => {
@@ -106,6 +124,7 @@ export default function PlannerPage() {
       setActiveTrip(routeTrip);
       const savedMode = routeTrip.transportMode || (routeTrip?.options?.own ? 'own' : 'flight');
       setActiveMode(savedMode);
+      setActiveView('overview');
       setLoading(false);
     }
   }, [tripId, routeTrip]);
@@ -154,6 +173,7 @@ export default function PlannerPage() {
     setLoading(true);
     setSearchError(null);
     setShowEditForm(false);
+    setActiveView('transport');
 
     try {
       // 1. Authoritative Geocoding & Route Calculation
@@ -342,15 +362,20 @@ export default function PlannerPage() {
     });
   };
 
-  const handleSaveActiveTrip = async () => {
-    if (!user || !token) {
-      alert('Please sign in or create an account to save your travel itinerary.');
-      openAuthModal();
+  const handleSaveActiveTrip = async (forcedAuthUser = null, forcedAuthToken = null) => {
+    const activeUser = forcedAuthUser || user;
+    const activeToken = forcedAuthToken || token;
+
+    if (!activeUser || !activeToken) {
+      showNotification('info', 'Please sign in or create an account to save your travel itinerary.');
+      openAuthModal(({ user: loggedUser, token: loggedToken }) => {
+        handleSaveActiveTrip(loggedUser, loggedToken);
+      });
       return;
     }
 
     if (!activeTrip || !activeTrip.from || !activeTrip.to) {
-      alert('Cannot save incomplete trip. Please plan a trip first.');
+      showNotification('warning', 'Cannot save incomplete trip. Please plan a trip first.');
       return;
     }
 
@@ -360,25 +385,30 @@ export default function PlannerPage() {
     );
 
     if (alreadySaved) {
-      alert('This trip plan is already saved in your dashboard history.');
+      showNotification('info', 'This trip plan is already saved in your dashboard history.');
       return;
     }
 
     const tripToSave = {
       ...activeTrip,
       transportMode: activeMode,
-      userEmail: user.email
+      userEmail: activeUser.email
     };
 
     setSavingTrip(true);
     try {
-      const response = await createTrip(tripToSave, token);
+      const response = await createTrip(tripToSave, activeToken);
 
       if (response.ok) {
         const savedData = response.data;
         const effectiveTrip = savedData || { ...tripToSave, _id: `trip_${Date.now()}` };
         storage.setJSON('savedTrips', [effectiveTrip, ...localTrips]);
-        alert('Trip itinerary successfully saved to your dashboard!');
+        setActiveTrip(prev => {
+          const updated = { ...prev, _id: effectiveTrip._id };
+          storage.setJSON('activePlan', updated);
+          return updated;
+        });
+        showNotification('success', 'Trip itinerary successfully saved to your dashboard!');
         return;
       }
 
@@ -386,19 +416,21 @@ export default function PlannerPage() {
         let errorMsg = 'Invalid trip details. Please check your trip inputs.';
         if (response.data?.error) errorMsg = response.data.error;
         else if (response.data?.details?.[0]?.message) errorMsg = response.data.details[0].message;
-        alert(`Could not save trip: ${errorMsg}`);
+        showNotification('error', `Could not save trip: ${errorMsg}`);
         return;
       }
 
       if (response.status === 401 || response.status === 403) {
-        alert('Your session has expired. Please sign in again to save your trip.');
+        showNotification('warning', 'Your session has expired. Please sign in again to save your trip.');
         logout();
-        openAuthModal();
+        openAuthModal(({ user: loggedUser, token: loggedToken }) => {
+          handleSaveActiveTrip(loggedUser, loggedToken);
+        });
         return;
       }
 
       if (response.status === 429) {
-        alert('Too many save requests. Please wait a moment before trying again.');
+        showNotification('warning', 'Too many save requests. Please wait a moment before trying again.');
         return;
       }
 
@@ -411,7 +443,12 @@ export default function PlannerPage() {
         createdAt: new Date().toISOString()
       };
       storage.setJSON('savedTrips', [localSavedTrip, ...localTrips]);
-      alert('Trip itinerary saved locally (Offline Mode).');
+      setActiveTrip(prev => {
+        const updated = { ...prev, _id: localSavedTrip._id };
+        storage.setJSON('activePlan', updated);
+        return updated;
+      });
+      showNotification('info', 'Trip itinerary saved locally (Offline Mode).');
     } finally {
       setSavingTrip(false);
     }
@@ -622,14 +659,58 @@ export default function PlannerPage() {
     <ErrorBoundary fallbackTitle="Travel Plan Error" onReset={handleBackToSearch}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 animate-fade-in">
 
-        {/* Trip Summary Header Bar with Modify Search & Save Plan */}
-        <TripSummaryBar
-          activeTrip={activeTrip}
-          onBackToSearch={handleBackToSearch}
-          onModifySearch={() => setShowEditForm(!showEditForm)}
-          onSaveTrip={handleSaveActiveTrip}
-          savingTrip={savingTrip}
-        />
+        {/* Workflow Stage Navigation: [ ✈ 1. Transport & Routes ] [ 🗺️ 2. Trip Overview & Itinerary ] */}
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveView('transport')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                activeView === 'transport'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Plane className="w-3.5 h-3.5" />
+              <span>1. Transport &amp; Routes</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveView('overview')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                activeView === 'overview'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>2. Trip Overview &amp; Itinerary</span>
+            </button>
+          </div>
+
+          {activeView === 'transport' ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveView('overview')}
+              className="cursor-pointer font-semibold text-xs flex items-center gap-1.5"
+            >
+              <span>View Itinerary</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveView('transport')}
+              className="cursor-pointer font-semibold text-xs flex items-center gap-1.5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Change Transport</span>
+            </Button>
+          )}
+        </div>
 
         {/* Collapsible Search Parameter Editor */}
         {showEditForm && (
@@ -650,32 +731,51 @@ export default function PlannerPage() {
           </div>
         )}
 
-        {/* PRIMARY FOCAL CONTENT: Transport & Flight Results (3-Column Layout) */}
-        <div className="p-5 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-xs">
-          <div className="pb-4 mb-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h3 className="font-semibold text-lg text-slate-900 tracking-tight">
-                Available Transport &amp; Routes
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Select your preferred route. Flights are backed by Google Flights live schedules.
-              </p>
+        {/* In-App Notification Toast / Banner for State Feedback */}
+        {saveNotification && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 shadow-xs animate-fade-in ${
+              saveNotification.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : saveNotification.type === 'error'
+                ? 'bg-rose-50 border-rose-200 text-rose-800'
+                : saveNotification.type === 'warning'
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-blue-50 border-blue-200 text-blue-800'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              {saveNotification.type === 'success' && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+              {saveNotification.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+              {saveNotification.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
+              {saveNotification.type === 'info' && <Info className="w-4 h-4 text-blue-600 shrink-0" />}
+              <span className="font-medium">{saveNotification.message}</span>
             </div>
+            <button
+              type="button"
+              onClick={() => setSaveNotification(null)}
+              className="p-1 text-slate-400 hover:text-slate-700 rounded-md transition-colors cursor-pointer"
+              aria-label="Dismiss notification"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
+        )}
 
-          <TravelOptions
-            from={activeTrip.from}
-            to={activeTrip.to}
-            date={activeTrip.date}
-            returnDate={activeTrip.returnDate}
-            travelers={activeTrip.travelers}
-            options={activeTrip.options}
-            activeMode={activeMode}
-            setActiveMode={handleSelectMode}
-            flightLoading={flightLoading}
-            flightError={flightError}
-            onModifySearch={() => setShowEditForm(true)}
-            onRetrySearch={() => {
+        {/* Dynamic Stage View: 2. Trip Overview OR 1. Transport & Routes */}
+        {activeView === 'overview' ? (
+          <TripOverview
+            trip={activeTrip}
+            onEditTrip={() => setShowEditForm(!showEditForm)}
+            onChangeItinerary={handleChangeItinerary}
+            onSaveTrip={handleSaveActiveTrip}
+            savingTrip={savingTrip}
+            isSaved={Boolean(tripId || activeTrip?._id)}
+            onViewTransport={() => setActiveView('transport')}
+            onBackToTrips={() => navigate('/dashboard')}
+            onRetry={() => {
               if (activeTrip) {
                 handleSearch({
                   from: activeTrip.from,
@@ -688,49 +788,138 @@ export default function PlannerPage() {
                 });
               }
             }}
-            suggestions={activeTrip.suggestions}
-            onSelectFlightOffer={(offer) => {
-              setActiveTrip(prev => {
-                if (!prev) return prev;
-                const updated = mergeFlightOffersIntoTrip(prev, [offer, ...(prev.options?.flight || []).filter(f => f.id !== offer.id)]);
-                storage.setJSON('activePlan', updated);
-                return updated;
-              });
-            }}
-          >
-            <RoadTripDetails tripData={activeTrip} />
-          </TravelOptions>
-        </div>
+          />
+        ) : (
+          <div className="space-y-6">
+            {/* Trip Summary Header Bar with Modify Search & Save Plan */}
+            <TripSummaryBar
+              activeTrip={activeTrip}
+              onBackToSearch={handleBackToSearch}
+              onModifySearch={() => setShowEditForm(!showEditForm)}
+              onSaveTrip={handleSaveActiveTrip}
+              savingTrip={savingTrip}
+              isSaved={Boolean(tripId || activeTrip?._id)}
+            />
 
-        {/* SECONDARY SECTION: Day-by-day Itinerary & Destination Logistics */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 pt-2">
-          
-          {/* Left Column: Itinerary Details */}
-          <div className="lg:col-span-8 space-y-6">
-            <div className="p-5 sm:p-6 rounded-xl bg-white border border-slate-200/90 shadow-xs">
-              <ItineraryGenerator
-                itinerary={activeTrip.itinerary}
-                onChangeItinerary={handleChangeItinerary}
-              />
+            {/* PRIMARY FOCAL CONTENT: Transport & Flight Results (3-Column Layout) */}
+            <div className="p-5 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-xs">
+              <div className="pb-4 mb-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold text-lg text-slate-900 tracking-tight">
+                    Available Transport &amp; Routes
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Select your preferred route. Flights are backed by Google Flights live schedules.
+                  </p>
+                </div>
+              </div>
+
+              <TravelOptions
+                from={activeTrip.from}
+                to={activeTrip.to}
+                date={activeTrip.date}
+                returnDate={activeTrip.returnDate}
+                travelers={activeTrip.travelers}
+                options={activeTrip.options}
+                activeMode={activeMode}
+                setActiveMode={handleSelectMode}
+                flightLoading={flightLoading}
+                flightError={flightError}
+                onModifySearch={() => setShowEditForm(true)}
+                onRetrySearch={() => {
+                  if (activeTrip) {
+                    handleSearch({
+                      from: activeTrip.from,
+                      to: activeTrip.to,
+                      date: activeTrip.date,
+                      returnDate: activeTrip.returnDate,
+                      travelers: activeTrip.travelers,
+                      budget: activeTrip.budget,
+                      preferredMode: activeMode
+                    });
+                  }
+                }}
+                suggestions={activeTrip.suggestions}
+                onSelectFlightOffer={(offer) => {
+                  setActiveTrip(prev => {
+                    if (!prev) return prev;
+                    const remainingOffers = (prev.options?.flight || []).filter(f => f !== offer);
+                    const updated = mergeFlightOffersIntoTrip(prev, [offer, ...remainingOffers]);
+                    storage.setJSON('activePlan', updated);
+                    return updated;
+                  });
+                  setActiveView('overview');
+                }}
+                onSelectTrainOffer={(train) => {
+                  handleSelectMode('train');
+                  setActiveTrip(prev => {
+                    if (!prev) return prev;
+                    const updated = { ...prev, selectedTrain: train };
+                    storage.setJSON('activePlan', updated);
+                    return updated;
+                  });
+                  setActiveView('overview');
+                }}
+                onSelectBusOffer={(bus) => {
+                  handleSelectMode('bus');
+                  setActiveTrip(prev => {
+                    if (!prev) return prev;
+                    const updated = { ...prev, selectedBus: bus };
+                    storage.setJSON('activePlan', updated);
+                    return updated;
+                  });
+                  setActiveView('overview');
+                }}
+              >
+                <RoadTripDetails
+                  tripData={activeTrip}
+                  onSelectRoadRoute={(routeIndexOrObj) => {
+                    handleSelectMode('own');
+                    setActiveTrip(prev => {
+                      if (!prev) return prev;
+                      const routes = prev.options?.own?.routes || [];
+                      let resolvedRoute = routeIndexOrObj;
+                      let resolvedIndex = 0;
+                      if (typeof routeIndexOrObj === 'number') {
+                        resolvedIndex = routeIndexOrObj;
+                        resolvedRoute = routes[routeIndexOrObj] || null;
+                      } else if (routeIndexOrObj && typeof routeIndexOrObj === 'object') {
+                        const foundIdx = routes.findIndex(r => r === routeIndexOrObj);
+                        resolvedIndex = foundIdx >= 0 ? foundIdx : 0;
+                        resolvedRoute = routeIndexOrObj;
+                      }
+                      const updated = {
+                        ...prev,
+                        selectedRoute: resolvedRoute,
+                        selectedRouteIndex: resolvedIndex
+                      };
+                      storage.setJSON('activePlan', updated);
+                      return updated;
+                    });
+                    setActiveView('overview');
+                  }}
+                />
+              </TravelOptions>
+            </div>
+
+            {/* Prompt to Continue to Itinerary */}
+            <div className="p-4 sm:p-5 rounded-xl bg-blue-50/80 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="space-y-0.5">
+                <h4 className="font-bold text-sm text-blue-950">Ready to explore your daily itinerary?</h4>
+                <p className="text-xs text-blue-800">Review your timeline, day-by-day sightseeing, route map, and budget breakdown.</p>
+              </div>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setActiveView('overview')}
+                className="cursor-pointer font-semibold px-5 shrink-0 shadow-xs flex items-center gap-2"
+              >
+                <span>Continue to Trip Overview</span>
+                <ArrowRight className="w-4 h-4" />
+              </Button>
             </div>
           </div>
-
-          {/* Right Column: Destination Weather & Budget Details */}
-          <div className="lg:col-span-4 space-y-6">
-            <WeatherInfo
-              weather={activeTrip.weather}
-              destination={activeTrip.to}
-              destinationCoords={activeTrip.coordinates?.to}
-            />
-
-            <BudgetCalculator
-              budgetDetails={activeTrip.budgetDetails}
-              travelers={activeTrip.travelers}
-              activeMode={activeMode}
-            />
-          </div>
-
-        </div>
+        )}
 
         {/* Floating Chat Assistant */}
         <ChatAssistant tripData={activeTrip} />

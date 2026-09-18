@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { Compass, Menu, Key, User, LogOut, FolderHeart, Settings as SettingsIcon, ChevronDown } from 'lucide-react';
+import { Compass, Menu, User, LogOut, FolderHeart, Settings as SettingsIcon, ChevronDown } from 'lucide-react';
 import { Dropdown, DropdownItem, DropdownDivider } from '../ui/Dropdown';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
@@ -21,10 +21,8 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
   };
 
   const handleLogout = () => {
-    if (window.confirm('Are you sure you want to sign out?')) {
-      logout();
-      navigate('/');
-    }
+    logout();
+    navigate('/');
   };
 
   const userInitials = user?.name
@@ -39,7 +37,7 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
         <button
           type="button"
           onClick={onToggleSidebar}
-          className="md:hidden p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+          className="md:hidden p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           aria-label="Toggle Navigation Menu"
         >
           <Menu className="w-5 h-5" />
@@ -73,14 +71,15 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
 
       {/* Right: Actions & Profile */}
       <div className="flex items-center gap-2.5">
-        {/* Settings Key Button */}
+        {/* Preferences & Settings Button */}
         <button
           type="button"
           onClick={onOpenSettings}
-          title="Configure API Keys & Settings"
-          className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200/80 transition-colors cursor-pointer"
+          title="Preferences & Settings"
+          aria-label="Preferences and settings"
+          className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200/80 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
-          <Key className="w-4 h-4" />
+          <SettingsIcon className="w-4 h-4" />
         </button>
 
         {/* User Account / Sign In */}
@@ -90,7 +89,7 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
             trigger={
               <button
                 type="button"
-                className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all cursor-pointer"
+                className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               >
                 <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
                   {userInitials}

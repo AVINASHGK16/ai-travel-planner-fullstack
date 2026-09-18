@@ -31,7 +31,8 @@ export function AppSidebar({ onOpenHelp, onCloseMobile, className = '' }) {
 
   const searchParams = new URLSearchParams(location.search);
   const tabParam = searchParams.get('tab');
-  const isPlanActive = location.pathname === '/' || location.pathname.startsWith('/plan');
+  const isExploreActive = location.pathname === '/';
+  const isPlanActive = location.pathname.startsWith('/plan');
   const isDashboardActive = location.pathname === '/dashboard' && tabParam !== 'saved';
   const isSavedActive = location.pathname === '/dashboard' && tabParam === 'saved';
   const isProfileActive = location.pathname === '/settings';
@@ -62,7 +63,7 @@ export function AppSidebar({ onOpenHelp, onCloseMobile, className = '' }) {
       id: 'destinations',
       label: 'Destinations',
       icon: Navigation,
-      isActive: false,
+      isActive: isExploreActive,
       onClick: () => handleNav('/')
     },
     {
@@ -99,7 +100,8 @@ export function AppSidebar({ onOpenHelp, onCloseMobile, className = '' }) {
                   key={item.id}
                   type="button"
                   onClick={item.onClick}
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all duration-150 cursor-pointer text-left ${
+                  aria-current={item.isActive ? 'page' : undefined}
+                  className={`w-full min-h-[44px] flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all duration-150 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                     item.isActive
                       ? 'bg-blue-50 text-blue-600 font-semibold shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium'
@@ -111,7 +113,7 @@ export function AppSidebar({ onOpenHelp, onCloseMobile, className = '' }) {
                     }`}
                   />
                   <span className="truncate">{item.label}</span>
-                  {item.id === 'plan' && (
+                  {item.isActive && (
                     <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />
                   )}
                 </button>
@@ -142,7 +144,7 @@ export function AppSidebar({ onOpenHelp, onCloseMobile, className = '' }) {
             if (onOpenHelp) onOpenHelp();
             if (onCloseMobile) onCloseMobile();
           }}
-          className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-colors font-medium text-left cursor-pointer"
+          className="w-full min-h-[44px] flex items-center gap-3 px-3 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-colors font-medium text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           <HelpCircle className="w-4.5 h-4.5 text-slate-400 shrink-0" />
           <span>Help & Support</span>

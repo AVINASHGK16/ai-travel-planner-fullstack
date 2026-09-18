@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { storage, isValidUser } from '../utils/storage';
 import { getCurrentUser, logout as apiLogout } from '../services/authService';
 
@@ -11,6 +11,7 @@ export function AuthProvider({ children }) {
     modalOpen: false
   });
   const [loadingAuth, setLoadingAuth] = useState(false);
+  const pendingCallbackRef = useRef(null);
 
   // Validate stored auth token on initial mount
   useEffect(() => {
@@ -70,9 +71,22 @@ export function AuthProvider({ children }) {
     setAuth({ user, token, modalOpen: false });
     storage.set('authToken', token);
     storage.setJSON('user', user);
+
+    const pendingCb = pendingCallbackRef.current;
+    pendingCallbackRef.current = null;
+    if (typeof pendingCb === 'function') {
+      try {
+        Promise.resolve(pendingCb({ user, token })).catch((cbErr) => {
+          console.warn('Error executing pending continuation callback after login:', cbErr);
+        });
+      } catch (cbErr) {
+        console.warn('Error executing pending continuation callback after login:', cbErr);
+      }
+    }
   };
 
   const handleLogout = async () => {
+    pendingCallbackRef.current = null;
     const currentToken = auth.token;
     setAuth({ user: null, token: null, modalOpen: false });
     storage.remove('authToken');
@@ -87,8 +101,15 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const openAuthModal = () => setAuth(prev => ({ ...prev, modalOpen: true }));
-  const closeAuthModal = () => setAuth(prev => ({ ...prev, modalOpen: false }));
+  const openAuthModal = (callback = null) => {
+    pendingCallbackRef.current = typeof callback === 'function' ? callback : null;
+    setAuth(prev => ({ ...prev, modalOpen: true }));
+  };
+
+  const closeAuthModal = () => {
+    pendingCallbackRef.current = null;
+    setAuth(prev => ({ ...prev, modalOpen: false }));
+  };
 
   const value = {
     user: auth.user,

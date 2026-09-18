@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Mic, MicOff, Search, MapPin, Calendar, Users, DollarSign, Navigation, Loader2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Mic, MicOff, Search, MapPin, Calendar, Users, DollarSign, Navigation, Loader2, AlertCircle } from 'lucide-react';
+import { Button } from './ui/Button';
 
 export default function HeroSearch({ onSearch, loading = false }) {
   const [from, setFrom] = useState('');
@@ -7,52 +8,90 @@ export default function HeroSearch({ onSearch, loading = false }) {
   const [date, setDate] = useState('');
   const [returnDate, setReturnDate] = useState('');
   const [travelers, setTravelers] = useState(1);
-  const [budget, setBudget] = useState(2500);
+  const [budget, setBudget] = useState(25000);
   const [preferredMode, setPreferredMode] = useState('any'); // 'any' | 'flight' | 'train' | 'bus' | 'cab' | 'own'
+  const [validationError, setValidationError] = useState(null);
   
-  // Voice recognition states
+  // Voice recognition states & ref
   const [listeningField, setListeningField] = useState(null); // 'from' | 'to' | null
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
 
   const handleVoiceSearch = (field) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Speech Recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
+      setValidationError('Speech Recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
       return;
+    }
+
+    if (listeningField === field) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+        recognitionRef.current = null;
+      }
+      setListeningField(null);
+      return;
+    }
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+      recognitionRef.current = null;
     }
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-
-    if (listeningField === field) {
-      try { recognition.stop(); } catch {}
-      setListeningField(null);
-      return;
-    }
+    recognitionRef.current = recognition;
 
     try {
       setListeningField(field);
       recognition.start();
     } catch (err) {
       console.warn('Speech recognition start failed:', err);
-      setListeningField(null);
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+        setListeningField(null);
+      }
       return;
     }
 
     recognition.onresult = (event) => {
+      if (recognitionRef.current !== recognition) return;
       const speechToText = event.results[0][0].transcript;
-      const cleanText = speechToText.replace(/\.$/g, '');
+      const cleanText = speechToText.replace(/\.$/g, '').trim();
       if (field === 'from') setFrom(cleanText);
       if (field === 'to') setTo(cleanText);
+      recognitionRef.current = null;
       setListeningField(null);
+      setValidationError(null);
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
+      recognitionRef.current = null;
       setListeningField(null);
+      const errorType = event?.error;
+      if (errorType === 'not-allowed') {
+        setValidationError('Microphone access was denied. Please allow microphone permissions in your browser.');
+      } else if (errorType === 'no-speech') {
+        setValidationError('No speech was detected. Please try speaking again.');
+      } else {
+        setValidationError('Voice search was interrupted. Please try again or type manually.');
+      }
     };
 
     recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      recognitionRef.current = null;
       setListeningField(null);
     };
   };
@@ -65,25 +104,33 @@ export default function HeroSearch({ onSearch, loading = false }) {
     e.preventDefault();
     if (loading) return;
     if (!from.trim() || !to.trim() || !date) {
-      alert('Please fill out Starting Location, Destination, and Departure Date.');
+      setValidationError('Please fill out Starting Location, Destination, and Departure Date.');
       return;
     }
     if (from.trim().toLowerCase() === to.trim().toLowerCase()) {
-      alert('Starting location and Destination must be different.');
+      setValidationError('Starting location and Destination must be different.');
       return;
     }
     if (date < todayLocalStr) {
-      alert('Departure date cannot be in the past.');
+      setValidationError('Departure date cannot be in the past.');
       return;
     }
     if (returnDate && returnDate < date) {
-      alert('Return date cannot be earlier than departure date.');
+      setValidationError('Return date cannot be earlier than departure date.');
       return;
     }
+    setValidationError(null);
     const cleanTravelers = Math.min(50, Math.max(1, parseInt(travelers, 10) || 1));
-    const cleanBudget = Math.max(100, Math.min(10000000, parseInt(budget, 10) || 2500));
+    const cleanBudget = Math.max(100, Math.min(10000000, parseInt(budget, 10) || 25000));
     onSearch({ from: from.trim(), to: to.trim(), date, returnDate: returnDate || null, travelers: cleanTravelers, budget: cleanBudget, preferredMode });
   };
+
+  const budgetPresets = [
+    { label: '₹10,000', value: 10000 },
+    { label: '₹25,000', value: 25000 },
+    { label: '₹50,000', value: 50000 },
+    { label: '₹1,00,000', value: 100000 }
+  ];
 
   return (
     <div className="w-full">
@@ -103,9 +150,29 @@ export default function HeroSearch({ onSearch, loading = false }) {
 
       {/* Main Search Panel */}
       <form 
+        noValidate
         onSubmit={handleSubmit} 
         className="w-full bg-white rounded-2xl border border-slate-200/90 shadow-md p-6 sm:p-8 space-y-5 text-slate-800"
       >
+        {/* In-form Validation Alert */}
+        {validationError && (
+          <div
+            role="alert"
+            className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center justify-between gap-2 animate-fade-in"
+          >
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{validationError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setValidationError(null)}
+              className="text-xs text-red-600 hover:text-red-800 font-semibold px-2 py-0.5 rounded hover:bg-red-100/60 cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {/* From & To inputs */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Starting Location */}
@@ -276,53 +343,58 @@ export default function HeroSearch({ onSearch, loading = false }) {
         </div>
 
         {/* Budget Slider */}
-        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl">
-          <div className="flex justify-between items-center mb-2">
+        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+          <div className="flex justify-between items-center">
             <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
               <DollarSign className="w-4 h-4 text-emerald-600" />
               Estimated Budget
             </label>
-            <span className="text-xs font-semibold text-emerald-700 font-mono bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
-              ₹{budget.toLocaleString()} / USD ${(Math.round(budget/80))}
+            <span className="text-xs font-bold text-emerald-700 font-mono bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
+              ₹{Number(budget || 0).toLocaleString()}
             </span>
           </div>
           <input
             type="range"
-            min="500"
-            max="15000"
-            step="250"
+            min="5000"
+            max="150000"
+            step="2500"
             value={budget}
-            onChange={(e) => setBudget(parseInt(e.target.value))}
+            onChange={(e) => setBudget(parseInt(e.target.value, 10) || 5000)}
             className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
           />
-          <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-1.5">
-            <span>₹500 (Economy)</span>
-            <span>₹5,000 (Standard)</span>
-            <span>₹15,000+ (Luxury)</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/70">
+            <span className="text-[11px] text-slate-500 font-medium">Quick Presets:</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {budgetPresets.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => setBudget(preset.value)}
+                  className={`text-xs font-mono px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                    budget === preset.value
+                      ? 'bg-blue-600 text-white font-bold shadow-xs'
+                      : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Action Button */}
         <div className="flex justify-center pt-2">
-          <button
+          <Button
             type="submit"
-            disabled={loading}
-            className={`w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-xl transition-all shadow-sm shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer ${
-              loading ? 'opacity-70 cursor-not-allowed' : 'active:scale-[0.98]'
-            }`}
+            size="lg"
+            variant="primary"
+            isLoading={loading}
+            leftIcon={!loading && <Search className="w-4 h-4" />}
+            className="w-full md:w-auto px-8 py-3 text-sm font-semibold rounded-xl shadow-xs"
           >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Planning Trip...</span>
-              </>
-            ) : (
-              <>
-                <Search className="w-4 h-4" />
-                <span>Plan Trip →</span>
-              </>
-            )}
-          </button>
+            {loading ? 'Planning Trip...' : 'Plan Trip →'}
+          </Button>
         </div>
 
       </form>

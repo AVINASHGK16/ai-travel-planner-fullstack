@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   User, 
   ShieldCheck, 
@@ -18,7 +18,9 @@ import { storage } from '../utils/storage';
 
 export default function SettingsPanel({
   isOpen,
-  onClose
+  onClose,
+  settings,
+  onSaveSettings
 }) {
   const { user, token, openAuthModal } = useAuth();
 
@@ -35,6 +37,31 @@ export default function SettingsPanel({
   }));
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const saveTimerRef = useRef(null);
+
+  // Synchronize state when opening or when external settings change
+  useEffect(() => {
+    if (isOpen) {
+      if (settings?.currency) setCurrency(settings.currency);
+      if (settings?.travelers) setTravelers(parseInt(settings.travelers, 10) || 1);
+      if (settings?.preferredMode) setPreferredMode(settings.preferredMode);
+    }
+  }, [isOpen, settings]);
+
+  // Clear timer when modal is closed or on unmount
+  useEffect(() => {
+    if (!isOpen && saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+      setSavedSuccess(false);
+    }
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, [isOpen]);
 
   const toggleNotification = (key) => {
     setNotifications((prev) => {
@@ -49,8 +76,14 @@ export default function SettingsPanel({
     storage.set('pref_currency', currency);
     storage.set('pref_travelers', String(travelers));
     storage.set('pref_mode', preferredMode);
+    if (onSaveSettings) {
+      onSaveSettings({ currency, travelers: String(travelers), preferredMode });
+    }
     setSavedSuccess(true);
-    setTimeout(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
       setSavedSuccess(false);
       onClose();
     }, 1200);
@@ -118,9 +151,12 @@ export default function SettingsPanel({
         {/* Section 2: Preferences Form */}
         <form onSubmit={handleSavePreferences} className="space-y-4">
           <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-200/60">
-              <Sliders className="w-4 h-4 text-slate-700" />
-              <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">Preferences</h4>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+              <div className="flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-slate-700" />
+                <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">Preferences</h4>
+              </div>
+              <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Travel Preferences</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -186,22 +222,28 @@ export default function SettingsPanel({
               <h4 className="font-semibold text-xs text-slate-900 uppercase tracking-wider">Notifications</h4>
             </div>
 
-            <div className="space-y-2 text-xs">
+            <div className="space-y-3 text-xs">
               <div className="flex items-center justify-between py-1">
                 <div>
                   <span className="font-medium text-slate-900 block">Trip updates</span>
-                  <span className="text-[11px] text-slate-500">Schedule changes & reminders</span>
+                  <span className="text-[11px] text-slate-500">Schedule changes &amp; reminders</span>
                 </div>
                 <button
                   type="button"
+                  role="switch"
+                  aria-checked={notifications.tripUpdates}
+                  aria-label="Toggle trip updates notifications"
                   onClick={() => toggleNotification('tripUpdates')}
-                  className={`px-2.5 py-0.5 rounded text-xs font-semibold cursor-pointer ${
-                    notifications.tripUpdates
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-200 text-slate-600'
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                    notifications.tripUpdates ? 'bg-blue-600' : 'bg-slate-300'
                   }`}
                 >
-                  {notifications.tripUpdates ? 'ON' : 'OFF'}
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      notifications.tripUpdates ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
                 </button>
               </div>
 
@@ -212,14 +254,20 @@ export default function SettingsPanel({
                 </div>
                 <button
                   type="button"
+                  role="switch"
+                  aria-checked={notifications.priceAlerts}
+                  aria-label="Toggle price alert notifications"
                   onClick={() => toggleNotification('priceAlerts')}
-                  className={`px-2.5 py-0.5 rounded text-xs font-semibold cursor-pointer ${
-                    notifications.priceAlerts
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-200 text-slate-600'
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                    notifications.priceAlerts ? 'bg-blue-600' : 'bg-slate-300'
                   }`}
                 >
-                  {notifications.priceAlerts ? 'ON' : 'OFF'}
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      notifications.priceAlerts ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
                 </button>
               </div>
 
@@ -230,14 +278,20 @@ export default function SettingsPanel({
                 </div>
                 <button
                   type="button"
+                  role="switch"
+                  aria-checked={notifications.weatherAlerts}
+                  aria-label="Toggle weather alert notifications"
                   onClick={() => toggleNotification('weatherAlerts')}
-                  className={`px-2.5 py-0.5 rounded text-xs font-semibold cursor-pointer ${
-                    notifications.weatherAlerts
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-200 text-slate-600'
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                    notifications.weatherAlerts ? 'bg-blue-600' : 'bg-slate-300'
                   }`}
                 >
-                  {notifications.weatherAlerts ? 'ON' : 'OFF'}
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      notifications.weatherAlerts ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
                 </button>
               </div>
             </div>
@@ -298,7 +352,11 @@ export default function SettingsPanel({
             </div>
             <div className="flex items-center justify-between py-1">
               <span className="text-slate-700">JWT authentication</span>
-              <Badge variant="success" size="sm">Active</Badge>
+              {token ? (
+                <Badge variant="success" size="sm">Active</Badge>
+              ) : (
+                <Badge variant="neutral" size="sm">Inactive (Guest)</Badge>
+              )}
             </div>
             <div className="flex items-center justify-between py-1 border-t border-slate-200/60">
               <span className="text-slate-700">Server-side API protection</span>

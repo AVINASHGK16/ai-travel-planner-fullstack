@@ -1,4 +1,4 @@
-import { ChevronLeft, ArrowLeft, Save, Sparkles, Compass, Route, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Save, Sparkles, Compass, Route, ArrowRight, Check } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -13,6 +13,7 @@ export function TripSummaryBar({
   onModifySearch,
   onSaveTrip,
   savingTrip = false,
+  isSaved = false,
   className = ''
 }) {
   if (!activeTrip) return null;
@@ -85,7 +86,7 @@ export function TripSummaryBar({
             )}
             <span className="text-slate-300">·</span>
             <span>
-              <strong className="text-slate-800 font-semibold">{activeTrip.travelers || 1}</strong> {activeTrip.travelers === 1 ? 'Traveler' : 'Travelers'} ({travelersLabel})
+              <strong className="text-slate-800 font-semibold">{travelersCount}</strong> {travelersCount === 1 ? 'Traveler' : 'Travelers'} ({travelersLabel})
             </span>
             <span className="text-slate-300">·</span>
             <span className="text-blue-700 font-semibold">{tripTypeLabel}</span>
@@ -136,15 +137,19 @@ export function TripSummaryBar({
 
           <Button
             type="button"
-            variant="primary"
+            variant={isSaved ? 'outline' : 'primary'}
             size="md"
             onClick={onSaveTrip}
             isLoading={savingTrip}
             disabled={savingTrip}
-            leftIcon={<Save className="w-4 h-4" />}
-            className="cursor-pointer font-bold shadow-xs bg-blue-600 hover:bg-blue-700 text-white"
+            leftIcon={isSaved ? <Check className="w-4 h-4 text-emerald-600" /> : <Save className="w-4 h-4" />}
+            className={`cursor-pointer font-bold shadow-xs ${
+              isSaved
+                ? 'border-emerald-200 text-emerald-700 bg-emerald-50/80 hover:bg-emerald-100/80'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
           >
-            {savingTrip ? 'Saving...' : 'Save Plan'}
+            {savingTrip ? 'Saving...' : isSaved ? 'Saved' : 'Save Plan'}
           </Button>
         </div>
 

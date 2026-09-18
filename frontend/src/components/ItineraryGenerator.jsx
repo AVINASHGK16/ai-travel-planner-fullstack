@@ -4,6 +4,8 @@ import {
   Coffee, ShoppingBag, Camera, Compass, ChevronDown, ChevronUp, Clock, DollarSign,
   Pencil, Trash2, Plus
 } from 'lucide-react';
+import { Modal } from './ui/Modal';
+import { Button } from './ui/Button';
 
 const iconMap = {
   Utensils: Utensils,
@@ -21,6 +23,7 @@ const iconMap = {
 export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
   const [expandedDay, setExpandedDay] = useState(1);
   const [editingActivity, setEditingActivity] = useState(null); // { day, actIdx }
+  const [activityToDelete, setActivityToDelete] = useState(null); // { day, actIdx, title }
 
   // Form states
   const [formTime, setFormTime] = useState('');
@@ -28,6 +31,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
   const [formDesc, setFormDesc] = useState('');
   const [formCost, setFormCost] = useState(0);
   const [formIcon, setFormIcon] = useState('Compass');
+  const [titleError, setTitleError] = useState('');
 
   if (!itinerary || !Array.isArray(itinerary) || itinerary.length === 0) return null;
 
@@ -42,6 +46,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
     setFormDesc(activity.desc || '');
     setFormCost(activity.cost || 0);
     setFormIcon(activity.icon || 'Compass');
+    setTitleError('');
   };
 
   const handleStartAdd = (day) => {
@@ -51,6 +56,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
     setFormDesc('');
     setFormCost(0);
     setFormIcon('Compass');
+    setTitleError('');
   };
 
   const handleInputKeyDown = (e, day) => {
@@ -65,9 +71,10 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
 
   const handleSaveActivity = (day) => {
     if (!formTitle.trim()) {
-      alert('Activity title is required.');
+      setTitleError('Activity title is required.');
       return;
     }
+    setTitleError('');
 
     const newItinerary = itinerary.map((dayPlan, dayIdx) => {
       const planDay = dayPlan.day ?? (dayIdx + 1);
@@ -104,20 +111,25 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
     setEditingActivity(null);
   };
 
-  const handleDeleteActivity = (day, actIdx) => {
-    if (confirm('Delete this activity from your itinerary?')) {
-      const newItinerary = itinerary.map((dayPlan, dayIdx) => {
-        const planDay = dayPlan.day ?? (dayIdx + 1);
-        if (planDay !== day) return dayPlan;
-        return {
-          ...dayPlan,
-          activities: (dayPlan.activities || []).filter((_, idx) => idx !== actIdx)
-        };
-      });
-      if (onChangeItinerary) {
-        onChangeItinerary(newItinerary);
-      }
+  const handleDeleteActivity = (day, actIdx, title) => {
+    setActivityToDelete({ day, actIdx, title: title || 'this activity' });
+  };
+
+  const confirmDeleteActivity = () => {
+    if (!activityToDelete) return;
+    const { day, actIdx } = activityToDelete;
+    const newItinerary = itinerary.map((dayPlan, dayIdx) => {
+      const planDay = dayPlan.day ?? (dayIdx + 1);
+      if (planDay !== day) return dayPlan;
+      return {
+        ...dayPlan,
+        activities: (dayPlan.activities || []).filter((_, idx) => idx !== actIdx)
+      };
+    });
+    if (onChangeItinerary) {
+      onChangeItinerary(newItinerary);
     }
+    setActivityToDelete(null);
   };
 
   return (
@@ -209,9 +221,15 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                     type="text" 
                                     value={formTitle}
                                     onKeyDown={(e) => handleInputKeyDown(e, dayNumber)}
-                                    onChange={(e) => setFormTitle(e.target.value)}
-                                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                                    onChange={(e) => {
+                                      setFormTitle(e.target.value);
+                                      if (titleError) setTitleError('');
+                                    }}
+                                    className={`w-full bg-white border rounded-lg px-2.5 py-1 text-xs text-slate-900 font-medium focus:outline-none focus:ring-1 ${
+                                      titleError ? 'border-red-400 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                                    }`}
                                 />
+                                {titleError && <p className="text-xs text-red-600 mt-1">{titleError}</p>}
                               </div>
                               <div>
                                 <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">Description</label>
@@ -297,7 +315,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteActivity(dayNumber, actIdx)}
+                              onClick={() => handleDeleteActivity(dayNumber, actIdx, activity?.title)}
                               className="p-1 bg-white border border-slate-200 hover:border-red-400 text-slate-500 hover:text-red-600 rounded transition-colors cursor-pointer"
                               title="Delete Activity"
                             >
@@ -345,10 +363,16 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                             type="text" 
                             value={formTitle}
                             onKeyDown={(e) => handleInputKeyDown(e, dayNumber)}
-                            onChange={(e) => setFormTitle(e.target.value)}
+                            onChange={(e) => {
+                              setFormTitle(e.target.value);
+                              if (titleError) setTitleError('');
+                            }}
                             placeholder="e.g. Visit Museum"
-                            className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                            className={`w-full bg-white border rounded-lg px-2.5 py-1 text-xs text-slate-900 font-medium focus:outline-none focus:ring-1 ${
+                              titleError ? 'border-red-400 focus:ring-red-500' : 'border-slate-300 focus:ring-blue-500'
+                            }`}
                           />
+                          {titleError && <p className="text-xs text-red-600 mt-1">{titleError}</p>}
                         </div>
                         <div>
                           <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">Description</label>
@@ -414,6 +438,39 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
           );
         })}
       </div>
+
+      {/* Delete Activity Confirmation Modal */}
+      <Modal
+        isOpen={activityToDelete !== null}
+        onClose={() => setActivityToDelete(null)}
+        title="Delete Activity"
+        maxWidth="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Are you sure you want to remove{' '}
+            <strong className="text-slate-900 font-semibold">{activityToDelete?.title || 'this activity'}</strong>{' '}
+            from Day {activityToDelete?.day}?
+          </p>
+
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActivityToDelete(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={confirmDeleteActivity}
+            >
+              Delete Activity
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
     </div>
   );

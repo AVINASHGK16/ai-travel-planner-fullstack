@@ -23,8 +23,9 @@ export const request = async (endpoint, options = {}) => {
 
   // Combine signal and timeout if timeoutMs provided
   let effectiveSignal = signal;
+  let timeoutSignal = null;
   if (timeoutMs && typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    timeoutSignal = AbortSignal.timeout(timeoutMs);
     if (signal && typeof AbortSignal.any === 'function') {
       effectiveSignal = AbortSignal.any([signal, timeoutSignal]);
     } else if (!signal) {
@@ -44,7 +45,24 @@ export const request = async (endpoint, options = {}) => {
     fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
   }
 
-  const response = await fetch(url, fetchOptions);
+  let response;
+  try {
+    response = await fetch(url, fetchOptions);
+  } catch (err) {
+    // If caller explicitly aborted using their own AbortController, re-throw caller cancellation
+    if (signal?.aborted && (!timeoutSignal || !timeoutSignal.aborted)) {
+      throw err;
+    }
+    if (err?.name === 'TimeoutError' || (timeoutSignal && timeoutSignal.aborted) || err?.name === 'AbortError') {
+      throw new ApiError('Connection timed out. Please check your network and try again.', 408, 'REQUEST_TIMEOUT');
+    }
+    throw new ApiError(
+      "We couldn't connect to Roamly right now. Please check your connection and try again.",
+      503,
+      'NETWORK_UNAVAILABLE',
+      err?.message ? { originalError: err.message } : null
+    );
+  }
 
   let data = null;
   const contentType = response.headers.get('content-type');

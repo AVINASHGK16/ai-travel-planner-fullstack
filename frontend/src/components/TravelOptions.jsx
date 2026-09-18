@@ -8,12 +8,9 @@ import {
   ExternalLink, 
   AlertCircle, 
   Check, 
-  ArrowUpDown, 
   Star, 
-  Info,
   ChevronRight,
   ShieldCheck,
-  Filter,
   TrendingDown,
   Calendar,
   Users,
@@ -58,9 +55,11 @@ export default function TravelOptions({
   flightError = null,
   onModifySearch = null,
   onRetrySearch = null,
-  suggestions = null,
+  _suggestions = null,
   selectedFlightOffer = null,
-  onSelectFlightOffer = null
+  onSelectFlightOffer = null,
+  onSelectTrainOffer = null,
+  onSelectBusOffer = null
 }) {
   // Sort State: 'recommended' | 'price' | 'duration' | 'departure'
   const [sortBy, setSortBy] = useState('recommended');
@@ -78,6 +77,8 @@ export default function TravelOptions({
   const showMobileFilterModal = mobileFiltersOpen;
   const setShowMobileFilterModal = setMobileFiltersOpen;
   const [activeFlightId, setActiveFlightId] = useState(() => selectedFlightOffer?.id || null);
+  const [activeTrainId, setActiveTrainId] = useState(null);
+  const [activeBusId, setActiveBusId] = useState(null);
 
   // Safe currency / price formatter
   const formatPrice = (p, currency = 'INR') => {
@@ -229,6 +230,9 @@ export default function TravelOptions({
     if (idx === 0 && flight.id !== cheapestFlightId && flight.id !== fastestFlightId) {
       return { label: 'RECOMMENDED', icon: '✦', color: 'blue' };
     }
+    if (idx === 1 && flight.id !== cheapestFlightId && flight.id !== fastestFlightId) {
+      return { label: 'BEST VALUE', icon: '💎', color: 'blue' };
+    }
     return null;
   };
 
@@ -262,11 +266,21 @@ export default function TravelOptions({
     };
   }, [flightList]);
 
-  // Lowest fare calculation for Price Insights
+  // Lowest fare and comparative calculation for Price Insights
   const lowestFare = useMemo(() => {
-    if (flightList.length === 0) return 4850;
-    const min = Math.min(...flightList.map(f => f.price || 999999));
-    return min === 999999 ? 4850 : min;
+    const validPrices = flightList.map(f => f.price).filter(p => typeof p === 'number' && p > 0);
+    if (validPrices.length === 0) return null;
+    return Math.min(...validPrices);
+  }, [flightList]);
+
+  const priceComparison = useMemo(() => {
+    const validPrices = flightList.map(f => f.price).filter(p => typeof p === 'number' && p > 0);
+    if (validPrices.length < 2) return null;
+    const min = Math.min(...validPrices);
+    const avg = Math.round(validPrices.reduce((sum, p) => sum + p, 0) / validPrices.length);
+    if (avg <= min) return null;
+    const percent = Math.round(((avg - min) / avg) * 100);
+    return percent > 0 ? percent : null;
   }, [flightList]);
 
   // Handle selecting a flight
@@ -276,6 +290,26 @@ export default function TravelOptions({
       onSelectFlightOffer(flight);
     }
     setActiveMode('flight');
+  };
+
+  // Handle selecting a train
+  const handleSelectTrain = (train) => {
+    const id = train.number || train.id || train.name;
+    setActiveTrainId(id);
+    setActiveMode('train');
+    if (onSelectTrainOffer) {
+      onSelectTrainOffer(train);
+    }
+  };
+
+  // Handle selecting a bus
+  const handleSelectBus = (bus) => {
+    const id = bus.id || bus.name;
+    setActiveBusId(id);
+    setActiveMode('bus');
+    if (onSelectBusOffer) {
+      onSelectBusOffer(bus);
+    }
   };
 
   // Toggle stop filter
@@ -559,12 +593,18 @@ export default function TravelOptions({
 
           <div>
             <div className="text-2xl font-black text-slate-900 font-mono tracking-tight">
-              ₹{lowestFare.toLocaleString()}
+              {lowestFare !== null ? `₹${lowestFare.toLocaleString()}` : 'Live fares available'}
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium mt-1">
-              <TrendingDown className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>12% lower than the average fare for this route.</span>
-            </div>
+            {priceComparison ? (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium mt-1">
+                <TrendingDown className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>{priceComparison}% lower than the average fare for this route.</span>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-500 mt-1">
+                Prices are dynamically queried for this route.
+              </div>
+            )}
           </div>
 
           <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-slate-500">
@@ -684,8 +724,8 @@ export default function TravelOptions({
             <h4 className="font-semibold text-lg text-slate-900 tracking-tight">
               We couldn't load travel options
             </h4>
-            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              Something went wrong while searching for available routes.
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              Your search details are safe. Try searching again or modify your travel parameters.
             </p>
           </div>
           <div className="flex items-center justify-center gap-3 pt-2">
@@ -929,14 +969,18 @@ export default function TravelOptions({
                     String(flight.source || '').toLowerCase() === 'live'
                   );
 
-                  const originCode = flight.origin?.code || 'BLR';
-                  const destCode = flight.destination?.code || 'GOI';
-                  const originCity = typeof from === 'string' ? from.split(',')[0].trim() : 'Bengaluru';
-                  const destCity = typeof to === 'string' ? to.split(',')[0].trim() : 'Goa';
+                  const originCode = flight.origin?.code || '—';
+                  const destCode = flight.destination?.code || '—';
+                  const originCity = typeof from === 'string' ? from.split(',')[0].trim() : (flight.origin?.name || '—');
+                  const destCity = typeof to === 'string' ? to.split(',')[0].trim() : (flight.destination?.name || '—');
 
                   const isSelected = activeFlightId === flight.id || (!activeFlightId && idx === 0 && activeMode === 'flight');
-                  const badge = getFlightBadge(flight, idx);
-                  const badgeMeta = badge;
+                  const badgeMeta = getFlightBadge(flight, idx);
+
+                  const stopsLabel = typeof flight.stops === 'number'
+                    ? (flight.stops === 0 ? 'Non-stop' : (flight.stops === 1 ? '1 stop' : `${flight.stops} stops`))
+                    : '—';
+                  const durationLabel = flight.duration || '—';
 
                   return (
                     <Card
@@ -953,7 +997,7 @@ export default function TravelOptions({
                           {flight.airlineLogo ? (
                             <img
                               src={flight.airlineLogo}
-                              alt={flight.airline}
+                              alt={flight.airline || 'Airline'}
                               className="w-9 h-9 rounded-lg object-contain bg-slate-50 p-1 border border-slate-200/80 shrink-0"
                               onError={(e) => {
                                 e.currentTarget.style.display = 'none';
@@ -961,12 +1005,12 @@ export default function TravelOptions({
                             />
                           ) : (
                             <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 font-bold text-xs flex items-center justify-center font-mono shrink-0">
-                              {(flight.airlineCode || flight.airline || 'FL').slice(0, 2).toUpperCase()}
+                              {(flight.airlineCode || flight.airline || '✈').slice(0, 2).toUpperCase()}
                             </div>
                           )}
                           <div>
                             <h4 className="font-bold text-sm sm:text-base text-slate-900 leading-tight">
-                              {flight.airline || 'IndiGo'}
+                              {flight.airline || '—'}
                             </h4>
                             {flight.flightNumber && (
                               <span className="text-xs text-slate-400 font-mono">
@@ -978,16 +1022,16 @@ export default function TravelOptions({
 
                         {/* Semantic Recommendation Badge */}
                         <div className="flex items-center gap-2">
-                          {badge && (
+                          {badgeMeta && (
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide uppercase font-mono border ${
-                              badge.color === 'emerald'
+                              badgeMeta.color === 'emerald'
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : badge.color === 'blue'
+                                : badgeMeta.color === 'blue'
                                 ? 'bg-blue-50 text-blue-700 border-blue-200'
                                 : 'bg-amber-50 text-amber-800 border-amber-200'
                             }`}>
-                              <span>{badge.icon}</span>
-                              <span>{badge.label}</span>
+                              <span>{badgeMeta.icon}</span>
+                              <span>{badgeMeta.label}</span>
                             </span>
                           )}
 
@@ -1006,7 +1050,7 @@ export default function TravelOptions({
                         {/* Departure */}
                         <div className="min-w-[90px]">
                           <span className="text-2xl font-bold text-slate-900 font-mono tracking-tight block">
-                            {flight.depart || '06:20'}
+                            {flight.depart || '—'}
                           </span>
                           <span className="text-xs font-semibold text-slate-700 block">
                             {originCity}
@@ -1019,7 +1063,7 @@ export default function TravelOptions({
                         {/* Route Line Graphic: How Long */}
                         <div className="flex flex-col items-center px-2 flex-1 max-w-[240px] mx-auto text-center w-full">
                           <span className="text-xs font-bold text-slate-700 mb-1 font-mono">
-                            {flight.duration || '2h 50m'} · {flight.stops === 0 ? 'Non-stop' : `${flight.stops} stop`}
+                            {durationLabel} · {stopsLabel}
                           </span>
                           <div className="w-full flex items-center gap-1.5">
                             <div className="h-px bg-slate-300 flex-1" />
@@ -1034,7 +1078,7 @@ export default function TravelOptions({
                         {/* Arrival */}
                         <div className="min-w-[90px] text-left sm:text-right">
                           <span className="text-2xl font-bold text-slate-900 font-mono tracking-tight block">
-                            {flight.arrive || '09:10'}
+                            {flight.arrive || '—'}
                           </span>
                           <span className="text-xs font-semibold text-slate-700 block">
                             {destCity}
@@ -1125,68 +1169,100 @@ export default function TravelOptions({
     <div className="space-y-4 animate-fade-in">
       {trainList.length === 0 ? (
         <Card className="p-8 text-center text-slate-500 border border-slate-200 bg-white">
-          No direct trains scheduled for this corridor.
+          No trains scheduled for this corridor.
         </Card>
       ) : (
-        trainList.map((train, idx) => (
-          <Card
-            key={train.id || idx}
-            className="p-5 border border-slate-200 hover:border-blue-300 hover:shadow-xs transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-4"
-          >
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <Train className="w-4 h-4" />
-                </div>
-                <h4 className="font-semibold text-sm text-slate-900">
-                  {train.name || 'Express Train'}{' '}
+        trainList.map((train, idx) => {
+          const trainKey = train.number || train.id || train.name || idx;
+          const isSelected = activeMode === 'train' && (activeTrainId === trainKey || (!activeTrainId && idx === 0));
+
+          return (
+            <Card
+              key={trainKey}
+              className={`p-5 transition-all duration-150 bg-white border flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                isSelected
+                  ? 'border-blue-600 ring-1 ring-blue-600 shadow-xs'
+                  : 'border-slate-200 hover:border-blue-300 hover:shadow-xs'
+              }`}
+            >
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <Train className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-semibold text-sm text-slate-900">
+                    {train.name || 'Express Train'}
+                  </h4>
                   {train.number && (
-                    <span className="font-mono text-xs text-slate-400 font-normal">
+                    <span className="text-xs text-slate-400 font-mono">
                       #{train.number}
                     </span>
                   )}
-                </h4>
-                <Badge variant="warning" size="sm">Estimated</Badge>
-              </div>
+                  <Badge variant="warning" size="sm">Estimated</Badge>
+                </div>
 
-              <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                <span className="flex items-center gap-1 font-mono text-slate-700">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  {train.depart || '--'} → {train.arrive || '--'} ({train.duration || 'N/A'})
-                </span>
-                {train.tier && (
-                  <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] font-semibold text-slate-700">
-                    Class: {train.tier}
+                <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                  <span className="flex items-center gap-1 font-mono text-slate-700">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    {train.depart || '--'} → {train.arrive || '--'} ({train.duration || 'N/A'})
                   </span>
-                )}
-                {train.avail && (
-                  <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
-                    Available: {train.avail} seats
+                  {train.tier && (
+                    <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] font-semibold text-slate-700">
+                      Class: {train.tier}
+                    </span>
+                  )}
+                  {train.avail && (
+                    <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
+                      Available: {train.avail} seats
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-none pt-3 md:pt-0 border-slate-100">
+                <div className="text-right">
+                  <span className="text-lg font-bold text-slate-900 font-mono block">
+                    {formatPrice(train.price)}
                   </span>
-                )}
-              </div>
-            </div>
+                  <span className="text-[10px] text-slate-500 uppercase">Estimated Fare</span>
+                </div>
 
-            <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-none pt-3 md:pt-0 border-slate-100">
-              <div className="text-right">
-                <span className="text-lg font-bold text-slate-900 font-mono block">
-                  {formatPrice(train.price)}
-                </span>
-                <span className="text-[10px] text-slate-500 uppercase">Estimated Fare</span>
-              </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={isSelected ? 'primary' : 'outline'}
+                    size="md"
+                    onClick={() => handleSelectTrain(train)}
+                    className={`cursor-pointer font-bold px-4 ${
+                      isSelected
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                        : 'border-blue-600 text-blue-600 hover:bg-blue-50'
+                    }`}
+                  >
+                    {isSelected ? (
+                      <>
+                        <Check className="w-4 h-4 mr-1.5" />
+                        <span>Selected</span>
+                      </>
+                    ) : (
+                      <span>Select Train</span>
+                    )}
+                  </Button>
 
-              <a
-                href={getConfirmTktUrl(train.number)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
-              >
-                <span>Book on ConfirmTkt</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          </Card>
-        ))
+                  <a
+                    href={getConfirmTktUrl(train.number)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors shadow-xs shrink-0"
+                    title="Open live ticket booking on ConfirmTkt"
+                  >
+                    <span>ConfirmTkt</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  </a>
+                </div>
+              </div>
+            </Card>
+          );
+        })
       )}
     </div>
   );
@@ -1198,61 +1274,93 @@ export default function TravelOptions({
           No buses scheduled for this corridor.
         </Card>
       ) : (
-        busList.map((bus, idx) => (
-          <Card
-            key={bus.id || idx}
-            className="p-5 border border-slate-200 hover:border-blue-300 hover:shadow-xs transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-4"
-          >
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <Bus className="w-4 h-4" />
+        busList.map((bus, idx) => {
+          const busKey = bus.id || bus.name || idx;
+          const isSelected = activeMode === 'bus' && (activeBusId === busKey || (!activeBusId && idx === 0));
+
+          return (
+            <Card
+              key={busKey}
+              className={`p-5 transition-all duration-150 bg-white border flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                isSelected
+                  ? 'border-blue-600 ring-1 ring-blue-600 shadow-xs'
+                  : 'border-slate-200 hover:border-blue-300 hover:shadow-xs'
+              }`}
+            >
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <Bus className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-semibold text-sm text-slate-900">
+                    {bus.name || 'Bus Service'}
+                  </h4>
+                  <Badge variant="warning" size="sm">Estimated</Badge>
                 </div>
-                <h4 className="font-semibold text-sm text-slate-900">
-                  {bus.name || 'Bus Service'}
-                </h4>
-                <Badge variant="warning" size="sm">Estimated</Badge>
-              </div>
 
-              <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                <span className="flex items-center gap-1 font-mono text-slate-700">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  {bus.depart || '--'} → {bus.arrive || '--'} ({bus.duration || 'N/A'})
-                </span>
-                {bus.seats !== undefined && (
-                  <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] text-slate-700">
-                    {bus.seats} seats left
+                <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+                  <span className="flex items-center gap-1 font-mono text-slate-700">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    {bus.depart || '--'} → {bus.arrive || '--'} ({bus.duration || 'N/A'})
                   </span>
-                )}
-                {bus.rating && (
-                  <span className="flex items-center gap-0.5 text-amber-600 font-medium text-[11px]">
-                    <Star className="w-3 h-3 fill-current" />
-                    {bus.rating}
+                  {bus.seats !== undefined && (
+                    <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] text-slate-700">
+                      {bus.seats} seats left
+                    </span>
+                  )}
+                  {bus.rating && (
+                    <span className="flex items-center gap-0.5 text-amber-600 font-medium text-[11px]">
+                      <Star className="w-3 h-3 fill-current" />
+                      {bus.rating}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-none pt-3 md:pt-0 border-slate-100">
+                <div className="text-right">
+                  <span className="text-lg font-bold text-slate-900 font-mono block">
+                    {formatPrice(bus.price)}
                   </span>
-                )}
-              </div>
-            </div>
+                  <span className="text-[10px] text-slate-500 uppercase">Per Ticket</span>
+                </div>
 
-            <div className="flex items-center justify-between md:justify-end gap-4 border-t md:border-none pt-3 md:pt-0 border-slate-100">
-              <div className="text-right">
-                <span className="text-lg font-bold text-slate-900 font-mono block">
-                  {formatPrice(bus.price)}
-                </span>
-                <span className="text-[10px] text-slate-500 uppercase">Per Ticket</span>
-              </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={isSelected ? 'primary' : 'outline'}
+                    size="md"
+                    onClick={() => handleSelectBus(bus)}
+                    className={`cursor-pointer font-bold px-4 ${
+                      isSelected
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                        : 'border-blue-600 text-blue-600 hover:bg-blue-50'
+                    }`}
+                  >
+                    {isSelected ? (
+                      <>
+                        <Check className="w-4 h-4 mr-1.5" />
+                        <span>Selected</span>
+                      </>
+                    ) : (
+                      <span>Select Bus</span>
+                    )}
+                  </Button>
 
-              <a
-                href={getRedBusUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
-              >
-                <span>Book on redBus</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          </Card>
-        ))
+                  <a
+                    href={getRedBusUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors shadow-xs shrink-0"
+                    title="Open live ticket booking on redBus"
+                  >
+                    <span>redBus</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  </a>
+                </div>
+              </div>
+            </Card>
+          );
+        })
       )}
     </div>
   );
@@ -1353,7 +1461,7 @@ export default function TravelOptions({
       {/* Panels */}
       <div className="pt-1">
         {activeMode === 'flight' && renderFlightTab()}
-        {activeMode === 'own' && children}
+        {(activeMode === 'own' || activeMode === 'cab') && children}
         {activeMode === 'train' && renderTrainsTab()}
         {activeMode === 'bus' && renderBusesTab()}
       </div>

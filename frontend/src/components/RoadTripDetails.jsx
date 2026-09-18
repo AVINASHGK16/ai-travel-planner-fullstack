@@ -4,6 +4,7 @@ import L from 'leaflet';
 import { Star, ExternalLink, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
 
 // Strict coordinate validator: prevents Leaflet unrecoverable NaN / invalid coordinate crashes
 export const isValidCoord = (coord) => {
@@ -91,7 +92,7 @@ const createCustomIcon = (iconHtml, color) => {
   });
 };
 
-export default function RoadTripDetails({ tripData }) {
+export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
   // ── ALL HOOKS BEFORE ANY CONDITIONAL RETURNS ──────────────────
   const [activeRoute, setActiveRoute] = useState(0);
   const [selectedLayer, setSelectedLayer] = useState('all');
@@ -281,8 +282,18 @@ export default function RoadTripDetails({ tripData }) {
                 return (
                   <div
                     key={idx}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
+                    aria-label={`Select ${route.name || `Route ${idx + 1}`}, distance ${route.distance || 'N/A'}`}
                     onClick={() => setActiveRoute(idx)}
-                    className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setActiveRoute(idx);
+                      }
+                    }}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 text-left ${
                       isSelected
                         ? 'border-blue-600 bg-blue-50/50 shadow-xs'
                         : 'border-slate-200 bg-white hover:border-slate-300'
@@ -308,6 +319,20 @@ export default function RoadTripDetails({ tripData }) {
                 );
               })}
             </div>
+
+            {/* Primary Action: Select Route & Continue */}
+            {onSelectRoadRoute && (
+              <div className="pt-2">
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => onSelectRoadRoute(activeRoute)}
+                  className="w-full font-bold shadow-xs cursor-pointer flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <span>Select Route &amp; View Itinerary →</span>
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Map Pin Layer Toggles */}
@@ -329,7 +354,7 @@ export default function RoadTripDetails({ tripData }) {
                   key={layer.id}
                   type="button"
                   onClick={() => setSelectedLayer(layer.id)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                  className={`min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer select-none ${
                     selectedLayer === layer.id
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'

@@ -6,8 +6,11 @@
 import fs from 'fs';
 import path from 'path';
 import assert from 'assert';
+import { fileURLToPath } from 'url';
 
-const ROOT_DIR = path.resolve('c:/Users/g/OneDrive/Documents/AI TRAVEL PLANNER');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..');
 const FRONTEND_DIR = path.join(ROOT_DIR, 'frontend', 'src');
 
 console.log('====================================================');
@@ -163,7 +166,7 @@ runTest('B6: Contextual Right Sidebar contains YOUR TRIP, PRICE INSIGHTS, and PO
   const content = fs.readFileSync(path.join(FRONTEND_DIR, 'components', 'TravelOptions.jsx'), 'utf-8');
   assert(content.includes('YOUR TRIP'), 'Must have YOUR TRIP card');
   assert(content.includes('PRICE INSIGHTS'), 'Must have PRICE INSIGHTS card');
-  assert(content.includes('12% lower than the average fare for this route.'), 'Must have comparative price callout');
+  assert(content.includes('lower than the average fare for this route.'), 'Must have comparative price callout');
   assert(content.includes('POPULAR TIMES'), 'Must have POPULAR TIMES card');
 });
 
@@ -180,7 +183,7 @@ runTest('B8: PlannerPage wires TravelOptions as primary focal content with 3-col
   assert(content.includes('<TravelOptions'), 'Must render TravelOptions');
   assert(content.includes('onModifySearch'), 'Must pass onModifySearch to TravelOptions');
   assert(content.includes('onSelectFlightOffer'), 'Must pass onSelectFlightOffer to TravelOptions');
-  assert(content.includes('PlanWithAICallout'), 'Must render PlanWithAICallout in empty state');
+  assert(content.includes('TripConfigurationCard'), 'Must render TripConfigurationCard in empty state');
   assert(content.includes('TravelFeatureStrip'), 'Must render TravelFeatureStrip in empty state');
 });
 

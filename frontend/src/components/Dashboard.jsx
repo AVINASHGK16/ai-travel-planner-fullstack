@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
-import { Download, Share2, Trash2, Calendar, Users, Compass, ArrowRight, Loader2, Plus } from 'lucide-react';
-import { Button, Badge } from './ui';
+import { Download, Share2, Trash2, Calendar, Users, Compass, ArrowRight, Loader2, Plus, Check } from 'lucide-react';
+import { Button, Badge, Modal } from './ui';
 
 export default function Dashboard({
   savedTrips = [],
@@ -12,6 +12,18 @@ export default function Dashboard({
   loadingTrips = false
 }) {
   const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'past' | 'saved'
+  const [copiedTripId, setCopiedTripId] = useState(null);
+  const [shareErrorTripId, setShareErrorTripId] = useState(null);
+  const [tripToDelete, setTripToDelete] = useState(null);
+  const copyTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   // Timezone-safe local today string (YYYY-MM-DD)
   const todayStr = useMemo(() => {
@@ -169,24 +181,52 @@ export default function Dashboard({
       doc.save(`Trip_${fromCity || 'Origin'}_to_${toCity || 'Destination'}.pdf`);
 
     } catch (err) {
-      console.error("PDF generation failed:", err);
-      alert("Error generating PDF: " + err.message);
+      console.error("PDF generation failed:", err?.message || err);
     }
   };
 
-  // Share or copy link
-  const handleShareTrip = (e, trip) => {
+  // Share or copy link with inline visual feedback
+  const handleShareTrip = async (e, trip) => {
     e.stopPropagation();
+    const tripId = trip?._id || trip?.id;
     const shareFrom = typeof trip?.from === 'string' ? trip.from : 'Origin';
     const shareTo = typeof trip?.to === 'string' ? trip.to : 'Destination';
     const shareDate = trip?.date || 'upcoming date';
     const shareText = `Check out my travel plan from ${shareFrom} to ${shareTo} on ${shareDate}! Planned using Roamly.`;
 
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(shareText);
-      alert('Trip details copied to clipboard! Paste anywhere to share.');
+    if (navigator?.share) {
+      try {
+        await navigator.share({
+          title: `Trip to ${shareTo}`,
+          text: shareText,
+          url: window.location.href
+        });
+        return;
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+        // If navigator.share fails or is denied, fall back to clipboard
+      }
+    }
+
+    if (navigator?.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        setShareErrorTripId(null);
+        setCopiedTripId(tripId);
+        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = setTimeout(() => setCopiedTripId(null), 2500);
+      } catch (err) {
+        console.warn('Could not copy trip details to clipboard:', err?.message || err);
+        setCopiedTripId(null);
+        setShareErrorTripId(tripId);
+        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = setTimeout(() => setShareErrorTripId(null), 3000);
+      }
     } else {
-      alert(shareText);
+      setCopiedTripId(null);
+      setShareErrorTripId(tripId);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setShareErrorTripId(null), 3000);
     }
   };
 
@@ -330,11 +370,20 @@ export default function Dashboard({
             return (
               <div
                 key={tripId}
+                role="button"
+                tabIndex={0}
+                aria-label={`View itinerary for ${fromCity} to ${toCity}`}
                 onClick={() => {
                   if (deletingTripId) return;
                   onSelectTrip(trip);
                 }}
-                className="group bg-white rounded-xl border border-slate-200/90 shadow-xs hover:shadow-md hover:border-blue-300 transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden"
+                onKeyDown={(e) => {
+                  if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    if (!deletingTripId) onSelectTrip(trip);
+                  }
+                }}
+                className="group bg-white rounded-xl border border-slate-200/90 shadow-xs hover:shadow-md hover:border-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden text-left"
               >
                 {/* Card Content */}
                 <div className="p-5 space-y-3.5">
@@ -399,11 +448,29 @@ export default function Dashboard({
                     <button
                       type="button"
                       onClick={(e) => handleShareTrip(e, trip)}
-                      title="Share Itinerary"
+                      title={
+                        shareErrorTripId === tripId
+                          ? 'Failed to share or copy'
+                          : copiedTripId === tripId
+                          ? 'Copied to clipboard!'
+                          : 'Share Itinerary'
+                      }
                       aria-label="Share trip itinerary"
-                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors cursor-pointer"
+                      className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                        shareErrorTripId === tripId
+                          ? 'text-red-700 bg-red-50 border-red-200'
+                          : copiedTripId === tripId
+                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                          : 'text-slate-500 hover:text-slate-800 hover:bg-white border-transparent hover:border-slate-200'
+                      }`}
                     >
-                      <Share2 className="w-4 h-4" />
+                      {shareErrorTripId === tripId ? (
+                        <span className="text-[10px] font-bold text-red-600 px-0.5">Failed</span>
+                      ) : copiedTripId === tripId ? (
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Share2 className="w-4 h-4" />
+                      )}
                     </button>
 
                     <button
@@ -412,13 +479,11 @@ export default function Dashboard({
                       onClick={(e) => {
                         e.stopPropagation();
                         if (deletingTripId) return;
-                        if (window.confirm('Are you sure you want to delete this trip itinerary?')) {
-                          onDeleteTrip(tripId);
-                        }
+                        setTripToDelete({ id: tripId, title: `${fromCity} → ${toCity}` });
                       }}
                       title="Delete Trip"
                       aria-label="Delete saved trip"
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-200 transition-colors cursor-pointer disabled:opacity-50"
+                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-200 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                     >
                       {deletingTripId === tripId ? (
                         <Loader2 className="w-4 h-4 animate-spin text-red-600" />
@@ -434,6 +499,47 @@ export default function Dashboard({
           })}
         </div>
       )}
+
+      {/* Accessible In-App Delete Confirmation Modal */}
+      <Modal
+        isOpen={tripToDelete !== null}
+        onClose={() => setTripToDelete(null)}
+        title="Delete Trip Itinerary"
+        maxWidth="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Are you sure you want to delete your trip to{' '}
+            <strong className="text-slate-900 font-semibold">{tripToDelete?.title || 'this destination'}</strong>?
+            This action will remove the saved itinerary and cannot be undone.
+          </p>
+
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTripToDelete(null)}
+              disabled={deletingTripId !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              isLoading={deletingTripId === tripToDelete?.id}
+              onClick={async () => {
+                const id = tripToDelete?.id;
+                if (id) {
+                  await onDeleteTrip(id);
+                  setTripToDelete(null);
+                }
+              }}
+            >
+              Delete Trip
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
     </div>
   );

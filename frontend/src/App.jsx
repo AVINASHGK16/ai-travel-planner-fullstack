@@ -14,6 +14,7 @@ const PlannerPage = lazy(() => import('./pages/PlannerPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
+import { PreferencesProvider, usePreferences } from './context/PreferencesContext';
 import { AppShell } from './components/shell';
 
 function PageFallback() {
@@ -25,8 +26,17 @@ function PageFallback() {
   );
 }
 
-function AppLayout({ settingsOpen, setSettingsOpen, settings, handleSaveSettings }) {
+function AppLayout({ settingsOpen, setSettingsOpen }) {
   const { modalOpen, closeAuthModal, login } = useAuth();
+  const { preferences, updatePreferences } = usePreferences();
+
+  const handleSaveSettings = (newSettings) => {
+    updatePreferences(newSettings);
+    // Clean up legacy keys if any existed
+    storage.remove('googleMapsKey');
+    storage.remove('geminiKey');
+    storage.remove('openWeatherKey');
+  };
 
   return (
     <AppShell onOpenSettings={() => setSettingsOpen(true)}>
@@ -53,7 +63,7 @@ function AppLayout({ settingsOpen, setSettingsOpen, settings, handleSaveSettings
       <SettingsPanel
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        settings={settings}
+        settings={preferences}
         onSaveSettings={handleSaveSettings}
       />
     </AppShell>
@@ -62,29 +72,16 @@ function AppLayout({ settingsOpen, setSettingsOpen, settings, handleSaveSettings
 
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState({
-    currency: storage.get('pref_currency', 'INR'),
-    travelers: storage.get('pref_travelers', '1'),
-    preferredMode: storage.get('pref_mode', 'any')
-  });
-
-  const handleSaveSettings = (newSettings) => {
-    setSettings(newSettings);
-    // Clean up legacy keys if any existed
-    storage.remove('googleMapsKey');
-    storage.remove('geminiKey');
-    storage.remove('openWeatherKey');
-  };
 
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppLayout
-          settingsOpen={settingsOpen}
-          setSettingsOpen={setSettingsOpen}
-          settings={settings}
-          handleSaveSettings={handleSaveSettings}
-        />
+        <PreferencesProvider>
+          <AppLayout
+            settingsOpen={settingsOpen}
+            setSettingsOpen={setSettingsOpen}
+          />
+        </PreferencesProvider>
       </AuthProvider>
     </BrowserRouter>
   );

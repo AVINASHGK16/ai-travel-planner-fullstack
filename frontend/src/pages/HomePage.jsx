@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import HeroSearch from '../components/HeroSearch';
+import { QuickStartSuggestions } from '../components/planner';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -9,8 +10,12 @@ export default function HomePage() {
     navigate('/plan', { state: { searchParams: params } });
   };
 
+  const handleSelectSuggestion = (params) => {
+    navigate('/plan', { state: { searchParams: params } });
+  };
+
   return (
-    <div className="relative min-h-[calc(100vh-60px)] flex flex-col items-center justify-center overflow-hidden py-10 px-4">
+    <div className="relative min-h-[calc(100vh-60px)] flex flex-col items-center justify-start overflow-hidden py-10 px-4">
       {/* Animated subtle background orbs */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-blue-500/5 blur-[120px] animate-pulse" />
@@ -47,8 +52,13 @@ export default function HomePage() {
         <HeroSearch onSearch={handleSearch} loading={false} />
       </div>
 
+      {/* Destination Inspiration */}
+      <div className="relative z-10 w-full max-w-4xl mt-12">
+        <QuickStartSuggestions onSelectSuggestion={handleSelectSuggestion} />
+      </div>
+
       {/* Powered-by strip */}
-      <div className="relative z-10 mt-8 text-center text-xs text-slate-400 flex items-center justify-center gap-3">
+      <div className="relative z-10 mt-10 mb-6 text-center text-xs text-slate-400 flex items-center justify-center gap-3">
         <div className="h-px w-12 bg-slate-200" />
         <span>Powered by Gemini AI · Leaflet OSM · OpenWeather</span>
         <div className="h-px w-12 bg-slate-200" />

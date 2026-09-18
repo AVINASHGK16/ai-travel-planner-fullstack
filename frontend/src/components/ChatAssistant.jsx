@@ -3,7 +3,7 @@ import { MessageSquare, X, Send, Sparkles } from 'lucide-react';
 import { getAIChatResponse } from '../utils/planner';
 
 // Safe markdown-bold renderer — strictly prevents XSS without dangerouslySetInnerHTML
-export const renderMessageText = (text) => {
+const renderMessageText = (text) => {
   if (typeof text !== 'string' || !text) return null;
   const parts = text.split(/(\*\*.*?\*\*)/g);
   return parts.map((part, i) => {
@@ -15,7 +15,7 @@ export const renderMessageText = (text) => {
 };
 
 // Local fallback rules engine when backend AI is offline or key is unconfigured
-export const getLocalChatFallback = (text, tripData) => {
+const getLocalChatFallback = (text, tripData) => {
   const lower = typeof text === 'string' ? text.toLowerCase() : '';
   const from = tripData?.from || 'Origin';
   const to = tripData?.to || 'Destination';
@@ -71,6 +71,7 @@ export default function ChatAssistant({ tripData }) {
   ]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isBackendAvailable, setIsBackendAvailable] = useState(true);
   
   const chatEndRef = useRef(null);
   const isMounted = useRef(true);
@@ -129,6 +130,7 @@ export default function ChatAssistant({ tripData }) {
       // Call backend AI proxy
       const reply = await getAIChatResponse(updatedHistory, boundedText, tripData, controller.signal);
       if (isMounted.current && !controller.signal.aborted) {
+        setIsBackendAvailable(true);
         setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);
       }
     } catch (err) {
@@ -140,11 +142,16 @@ export default function ChatAssistant({ tripData }) {
         fallbackPrefix = '⚠️ Live AI assistant is currently rate-limited due to high traffic.\nHere is quick route intelligence for your question:\n\n';
       } else if (err.status === 504 || err.name === 'TimeoutError') {
         fallbackPrefix = '⏱️ Live AI response timed out.\nHere is estimated guidance for your question:\n\n';
+      } else {
+        if (isMounted.current) {
+          setIsBackendAvailable(false);
+        }
+        fallbackPrefix = 'ℹ️ Live backend currently offline. Displaying local travel intelligence:\n\n';
       }
 
       // Fallback local rules engine for chat queries
       const localReply = getLocalChatFallback(boundedText, tripData);
-      const finalReply = fallbackPrefix ? `${fallbackPrefix}${localReply}` : localReply;
+      const finalReply = `${fallbackPrefix}${localReply}`;
       if (isMounted.current) {
         setMessages(prev => [...prev, { sender: 'assistant', text: finalReply }]);
       }
@@ -170,7 +177,7 @@ export default function ChatAssistant({ tripData }) {
   ];
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
       
       {/* Expanded Chat Pane */}
       {isOpen && (
@@ -185,9 +192,15 @@ export default function ChatAssistant({ tripData }) {
               <div>
                 <h4 className="font-semibold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
                   AI Travel Guide
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Online
-                  </span>
+                  {isBackendAvailable ? (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Online
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                      Offline (Local)
+                    </span>
+                  )}
                 </h4>
                 <p className="text-[11px] text-slate-500">
                   Instant route & destination answers
@@ -292,7 +305,7 @@ export default function ChatAssistant({ tripData }) {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-label={isOpen ? 'Close chat assistant' : 'Open chat assistant'}
-        className="p-3.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20 transition-all duration-200 active:scale-95 hover:scale-105 shrink-0 z-50 flex items-center justify-center cursor-pointer"
+        className="p-3.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20 transition-all duration-200 active:scale-95 hover:scale-105 shrink-0 z-40 flex items-center justify-center cursor-pointer"
       >
         {isOpen ? <X className="w-5 h-5" /> : <MessageSquare className="w-5 h-5" />}
       </button>

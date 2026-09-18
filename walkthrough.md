@@ -1,81 +1,140 @@
-# ROAMLY — UI-3 Walkthrough
-## Plan Trip + Flight Results Visual Redesign
+# ROAMLY — UI-3.3, UI-3.2 & UI-3.1 Walkthrough
 
-UI-3 has been fully implemented, validated with automated test suites, and verified visually through interactive browser sessions.
-
----
-
-## 1. Overview of Changes
-
-### Phase A — Plan Trip Page (`/plan` Initial View) — Refined in UI-3.1
-- **Desktop Composition & 1180px Canvas**:
-  - Container expanded to `w-full max-w-[1180px] mx-auto` with fluid responsive padding (`px-4 sm:px-6 lg:px-8`).
-  - Completely resolves narrow-column appearance and excessive horizontal desktop whitespace.
-- **Unified Planning Experience (Mode Selector)**:
-  - Eliminated competing hero cards. Top segmented mode selector: `[ 🧭 Structured Search ]` and `[ ✨ Ask AI ]`.
-  - **Structured Search**: Active brand blue treatment (`#2563EB`).
-  - **Ask AI**: Seamlessly switches content area into natural language prompt flow with reserved purple AI styling (`#7C3AED`), prompt textarea, inspiration prompt chips, and single dominant purple CTA (`[ ✨ Plan with AI → ]`).
-  - Exactly ONE dominant CTA exists at a time.
-- **Main Planning Area (Elevated Card Layout)**:
-  - Top bar: Mode selector on left, segmented trip type (`[ Round Trip ] [ One Way ] [ Multi-city BETA ]`) on right.
-  - Row 1 (Location): `FROM` (Bengaluru) and `TO` (Goa) with central swap button having ample hit area and no collision.
-  - Row 2 (4-Column Logistics): `DEPARTURE`, `RETURN`, `TRAVELERS`, and `TRIP TYPE` balanced across 4 desktop columns.
-  - Row 3 (Dedicated Budget): Spacious full-width budget control with formatted currency badge (`₹50,000`), smooth range slider, and quick-preset pills (`₹15,000`, `₹30,000`, `₹50,000`, `₹1,00,000`).
-  - Row 4 (CTA): Dominant CTA **`[ Search Flights & Plan Trip → ]`** in brand blue (`#2563EB`).
-- **Travel Feature Strip**:
-  - Visually restrained supporting proof-point strip evenly distributed across 4 items: `✓ Live flight data`, `✓ Curated itineraries`, `✓ Maps & navigation`, `✨ AI recommendations`.
-- **Destination Inspiration Section**:
-  - Substantially larger `QuickStartSuggestions` cards with cinematic ~16:10 photography (`h-48 sm:h-50`), category badges, days duration chips, route corridors, formatted budget, and interactive `Configure Trip →` action.
+This walkthrough documents the visual and UX implementation and verification of **UI-3.3 (Trip Overview & Itinerary Experience)**, building naturally upon **UI-3.2 (Search Results & Transport Comparison)** and **UI-3.1 (Planner Composition & UX Refinement)**.
 
 ---
 
-### Phase B — Flight Results Page (`/plan` Active View)
-- **Visual Hierarchy Shift**:
-  - Actual flight results are the **primary focal content**.
-  - Route header: **"Bengaluru to Goa"** (or selected corridor).
-  - Metadata line: `2026-09-20 → 2026-09-23 • 2 Travelers • Round Trip • 558 km`.
-  - Secondary action: **`[ Modify Search ]`** outline button to toggle search parameters.
-  - Primary action: **`[ Save Plan ]`**.
-- **Transport Selector Tabs**:
-  - `[ ✈ Flights ] [ 🚗 Road Trip ] [ 🚆 Trains ] [ 🚌 Buses ]` with Flights active by default.
-- **Desktop 3-Column Layout**:
-  - **Left Column (~20-25%)**: Visually quiet filter panel with **Sort by** (Recommended, Lowest Price, Shortest Duration, Earliest Departure), **Stops** (Non-stop, 1 stop, 2+ stops), and dynamic **Airlines** list (IndiGo, Air India, etc.).
-  - **Center Column (~55-60%)**: Primary Flight Content:
-    - **Compact "✨ Smart picks" bar**: Best value, Fastest, Cheapest chips positioned neatly above results without overpowering actual flight cards.
-    - **Horizontal Flight Result Cards**: Airline name, logo/avatar, and flight number (`IndiGo • 6E 6554`); departure & arrival times with airport codes (`19:15 BLR` ─── `1h 10m Non-stop` ─── `20:25 GOI`); live fare badge (`Google Flights · Live`); price per traveler (`₹17,362 / traveler`); and `[ Select → ]` / `✓ Selected` CTA with external Google Flights link.
-  - **Right Column (~20-25%)**: Contextual sidebar:
-    - **YOUR TRIP**: Origin → Destination, travel dates, travelers, `[ Edit ]` link.
-    - **PRICE INSIGHTS**: Lowest route fare with comparative callout (*"12% lower than the average fare for this route."*) and green indicator.
-    - **POPULAR TIMES**: Compact midweek low-fare visual histogram highlighting Tuesday & Wednesday departures.
-- **Secondary Section**:
-  - Day-by-Day Itinerary (`ItineraryGenerator`) and Destination Weather & Budget Details (`WeatherInfo`, `BudgetCalculator`) positioned cleanly below the transport view.
-- **Mobile Responsiveness**:
-  - Left filter panel collapses into a mobile filter toggle button.
-  - Flight cards format cleanly without horizontal overflow.
-  - Right sidebar cards stack neatly below results.
+## Part 1: UI-3.3 — Trip Overview & Itinerary Experience
+
+UI-3.3 transforms the trip-detail experience into a professional travel SaaS dashboard where the traveler can immediately understand:
+**Where am I going → When → How I'm getting there → What I'm doing → How much it costs.**
+
+The experience serves as the natural continuation of:
+`Plan Trip → Transport Results → Trip Overview`
+
+### Key Architectural & UX Additions
+
+1. **Trip Header (`TripOverview.jsx`)**:
+   - `Back to Trips` navigation link with hover arrow micro-interaction returning cleanly to previous view or dashboard.
+   - Clean route hierarchy: **`Origin → Destination`** (e.g. `Bengaluru → Goa`).
+   - High-density metadata line: `Dates · Travelers · Duration` (e.g., `Sep 20, 2026 · 1 Traveler · 2 days`).
+   - Clear primary & secondary action buttons:
+     - **`[ Edit Trip ]`**: Returns traveler to planner search form with prefilled parameters.
+     - **`[ Save ]` / `[ Saved ✓ ]`**: One-click trip persistence with visual feedback.
+     - **`[ ⋮ ]` Overflow Menu**: Dropdown providing `Download PDF Itinerary` (client-side PDF generation via `jsPDF`), `Share Trip` (with copy link confirmation), and `View Transport Options`.
+
+2. **Trip Summary Section (Positioned Immediately Underneath Header)**:
+   - Dominant **`TOTAL ESTIMATED COST`** display with formatted amount in Indian Rupees (`₹8,657`).
+   - Subtitle indicating travelers and duration context (`For 1 traveler · 2 days`).
+   - **4 Compact Summary Metric Cards**:
+     - **`FLIGHTS`**: `₹4,157`
+     - **`STAYS`**: `₹1,700`
+     - **`ACTIVITIES`**: `₹2,800`
+     - **`TRANSPORT`**: `included` (or mode-aware fuel/toll sum for road trips)
+
+3. **Left Column (Primary Content): ITINERARY Timeline**:
+   - Occupies `lg:col-span-7` as the primary focal center of the 2-column desktop layout.
+   - **Day Navigation**: `‹ Day 1  Day 2  Day 3 ... ›` with active pill highlighting, previous/next controls, and days planned counter.
+   - **Selected Day Header**: Monospace day label (`DAY 2 · SEP 21`) with day title (`Highlights & Return Journey`).
+   - **Compact Attached Weather**: Directly adjacent weather pill (`☀ 28°C · Pleasant & Clear`) providing day-specific context.
+   - **Reserved AI Suggestions (`✨ AI Suggestion`)**: Strictly styled in soft purple (`bg-purple-50`, `border-purple-200`, `text-purple-900`) reserved exclusively for AI insights without polluting product blue actions.
+   - **Vertical Timeline Progression**:
+     - Connected vertical progression line (`w-0.5 bg-slate-200`).
+     - Distinct transit node (`✈ Arrive in Goa`, touchdown & baggage claim).
+     - Numbered activity cards displaying start time, activity title with category icon (dining, monument, outdoors, shopping), duration pill, cost, and rich description.
+     - Final return journey node on last day (`Return Journey to Bengaluru`).
+
+4. **Right Column (Supporting Context): TRIP MAP & Compact BUDGET**:
+   - Occupies `lg:col-span-5` as supporting contextual intelligence.
+   - **Interactive Leaflet Trip Map**:
+     - Focuses on active day waypoints in destination city with custom numbered SVG pins.
+     - Polyline route connecting chronological day stops.
+     - Protected by `MapErrorBoundary` and dynamic bounds updater (`MapBoundsUpdater`).
+     - Header includes **`[ View Full Map ]`** trigger.
+   - **Full Map Modal Sheet**:
+     - Clicking `[ View Full Map ]` opens an expanded, high-resolution modal sheet using Roamly's accessible `Modal` primitive.
+   - **Compact Budget Section**:
+     - Total estimated cost vs planned budget figure (`₹8,657 of ₹10,821 planned`).
+     - Budget health status (`₹2,164 remaining` or `₹X over budget`).
+     - Visual progress bar (`████████████░░░░░ 80%`) with dynamic color thresholding (blue < 80%, amber 80–95%, rose > 95%).
+     - Category breakdown list: Flights & Transit, Hotels & Stays, Food & Activities, Local Transport & Misc.
+
+5. **Resilient States**:
+   - **Loading State**: Multi-card shimmer skeletons using `Skeleton` primitive without blocking spinners.
+   - **Empty State**: Friendly *"No itinerary available yet"* card with plan trip CTA.
+   - **Error State**: Reassuring *"We couldn't load this trip. Please try again."* card with **`[ Try Again ]`** and **`[ Back to Trips ]`** buttons, with zero credential or stack disclosures.
 
 ---
 
-## 2. Visual Verification
+### UI-3.3 Visual Verification Across Viewports
 
-### Plan Trip Initial Page (Desktop)
-![Plan Trip Initial View](file:///C:/Users/g/.gemini/antigravity-ide/brain/a10806de-a9f1-4c38-a85a-3116cecfa9f6/initial_plan_page_1789241335433.png)
+#### Desktop (1440 × 900) — Trip Overview Dashboard
+![Desktop 1440 Trip Overview](docs/screenshots/ui3_3_desktop_1440_1789285498457.png)
 
-### Flight Search Results (Desktop 3-Column Layout)
-![Flight Results Desktop](file:///C:/Users/g/.gemini/antigravity-ide/brain/a10806de-a9f1-4c38-a85a-3116cecfa9f6/flight_results_desktop_1789241433106.png)
+#### Desktop (1280 × 900) — Interactive Full Map Modal & Overflow Menu
+````carousel
+![Desktop 1280 Full Map Modal](docs/screenshots/ui3_3_map_modal_1280_1789285544407.png)
+<!-- slide -->
+![Desktop 1280 Actions Overflow Menu](docs/screenshots/ui3_3_desktop_1280_1789285581424.png)
+````
 
-### Flight Results (Mobile Viewport)
-![Flight Results Mobile](file:///C:/Users/g/.gemini/antigravity-ide/brain/a10806de-a9f1-4c38-a85a-3116cecfa9f6/flight_results_mobile_1789241454003.png)
+#### Tablet (768 × 1024) & Mobile (375 × 812) — Responsive Stacking
+````carousel
+![Tablet 768 Stacking](docs/screenshots/ui3_3_tablet_768_1789285612637.png)
+<!-- slide -->
+![Mobile 375 Single Column Stack](docs/screenshots/ui3_3_mobile_375_1789285660611.png)
+````
 
 ---
 
-## 3. Test & Quality Summary
+## Part 2: UI-3.2 — Search Results & Transport Comparison
 
-| Test Suite | Purpose | Status |
+UI-3.2 transformed transport search results into a SaaS comparison experience (`Planner → Search → Results → Compare options → Select → Trip`).
+
+### Key Highlights
+- **TripSummaryBar**: Clean route banner `Bengaluru → Goa` with `[ Modify Search ]` and `[ Save Plan ]`.
+- **240px Desktop Filter Rail**: Sort by, stops count, airlines, departure time buckets, and live price slider.
+- **5-Question Immediate Card Hierarchy**: Who, When, How Long, How Much, and What do I do.
+- **Semantic Badges**: `CHEAPEST`, `FASTEST`, `RECOMMENDED`, and `BEST VALUE`.
+- **Mobile Action Bar & Filter Drawer (375 × 812)**: Floating filters/sort bar with zero horizontal overflow (`scrollWidth <= 375`).
+
+#### Visual Verification
+````carousel
+![Desktop 1280 Results](docs/screenshots/ui3_2_desktop_1280_1789283616913.png)
+<!-- slide -->
+![Desktop 1440 Results](docs/screenshots/ui3_2_desktop_1440_1789284143889.png)
+<!-- slide -->
+![Mobile 375 Action Bar](docs/screenshots/ui3_2_mobile_action_bar_1789284373789.png)
+````
+
+---
+
+## Part 3: UI-3.1 — Planner Composition & UX Refinement
+
+UI-3.1 established the spacious `max-w-[1180px]` container, 4-column balanced logistics, unified structured vs natural language AI toggle, and image-driven destination suggestions.
+
+#### Visual Verification
+````carousel
+![Desktop 1280 Structured Search](docs/screenshots/desktop_1280_4col_confirmed_1789280650763.png)
+<!-- slide -->
+![Desktop 1280 Ask AI Mode](docs/screenshots/desktop_1280_ask_ai_1789280202250.png)
+````
+
+---
+
+## Part 4: Comprehensive Verification Matrix
+
+| Verification Suite / Tool | Scope / Focus Area | Result |
 | :--- | :--- | :--- |
-| `scratch/test_phase_ui3_implementation.js` | Verification of all 17 Phase A & B UI-3 requirements | **17/17 PASS** |
-| `scratch/test_batch_review_fixes.js` | Prior review invariants (date math, refs, modal accessibility, provider error) | **8/8 PASS** |
-| `scratch/test_phase4b_domain_integrity.js` | Geocoding, road routing, mode budgets, and backend persistence | **14/14 PASS** |
-| `scratch/test_phase_ui3_visual_correction.js` | Design system tokens, credentials privacy, zero dark glassmorphism | **7/7 PASS** |
-| `npm run lint` | ESLint rules across entire frontend codebase | **0 ERRORS** |
-| `npm run build` | Production bundle compilation with Vite | **0 ERRORS (6.31s)** |
+| `scratch/test_phase_ui3_3_overview.js` | UI-3.3 Trip Overview, Day Nav, Weather, AI Box, Map & Budget | **21/21 PASS** |
+| `scratch/test_phase_ui3_2_results.js` | UI-3.2 Transport Comparison, Filter Rail, Badges, Skeletons, Modal | **22/22 PASS** |
+| `scratch/test_phase_ui3_implementation.js` | UI-3.1 Planner & UI-3 Architecture Substring Contracts | **17/17 PASS** |
+| `scratch/test_phase_ui3_visual_correction.js` | Tokens, credentials privacy, zero dark glass, light modal | **7/7 PASS** |
+| `scratch/test_batch_review_fixes.js` | Date math, refs, modal focus trap, error sanitization | **8/8 PASS** |
+| `scratch/test_phase4b_domain_integrity.js` | Geocoding, road routes, mode-aware dynamic budgets, persistence | **14/14 PASS** |
+| `npm run lint` (oxlint) | Clean lint across 54 files | **0 ERRORS** |
+| `npm run build` (vite) | Production build bundling | **0 ERRORS (22.59s)** |
+| Real Browser (1440 × 900) | Two-column desktop layout (Itinerary + Map & Budget) | **VERIFIED** |
+| Real Browser (1280 × 900) | Day navigation, full map modal sheet, overflow actions menu | **VERIFIED** |
+| Real Browser (768 × 1024) | Tablet responsive stack and typography hierarchy | **VERIFIED** |
+| Real Browser (375 × 812) | Mobile single-column stack, zero horizontal overflow (`scrollWidth <= 375`) | **VERIFIED** |

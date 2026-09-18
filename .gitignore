@@ -16,18 +16,20 @@ dist-ssr/
 build/
 out/
 
-# Environment configurations
+# Environment configurations (root and subdirectories)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+*.env
+*.env.*
+!.env*.example
 
-# App-specific persistent data to ignore
-saved_trips.json
-backend/saved_trips.json
-users.json
-backend/users.json
+# App-specific persistent data to ignore (local JSON fallback DBs)
+*.json.bak
+saved_trips*.json
+backend/saved_trips*.json
+users*.json
+backend/users*.json
 
 # Editor directories and files
 .vscode/

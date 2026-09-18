@@ -59,10 +59,26 @@ export default function AuthModal({
       setName('');
       setError('');
     } catch (err) {
-      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-        setError('Connection timed out. Please check your network and try again.');
+      if (err?.name === 'TimeoutError' || err?.name === 'AbortError' || err?.code === 'REQUEST_TIMEOUT') {
+        setError({
+          message: 'Connection timed out. Please check your network and try again.',
+          isNetwork: true
+        });
+      } else if (err?.code === 'NETWORK_UNAVAILABLE' || err?.message?.toLowerCase()?.includes('failed to fetch') || err?.message?.toLowerCase()?.includes('connect to roamly')) {
+        setError({
+          message: "We couldn't connect to Roamly right now. Please check your connection and try again.",
+          isNetwork: true
+        });
       } else {
-        setError(err.message || 'Something went wrong. Please try again.');
+        const rawMsg = err?.message || '';
+        const isTechnical = /TypeError|AxiosError|Failed to fetch|NetworkError|Cannot read|undefined|null|500|jwt/i.test(rawMsg);
+        const safeMsg = isTechnical || !rawMsg
+          ? "We couldn't process your request right now. Please try again."
+          : rawMsg;
+        setError({
+          message: safeMsg,
+          isNetwork: false
+        });
       }
     } finally {
       setLoading(false);
@@ -74,7 +90,10 @@ export default function AuthModal({
     ? 'Sign in to access your saved trips and synchronized itineraries.'
     : mode === 'register'
     ? 'Join Roamly to plan, customize, and save your travel itineraries.'
-    : 'Enter your account email to receive a password recovery link.';
+    : 'Password reset is currently unavailable. Please contact support for account recovery assistance.';
+
+  const errorMessage = typeof error === 'object' && error !== null ? error.message : error;
+  const isNetworkError = typeof error === 'object' && error !== null ? Boolean(error.isNetwork) : (typeof error === 'string' && error.includes("couldn't connect"));
 
   return (
     <Modal
@@ -86,10 +105,30 @@ export default function AuthModal({
     >
       <div className="space-y-4 pt-1">
         {/* Error Notification */}
-        {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs animate-fade-in">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
+        {errorMessage && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs animate-fade-in space-y-2"
+          >
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{errorMessage}</span>
+            </div>
+            {isNetworkError && (
+              <div className="pt-1 pl-6">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  className="h-7 text-xs px-3 bg-white text-red-700 border-red-300 hover:bg-red-100 hover:text-red-900 cursor-pointer shadow-none"
+                >
+                  Try Again
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -97,12 +136,13 @@ export default function AuthModal({
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {mode === 'register' && (
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">
+              <label htmlFor="auth-name" className="block text-xs font-medium text-slate-700 mb-1.5">
                 Full Name
               </label>
               <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <User className="w-4 h-4 text-slate-400 shrink-0" />
                 <input
+                  id="auth-name"
                   type="text"
                   placeholder="Your full name"
                   value={name}
@@ -115,12 +155,13 @@ export default function AuthModal({
           )}
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1.5">
+            <label htmlFor="auth-email" className="block text-xs font-medium text-slate-700 mb-1.5">
               Email Address
             </label>
             <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
               <Mail className="w-4 h-4 text-slate-400 shrink-0" />
               <input
+                id="auth-email"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
@@ -134,12 +175,13 @@ export default function AuthModal({
 
           {mode !== 'forgot' && (
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">
+              <label htmlFor="auth-password" className="block text-xs font-medium text-slate-700 mb-1.5">
                 Password
               </label>
               <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <Lock className="w-4 h-4 text-slate-400 shrink-0" />
                 <input
+                  id="auth-password"
                   type="password"
                   placeholder={mode === 'register' ? 'Minimum 6 characters' : '••••••••'}
                   value={password}

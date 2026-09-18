@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, 
@@ -13,6 +13,7 @@ import {
   Check 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { usePreferences } from '../context/PreferencesContext';
 import { storage } from '../utils/storage';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -44,11 +45,22 @@ export default function SettingsPage() {
     });
   };
 
+  const { preferences, updatePreferences } = usePreferences();
+
+  useEffect(() => {
+    if (preferences) {
+      if (preferences.currency) setCurrency(preferences.currency);
+      if (preferences.travelers) setTravelers(parseInt(preferences.travelers, 10) || 1);
+      if (preferences.preferredMode) setPreferredMode(preferences.preferredMode);
+    }
+  }, [preferences]);
+
   const handleSavePreferences = (e) => {
     e.preventDefault();
     storage.set('pref_currency', currency);
     storage.set('pref_travelers', String(travelers));
     storage.set('pref_mode', preferredMode);
+    updatePreferences({ currency, travelers: String(travelers), preferredMode });
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -133,7 +145,7 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        {/* Section 2: Preferences */}
+        {/* Section 2: Travel Preferences */}
         <Card className="p-6 bg-white border-slate-200/90 shadow-xs space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
@@ -142,7 +154,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <h2 className="font-semibold text-sm text-slate-900">Preferences</h2>
-                <p className="text-xs text-slate-500">Configure your default search parameters</p>
+                <p className="text-xs text-slate-500">Travel Preferences: Configure your default currencies, party size, and transport mode</p>
               </div>
             </div>
           </div>
@@ -246,14 +258,20 @@ export default function SettingsPage() {
               </div>
               <button
                 type="button"
+                role="switch"
+                aria-checked={notifications.tripUpdates}
+                aria-label="Toggle trip updates notifications"
                 onClick={() => toggleNotification('tripUpdates')}
-                className={`px-3 py-1 rounded-md font-semibold text-xs transition-colors cursor-pointer ${
-                  notifications.tripUpdates
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                  notifications.tripUpdates ? 'bg-blue-600' : 'bg-slate-300'
                 }`}
               >
-                {notifications.tripUpdates ? 'ON' : 'OFF'}
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    notifications.tripUpdates ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
               </button>
             </div>
 
@@ -264,14 +282,20 @@ export default function SettingsPage() {
               </div>
               <button
                 type="button"
+                role="switch"
+                aria-checked={notifications.priceAlerts}
+                aria-label="Toggle price alert notifications"
                 onClick={() => toggleNotification('priceAlerts')}
-                className={`px-3 py-1 rounded-md font-semibold text-xs transition-colors cursor-pointer ${
-                  notifications.priceAlerts
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                  notifications.priceAlerts ? 'bg-blue-600' : 'bg-slate-300'
                 }`}
               >
-                {notifications.priceAlerts ? 'ON' : 'OFF'}
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    notifications.priceAlerts ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
               </button>
             </div>
 
@@ -282,14 +306,20 @@ export default function SettingsPage() {
               </div>
               <button
                 type="button"
+                role="switch"
+                aria-checked={notifications.weatherAlerts}
+                aria-label="Toggle weather alert notifications"
                 onClick={() => toggleNotification('weatherAlerts')}
-                className={`px-3 py-1 rounded-md font-semibold text-xs transition-colors cursor-pointer ${
-                  notifications.weatherAlerts
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                  notifications.weatherAlerts ? 'bg-blue-600' : 'bg-slate-300'
                 }`}
               >
-                {notifications.weatherAlerts ? 'ON' : 'OFF'}
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    notifications.weatherAlerts ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
               </button>
             </div>
 
@@ -365,7 +395,11 @@ export default function SettingsPage() {
           <div className="divide-y divide-slate-100 text-xs">
             <div className="flex items-center justify-between py-2.5">
               <span className="text-slate-700 font-medium">JWT authentication</span>
-              <Badge variant="success" size="sm">Active</Badge>
+              {token ? (
+                <Badge variant="success" size="sm">Active</Badge>
+              ) : (
+                <Badge variant="neutral" size="sm">Inactive (Guest)</Badge>
+              )}
             </div>
             <div className="flex items-center justify-between py-2.5">
               <span className="text-slate-700 font-medium">Server-side API protection</span>

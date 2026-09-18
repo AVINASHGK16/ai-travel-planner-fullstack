@@ -20,9 +20,7 @@ export default function Navbar({
 
   const handleAuthClick = () => {
     if (user) {
-      if (confirm('Are you sure you want to logout?')) {
-        if (logout) logout();
-      }
+      if (logout) logout();
     } else {
       if (openAuthModal) openAuthModal();
     }

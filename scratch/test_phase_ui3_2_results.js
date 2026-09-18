@@ -6,8 +6,11 @@
 import fs from 'fs';
 import path from 'path';
 import assert from 'assert';
+import { fileURLToPath } from 'url';
 
-const ROOT_DIR = path.resolve('c:/Users/g/OneDrive/Documents/AI TRAVEL PLANNER');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, '..');
 const FRONTEND_DIR = path.join(ROOT_DIR, 'frontend', 'src');
 
 console.log('====================================================');

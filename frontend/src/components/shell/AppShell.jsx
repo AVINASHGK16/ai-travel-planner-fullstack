@@ -11,6 +11,7 @@ import { X } from 'lucide-react';
 export function AppShell({ children, onOpenSettings }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [helpModalTab, setHelpModalTab] = useState('help');
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-slate-900">
@@ -80,15 +81,36 @@ export function AppShell({ children, onOpenSettings }) {
               <div className="flex items-center gap-4">
                 <button
                   type="button"
-                  onClick={() => setHelpModalOpen(true)}
+                  onClick={() => {
+                    setHelpModalTab('help');
+                    setHelpModalOpen(true);
+                  }}
                   className="hover:text-slate-800 transition-colors cursor-pointer"
                 >
                   Support
                 </button>
                 <span>•</span>
-                <span>Privacy Policy</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHelpModalTab('privacy');
+                    setHelpModalOpen(true);
+                  }}
+                  className="hover:text-slate-800 transition-colors cursor-pointer"
+                >
+                  Privacy Policy
+                </button>
                 <span>•</span>
-                <span>Terms of Service</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHelpModalTab('terms');
+                    setHelpModalOpen(true);
+                  }}
+                  className="hover:text-slate-800 transition-colors cursor-pointer"
+                >
+                  Terms of Service
+                </button>
               </div>
             </div>
           </footer>
@@ -99,6 +121,7 @@ export function AppShell({ children, onOpenSettings }) {
       {/* Global Help Modal */}
       <HelpModal
         isOpen={helpModalOpen}
+        initialTab={helpModalTab}
         onClose={() => setHelpModalOpen(false)}
       />
 

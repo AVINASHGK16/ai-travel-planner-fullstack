@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Check, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 import Dashboard from '../components/Dashboard';
 import ChatAssistant from '../components/ChatAssistant';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -14,6 +15,26 @@ export default function DashboardPage() {
   const [savedTrips, setSavedTrips] = useState(() => storage.getJSON('savedTrips', [], isValidTripsArray));
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [deletingTripId, setDeletingTripId] = useState(null);
+  const [notification, setNotification] = useState(null);
+  const notifyTimeoutRef = useRef(null);
+
+  const showNotification = (type, message) => {
+    if (notifyTimeoutRef.current) {
+      clearTimeout(notifyTimeoutRef.current);
+    }
+    setNotification({ type, message });
+    notifyTimeoutRef.current = setTimeout(() => {
+      setNotification(null);
+    }, 4500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (notifyTimeoutRef.current) {
+        clearTimeout(notifyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Load saved trips when user authenticates
   useEffect(() => {
@@ -110,14 +131,14 @@ export default function DashboardPage() {
         const response = await apiDeleteTrip(targetId, token);
 
         if (response.status === 401 || response.status === 403) {
-          alert('Your session has expired. Please sign in again.');
+          showNotification('warning', 'Your session has expired. Please sign in again.');
           logout();
           openAuthModal();
           return false;
         }
 
         if (response.status === 429) {
-          alert('Too many delete requests. Please wait a moment before trying again.');
+          showNotification('warning', 'Too many delete requests. Please wait a moment before trying again.');
           return false;
         }
 
@@ -126,12 +147,13 @@ export default function DashboardPage() {
           const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
           const filteredLocal = localTrips.filter(t => (t?._id || t?.id) !== targetId);
           storage.setJSON('savedTrips', filteredLocal);
+          showNotification('success', 'Trip removed.');
           return true;
         }
 
         if (!response.ok) {
           const errorDetail = response.data?.error ? `: ${response.data.error}` : '';
-          alert(`Failed to delete trip from server${errorDetail}. Please try again.`);
+          showNotification('error', `Failed to delete trip from server${errorDetail}. Please try again.`);
           return false;
         }
 
@@ -139,10 +161,11 @@ export default function DashboardPage() {
         const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
         const filteredLocal = localTrips.filter(t => (t?._id || t?.id) !== targetId);
         storage.setJSON('savedTrips', filteredLocal);
+        showNotification('success', 'Trip successfully deleted.');
         return true;
       } catch (err) {
         console.warn('Network error while deleting trip:', err.message);
-        alert('Could not delete trip due to a network error. Please check your connection and try again.');
+        showNotification('error', "We couldn't connect to Roamly right now. Please check your connection and try again.");
         return false;
       }
     } finally {
@@ -160,6 +183,39 @@ export default function DashboardPage() {
 
   return (
     <ErrorBoundary fallbackTitle="Dashboard Error" onReset={() => navigate('/')}>
+      {notification && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+          <div
+            role="status"
+            aria-live="polite"
+            className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 shadow-xs animate-fade-in ${
+              notification.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : notification.type === 'error'
+                ? 'bg-rose-50 border-rose-200 text-rose-800'
+                : notification.type === 'warning'
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-blue-50 border-blue-200 text-blue-800'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              {notification.type === 'success' && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+              {notification.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+              {notification.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
+              {notification.type === 'info' && <Info className="w-4 h-4 text-blue-600 shrink-0" />}
+              <span className="font-medium">{notification.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNotification(null)}
+              className="p-1 text-slate-400 hover:text-slate-700 rounded-md transition-colors cursor-pointer"
+              aria-label="Dismiss notification"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
       <Dashboard
         savedTrips={savedTrips}
         onDeleteTrip={handleDeleteTrip}
