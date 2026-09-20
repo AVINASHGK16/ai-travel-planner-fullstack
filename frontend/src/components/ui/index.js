@@ -7,3 +7,5 @@ export { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs';
 export { Dropdown, DropdownItem, DropdownDivider } from './Dropdown';
 export { Modal } from './Modal';
 export { Skeleton } from './Skeleton';
+export { Switch } from './Switch';
+export { Slider } from './Slider';

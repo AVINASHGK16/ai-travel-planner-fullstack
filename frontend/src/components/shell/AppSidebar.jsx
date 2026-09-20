@@ -84,12 +84,12 @@ export function AppSidebar({ onOpenHelp, onCloseMobile, className = '' }) {
 
   return (
     <aside
-      className={`w-64 bg-white border-r border-slate-200/90 flex flex-col justify-between p-3 select-none ${className}`}
+      className={`w-64 bg-white border-r border-[#E7E5DF] flex flex-col justify-between p-3 select-none ${className}`}
     >
       {/* Primary Navigation Section */}
       <div className="space-y-6">
         <div>
-          <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+          <p className="px-3 text-xs font-semibold text-[#737885] mb-2">
             Navigation
           </p>
           <nav className="space-y-1">
@@ -101,20 +101,20 @@ export function AppSidebar({ onOpenHelp, onCloseMobile, className = '' }) {
                   type="button"
                   onClick={item.onClick}
                   aria-current={item.isActive ? 'page' : undefined}
-                  className={`w-full min-h-[44px] flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all duration-150 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                  className={`group w-full min-h-[44px] flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-all duration-150 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2453FF] ${
                     item.isActive
-                      ? 'bg-blue-50 text-blue-600 font-semibold shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-medium'
+                      ? 'bg-[#2453FF]/8 text-[#2453FF] font-semibold shadow-xs'
+                      : 'text-[#3E434D] hover:text-[#14171F] hover:bg-[#FAFAF8] font-medium'
                   }`}
                 >
                   <IconComponent
-                    className={`w-4.5 h-4.5 shrink-0 ${
-                      item.isActive ? 'text-blue-600' : 'text-slate-400'
+                    className={`w-4.5 h-4.5 shrink-0 transition-colors duration-120 ${
+                      item.isActive ? 'text-[#2453FF]' : 'text-[#737885] group-hover:text-[#2453FF]'
                     }`}
                   />
                   <span className="truncate">{item.label}</span>
                   {item.isActive && (
-                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#2453FF]" />
                   )}
                 </button>
               );
@@ -124,13 +124,13 @@ export function AppSidebar({ onOpenHelp, onCloseMobile, className = '' }) {
 
         {/* AI Engine Status Card */}
         <div className="px-3">
-          <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-100 space-y-1.5">
-            <div className="flex items-center gap-2 text-purple-700 font-semibold text-xs">
-              <Sparkles className="w-3.5 h-3.5 shrink-0" />
+          <div className="p-3 rounded-xl bg-[#FAFAF8] border border-[#E7E5DF] space-y-1.5">
+            <div className="flex items-center gap-2 text-[#14171F] font-semibold text-xs">
+              <Sparkles className="w-3.5 h-3.5 shrink-0 text-[#2453FF] animate-pulse" />
               <span>Gemini AI Engine</span>
             </div>
-            <p className="text-[11px] text-purple-900/70 leading-relaxed">
-              Real-time flight search & narrative itineraries ready.
+            <p className="text-[11px] text-[#737885] leading-relaxed">
+              Real-time flight search &amp; narrative itineraries ready.
             </p>
           </div>
         </div>

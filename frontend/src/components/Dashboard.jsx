@@ -236,7 +236,7 @@ export default function Dashboard({
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center pb-6 mb-6 border-b border-slate-200/80 gap-4">
         <div>
-          <h1 className="font-semibold text-2xl sm:text-3xl text-slate-900 tracking-tight">
+          <h1 className="font-display font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
             My Trips
           </h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -248,104 +248,80 @@ export default function Dashboard({
           variant="primary"
           size="md"
           onClick={() => setView ? setView('plan') : null}
-          className="self-start sm:self-auto gap-1.5 shadow-sm"
+          className="self-start sm:self-auto gap-1.5 shadow-xs whitespace-nowrap"
         >
-          <Plus className="w-4 h-4" />
-          <span>+ Plan New Trip</span>
+          <Plus className="w-4 h-4 shrink-0" />
+          <span>Plan New Trip</span>
         </Button>
       </div>
 
-      {/* Tabs Row */}
-      <div className="flex items-center gap-1.5 mb-6 p-1 bg-slate-100 rounded-lg border border-slate-200/80 w-fit">
-        <button
-          type="button"
-          onClick={() => setActiveTab('upcoming')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-            activeTab === 'upcoming'
-              ? 'bg-white text-blue-600 shadow-xs border border-slate-200/60'
-              : 'text-slate-600 hover:text-slate-900 border border-transparent'
-          }`}
-        >
-          <span>Upcoming</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-            activeTab === 'upcoming' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200/80 text-slate-600'
-          }`}>
-            {categorizedTrips.upcoming.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('past')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-            activeTab === 'past'
-              ? 'bg-white text-blue-600 shadow-xs border border-slate-200/60'
-              : 'text-slate-600 hover:text-slate-900 border border-transparent'
-          }`}
-        >
-          <span>Past</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-            activeTab === 'past' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200/80 text-slate-600'
-          }`}>
-            {categorizedTrips.past.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('saved')}
-          className={`flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-            activeTab === 'saved'
-              ? 'bg-white text-blue-600 shadow-xs border border-slate-200/60'
-              : 'text-slate-600 hover:text-slate-900 border border-transparent'
-          }`}
-        >
-          <span>Saved</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-            activeTab === 'saved' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200/80 text-slate-600'
-          }`}>
-            {categorizedTrips.saved.length}
-          </span>
-        </button>
+      {/* Tabs Row with 150ms transition indicator */}
+      <div className="flex items-center gap-2 mb-6 border-b border-[#E7E5DF] pb-1">
+        {[
+          { id: 'upcoming', label: 'Upcoming', count: categorizedTrips.upcoming.length },
+          { id: 'past', label: 'Past', count: categorizedTrips.past.length },
+          { id: 'saved', label: 'Saved', count: categorizedTrips.saved.length }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 pb-2 px-3 text-xs font-semibold border-b-2 transition-all duration-150 cursor-pointer ${
+              activeTab === tab.id
+                ? 'border-[#2453FF] text-[#2453FF]'
+                : 'border-transparent text-[#737885] hover:text-[#14171F]'
+            }`}
+          >
+            <span>{tab.label}</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold transition-colors ${
+              activeTab === tab.id ? 'bg-[#2453FF]/10 text-[#2453FF]' : 'bg-[#E7E5DF] text-[#737885]'
+            }`}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Loading State */}
       {loadingTrips ? (
-        <div className="py-20 bg-white rounded-xl border border-slate-200/90 shadow-xs text-center max-w-md mx-auto flex flex-col items-center gap-3 p-8">
-          <div className="p-3.5 rounded-full bg-blue-50 text-blue-600">
+        <div className="py-20 bg-white rounded-xl border border-[#E7E5DF] shadow-xs text-center max-w-md mx-auto flex flex-col items-center gap-3 p-8">
+          <div className="p-3.5 rounded-full bg-[#2453FF]/10 text-[#2453FF]">
             <Loader2 className="w-8 h-8 animate-spin" />
           </div>
           <div>
-            <h3 className="font-semibold text-base text-slate-900">Loading Trips...</h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-[280px]">
+            <h3 className="font-semibold text-base text-[#14171F]">Loading Trips...</h3>
+            <p className="text-xs text-[#737885] mt-1 max-w-[280px]">
               Retrieving your saved journeys and itineraries.
             </p>
           </div>
         </div>
       ) : displayedTrips.length === 0 ? (
-        /* Empty State */
-        <div className="py-16 bg-white rounded-xl border border-slate-200/90 shadow-xs text-center max-w-md mx-auto flex flex-col items-center px-6 p-8">
-          <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
-            <Compass className="w-6 h-6" />
+        /* Focused Empty State Composition with Intentional Hierarchy */
+        <div className="py-12 px-6 bg-[#FAFAF8] rounded-xl border border-dashed border-[#E7E5DF] text-center max-w-md mx-auto flex flex-col items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-[#2453FF]/10 text-[#2453FF] flex items-center justify-center mb-3.5 shadow-2xs">
+            <Compass className="w-6 h-6 text-[#2453FF]" />
           </div>
-          <h3 className="font-semibold text-lg text-slate-900">
+
+          <h3 className="font-display font-bold text-xl text-[#14171F] tracking-tight">
             {activeTab === 'upcoming' ? 'No upcoming trips' : activeTab === 'past' ? 'No past trips' : 'No saved trips yet'}
           </h3>
-          <p className="text-sm text-slate-500 mt-1 max-w-[320px]">
+
+          <p className="text-sm text-[#737885] mt-1.5 max-w-sm mx-auto leading-relaxed">
             {activeTab === 'upcoming'
-              ? 'You have no scheduled trips coming up. Plan your next adventure now with live routes and fares.'
+              ? 'You have no scheduled trips coming up. Plan your next adventure now with live transit routes, fares, and day-by-day guides.'
               : activeTab === 'past'
-              ? 'Trips you take in the future will automatically appear here once completed.'
-              : 'You do not have any trips saved. Start exploring routes and create your first itinerary.'}
+              ? 'Trips you complete in the future will automatically appear here once finished.'
+              : 'You have not saved any journeys yet. Start exploring routes and create your first itinerary.'}
           </p>
+
           <Button
             variant="primary"
-            size="sm"
-            className="mt-5 gap-1.5 shadow-sm"
+            size="md"
+            className="mt-5 gap-1.5 rounded-lg shadow-xs bg-[#2453FF] hover:bg-[#1A3ECC] text-white whitespace-nowrap px-5 font-semibold"
             onClick={() => setView ? setView('plan') : null}
           >
-            <Plus className="w-4 h-4" />
-            <span>+ Plan a Trip</span>
+            <Plus className="w-4 h-4 shrink-0" />
+            <span>Plan New Trip</span>
           </Button>
         </div>
       ) : (
@@ -383,33 +359,34 @@ export default function Dashboard({
                     if (!deletingTripId) onSelectTrip(trip);
                   }
                 }}
-                className="group bg-white rounded-xl border border-slate-200/90 shadow-xs hover:shadow-md hover:border-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden text-left"
+                className="group bg-white rounded-xl border border-[#E7E5DF] shadow-[0_1px_2px_rgba(20,23,31,0.04)] hover:shadow-[0_4px_12px_rgba(20,23,31,0.06)] hover:border-[#2453FF]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2453FF] transition-all duration-150 cursor-pointer flex flex-col justify-between overflow-hidden text-left h-full"
               >
-                {/* Card Content */}
-                <div className="p-5 space-y-3.5">
+                {/* Card Content: Route is visual anchor; Price is supporting */}
+                <div className="p-5 space-y-3.5 flex-1 flex flex-col justify-between">
                   <div className="flex items-center justify-between gap-2">
                     <Badge variant={isUpcoming ? 'success' : 'default'} size="sm">
                       {isUpcoming ? 'Upcoming' : 'Completed'}
                     </Badge>
-                    <span className="text-sm font-semibold text-slate-900 font-mono">
-                      ₹{safeTotalStr}
+                    <span className="text-xs font-semibold text-[#737885] font-mono tabular-nums">
+                      Est. ₹{safeTotalStr}
                     </span>
                   </div>
 
                   <div>
-                    <h2 className="font-semibold text-base sm:text-lg text-slate-900 group-hover:text-blue-600 transition-colors flex items-center gap-2">
+                    {/* Primary Visual Anchor: Route Name */}
+                    <h2 className="font-display font-bold text-lg sm:text-xl text-[#14171F] group-hover:text-[#2453FF] transition-colors flex items-center gap-2">
                       <span className="truncate">{fromCity}</span>
-                      <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+                      <ArrowRight className="w-4 h-4 text-[#737885] shrink-0" />
                       <span className="truncate">{toCity}</span>
                     </h2>
 
-                    <div className="mt-3 space-y-1.5 text-xs text-slate-500">
+                    <div className="mt-3 space-y-1.5 text-xs text-[#737885]">
                       <div className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <Calendar className="w-3.5 h-3.5 text-[#737885] shrink-0" />
                         <span className="truncate">{dateDisplay}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <Users className="w-3.5 h-3.5 text-[#737885] shrink-0" />
                         <span>
                           {trip.travelers || 1} {trip.travelers === 1 ? 'traveler' : 'travelers'}
                           {trip.distance ? ` • ${trip.distance} km` : ''}
@@ -419,28 +396,28 @@ export default function Dashboard({
                   </div>
                 </div>
 
-                {/* Card Actions Footer */}
-                <div className="px-5 py-3 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-2">
+                {/* Card Actions Footer: Comfortable bottom padding and unclipped CTA */}
+                <div className="px-5 py-4 bg-[#FAFAF8] border-t border-[#E7E5DF] flex items-center justify-between gap-3 mt-auto">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-xs font-semibold text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-300"
+                    className="text-xs font-semibold text-[#2453FF] border-[#E7E5DF] hover:bg-[#2453FF]/8 rounded-lg whitespace-nowrap shrink-0 h-9 px-3.5"
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelectTrip(trip);
                     }}
                   >
-                    <span>View Trip</span>
-                    <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                    <span className="whitespace-nowrap">View Trip</span>
+                    <ArrowRight className="w-3.5 h-3.5 ml-1 shrink-0" />
                   </Button>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={(e) => handleDownloadPDF(e, trip)}
                       title="Download PDF"
                       aria-label="Download trip PDF"
-                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors cursor-pointer"
+                      className="p-2 text-[#737885] hover:text-[#2453FF] hover:bg-[#2453FF]/10 rounded-full transition-colors duration-100 cursor-pointer"
                     >
                       <Download className="w-4 h-4" />
                     </button>
@@ -456,18 +433,18 @@ export default function Dashboard({
                           : 'Share Itinerary'
                       }
                       aria-label="Share trip itinerary"
-                      className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                      className={`p-2 rounded-full transition-colors duration-100 cursor-pointer ${
                         shareErrorTripId === tripId
-                          ? 'text-red-700 bg-red-50 border-red-200'
+                          ? 'text-red-700 bg-red-50'
                           : copiedTripId === tripId
-                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                          : 'text-slate-500 hover:text-slate-800 hover:bg-white border-transparent hover:border-slate-200'
+                          ? 'text-[#1E9E6B] bg-[#1E9E6B]/10'
+                          : 'text-[#737885] hover:text-[#2453FF] hover:bg-[#2453FF]/10'
                       }`}
                     >
                       {shareErrorTripId === tripId ? (
                         <span className="text-[10px] font-bold text-red-600 px-0.5">Failed</span>
                       ) : copiedTripId === tripId ? (
-                        <Check className="w-4 h-4 text-emerald-600" />
+                        <Check className="w-4 h-4 text-[#1E9E6B]" />
                       ) : (
                         <Share2 className="w-4 h-4" />
                       )}
@@ -483,7 +460,7 @@ export default function Dashboard({
                       }}
                       title="Delete Trip"
                       aria-label="Delete saved trip"
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-200 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                      className="p-2 text-[#737885] hover:text-red-600 hover:bg-red-50 rounded-full transition-colors duration-100 cursor-pointer disabled:opacity-50"
                     >
                       {deletingTripId === tripId ? (
                         <Loader2 className="w-4 h-4 animate-spin text-red-600" />

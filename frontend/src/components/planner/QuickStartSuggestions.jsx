@@ -97,7 +97,7 @@ export function QuickStartSuggestions({ onSelectSuggestion, className = '' }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
         <div className="flex items-center gap-2">
           <Compass className="w-4 h-4 text-blue-600" />
-          <h3 className="font-bold text-base text-slate-900 tracking-tight">
+          <h3 className="font-display font-bold text-base text-slate-900 tracking-tight">
             Need inspiration?
           </h3>
         </div>

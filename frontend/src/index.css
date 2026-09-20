@@ -5,21 +5,28 @@
 
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-display: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Outfit', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
-  --color-primary: #2563EB;
-  --color-primary-hover: #1D4ED8;
+  --color-ink: #14171F;
+  --color-surface: #FAFAF8;
+  --color-card: #FFFFFF;
+  --color-route-blue: #2453FF;
+  --color-transit-amber: #E8A33D;
+  --color-signal-green: #1E9E6B;
+  --color-line: #E7E5DF;
+
+  --color-primary: #2453FF;
+  --color-primary-hover: #1A3ECC;
   --color-ai: #7C3AED;
-  --color-accent: #10B981;
-  --color-background: #F8FAFC;
-  --color-surface: #FFFFFF;
-  --color-surface-subtle: #F1F5F9;
-  --color-border: #E2E8F0;
-  --color-heading: #0F172A;
-  --color-body: #334155;
-  --color-muted: #64748B;
+  --color-accent: #1E9E6B;
+  --color-background: #FAFAF8;
+  --color-surface-subtle: #F4F3EF;
+  --color-border: #E7E5DF;
+  --color-heading: #14171F;
+  --color-body: #3E434D;
+  --color-muted: #737885;
   --color-error: #DC2626;
-  --color-warning: #D97706;
+  --color-warning: #E8A33D;
 
   --radius-input: 8px;
   --radius-btn: 8px;
@@ -29,27 +36,39 @@
 
 :root {
   font-family: var(--font-sans);
+  --font-display: 'Outfit', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   scroll-behavior: smooth;
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
+
+  /* Transit-grounded core design tokens */
+  --ink: #14171F;
+  --surface: #FAFAF8;
+  --card: #FFFFFF;
+  --route-blue: #2453FF;
+  --transit-amber: #E8A33D;
+  --signal-green: #1E9E6B;
+  --line: #E7E5DF;
+
+  /* Mapped tokens */
+  --color-primary: var(--route-blue);
+  --color-primary-hover: #1A3ECC;
   --color-ai: #7c3aed;
-  --color-accent: #10b981;
-  --color-background: #f8fafc;
-  --color-surface: #ffffff;
-  --color-surface-subtle: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-heading: #0f172a;
-  --color-body: #334155;
-  --color-muted: #64748b;
+  --color-accent: var(--signal-green);
+  --color-background: var(--surface);
+  --color-surface: var(--card);
+  --color-surface-subtle: #F4F3EF;
+  --color-border: var(--line);
+  --color-heading: var(--ink);
+  --color-body: #3E434D;
+  --color-muted: #737885;
   --color-error: #dc2626;
-  --color-warning: #d97706;
+  --color-warning: var(--transit-amber);
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--color-background, #f8fafc);
-  color: var(--color-body, #334155);
+  background-color: var(--surface, #FAFAF8);
+  color: var(--ink, #14171F);
   font-family: var(--font-sans, 'Inter', sans-serif);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
@@ -72,18 +91,44 @@ body {
   background: #94a3b8;
 }
 
-/* Light Card Utility & Glass Classes */
+/* Transit Card Surfaces & Depth Cues (No generic blur glassmorphism) */
 .glass {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  background: var(--card, #ffffff);
+  border: 1px solid var(--line, #E7E5DF);
+  box-shadow: 0 1px 2px rgba(20, 23, 31, 0.04);
 }
 
 .glass-light {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid #e2e8f0;
+  background: var(--card, #ffffff);
+  border: 1px solid var(--line, #E7E5DF);
+  box-shadow: 0 1px 2px rgba(20, 23, 31, 0.04);
+}
+
+/* Two-tier Radius System: 12px containers, 8px nested elements */
+.card-container {
+  border-radius: 12px;
+}
+
+.nested-element {
+  border-radius: 8px;
+}
+
+/* Depth tokens from design spec */
+.transit-card {
+  background: var(--card, #ffffff);
+  border: 1px solid var(--line, #E7E5DF);
+  box-shadow: 0 1px 2px rgba(20, 23, 31, 0.04);
+  transition: box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.transit-card-interactive:hover {
+  box-shadow: 0 4px 12px rgba(20, 23, 31, 0.06);
+}
+
+/* Tabular numbers for price alignment */
+.tabular-nums {
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
 }
 
 /* Leaflet Map Styles */
@@ -150,12 +195,37 @@ body {
   to   { transform: rotate(360deg); }
 }
 
+@keyframes modalScale {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.5s ease-out both;
 }
 
 .animate-slide-up {
   animation: slideUp 0.4s ease-out both;
+}
+
+@keyframes chatScale {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-modal-scale {
+  animation: modalScale 150ms ease-out both;
+}
+
+.animate-chat-scale {
+  transform-origin: bottom right;
+  animation: chatScale 200ms ease-out both;
 }
 
 .animate-spin-slow {
@@ -168,27 +238,61 @@ body {
 .scrollbar-none::-webkit-scrollbar { display: none; }
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Date input dark-mode color fix */
+/* Date input native picker styling */
 input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.7);
   cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.95;
 }
 
-/* Range input thumb styling */
+/* Range input thumb styling - Transit Route Theme */
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: #3b82f6;
+  background: var(--route-blue, #2453FF);
   cursor: pointer;
-  border: 2px solid #1e293b;
-  box-shadow: 0 0 6px rgba(59,130,246,0.5);
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 83, 255, 0.35), 0 0 0 1px rgba(36, 83, 255, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 6px rgba(36, 83, 255, 0.45), 0 0 0 2px rgba(36, 83, 255, 0.25);
 }
 
 input[type="range"]::-webkit-slider-runnable-track {
   height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(to right, #3b82f6 var(--range-pct, 50%), #1e293b 0);
+  border-radius: 9999px;
+  background: var(--line, #E7E5DF);
 }
+
+/* Firefox Range input styling */
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--route-blue, #2453FF);
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(36, 83, 255, 0.35), 0 0 0 1px rgba(36, 83, 255, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 6px rgba(36, 83, 255, 0.45), 0 0 0 2px rgba(36, 83, 255, 0.25);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--line, #E7E5DF);
+}
+
 

@@ -86,8 +86,8 @@ runTest('2.4: Filter rail includes Departure time buckets (Morning, Afternoon, E
 });
 
 runTest('2.5: Filter rail includes Price Range slider with Max Price feedback', () => {
-  assert(travelOptionsContent.includes('Price Range') || travelOptionsContent.includes('Max Price'), 'Must have Price filter title');
-  assert(travelOptionsContent.includes('type="range"'), 'Must have range slider for price');
+  assert(travelOptionsContent.includes('Price Range') || travelOptionsContent.includes('Max Price') || travelOptionsContent.includes('Max price'), 'Must have Price filter title');
+  assert(travelOptionsContent.includes('type="range"') || travelOptionsContent.includes('<Slider') || travelOptionsContent.includes('Slider'), 'Must have range slider for price');
   assert(travelOptionsContent.includes('maxPriceFilter'), 'Must manage max price state');
 });
 

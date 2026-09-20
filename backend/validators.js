@@ -7,8 +7,8 @@ const isValidDateString = (str) => {
   return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === str;
 };
 
-// Safe location/city pattern: letters, numbers, spaces, commas, periods, hyphens, apostrophes
-const SAFE_LOCATION_REGEX = /^[a-zA-Z0-9\s,.'\-]+$/;
+// Safe location/city pattern: letters, numbers, spaces, commas, periods, hyphens, apostrophes, parentheses
+const SAFE_LOCATION_REGEX = /^[a-zA-Z0-9\s,.'\-()]+$/;
 
 // Safe ID pattern: alphanumeric, hyphen, underscore, up to 64 chars
 const SAFE_ID_REGEX = /^[a-zA-Z0-9_\-]+$/;

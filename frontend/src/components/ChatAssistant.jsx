@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Sparkles } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles, Backpack, ShieldCheck, Utensils, CloudSun } from 'lucide-react';
 import { getAIChatResponse } from '../utils/planner';
 
 // Safe markdown-bold renderer — strictly prevents XSS without dangerouslySetInnerHTML
@@ -170,39 +170,40 @@ export default function ChatAssistant({ tripData }) {
   };
 
   const quickPrompts = [
-    { label: '🎒 Packing List', text: 'Suggest a packing list for this trip.' },
-    { label: '🛡️ Safety Score', text: 'What is the safety score of this route?' },
-    { label: '🍽️ Local Cuisine', text: 'Recommend good restaurants on the way.' },
-    { label: '🌦️ Weather Update', text: 'Give me weather updates for the route stops.' }
+    { label: 'Packing List', icon: Backpack, text: 'Suggest a packing list for this trip.' },
+    { label: 'Safety Score', icon: ShieldCheck, text: 'What is the safety score of this route?' },
+    { label: 'Local Cuisine', icon: Utensils, text: 'Recommend good restaurants on the way.' },
+    { label: 'Weather Update', icon: CloudSun, text: 'Give me weather updates for the route stops.' }
   ];
 
   return (
     <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
       
-      {/* Expanded Chat Pane */}
+      {/* Expanded Chat Pane with bottom-right origin animation */}
       {isOpen && (
-        <div className="w-[340px] sm:w-[400px] h-[520px] rounded-2xl bg-white border border-slate-200/90 shadow-2xl flex flex-col overflow-hidden text-slate-800 animate-slide-up mb-4">
+        <div className="w-[340px] sm:w-[400px] h-[520px] rounded-xl bg-white border border-[#E7E5DF] shadow-[0_8px_30px_rgba(20,23,31,0.12)] flex flex-col overflow-hidden text-[#14171F] animate-chat-scale mb-4">
           
           {/* Header */}
-          <div className="px-4 py-3.5 bg-slate-50 border-b border-slate-200/80 flex items-center justify-between">
+          <div className="px-4 py-3.5 bg-[#FAFAF8] border-b border-[#E7E5DF] flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-[#2453FF]/10 text-[#2453FF] flex items-center justify-center shrink-0">
                 <Sparkles className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="font-semibold text-xs sm:text-sm text-slate-900 flex items-center gap-1.5">
+                <h4 className="font-semibold text-xs sm:text-sm text-[#14171F] flex items-center gap-1.5">
                   AI Travel Guide
                   {isBackendAvailable ? (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      Online
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#1E9E6B]/10 text-[#1E9E6B] border border-[#1E9E6B]/20">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#1E9E6B] animate-pulse" />
+                      <span>Online</span>
                     </span>
                   ) : (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#E8A33D]/10 text-[#E8A33D] border border-[#E8A33D]/20">
                       Offline (Local)
                     </span>
                   )}
                 </h4>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-[#737885]">
                   Instant route & destination answers
                 </p>
               </div>
@@ -211,7 +212,7 @@ export default function ChatAssistant({ tripData }) {
             <button 
               type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded-lg hover:bg-slate-200/60 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+              className="p-1 rounded-lg hover:bg-[#E7E5DF]/60 text-[#737885] hover:text-[#14171F] transition-colors cursor-pointer"
               aria-label="Close chat assistant"
             >
               <X className="w-5 h-5" />
@@ -219,17 +220,17 @@ export default function ChatAssistant({ tripData }) {
           </div>
 
           {/* Messages list area */}
-          <div className="flex-grow p-4 overflow-y-auto space-y-3.5 custom-scrollbar bg-slate-50/50">
+          <div className="flex-grow p-4 overflow-y-auto space-y-3.5 custom-scrollbar bg-[#FAFAF8]/50">
             {messages.map((msg, idx) => (
               <div
                 key={idx}
                 className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
               >
                 <div
-                  className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed ${
+                  className={`p-3 rounded-xl max-w-[85%] text-xs leading-relaxed ${
                     msg.sender === 'user'
-                      ? 'bg-blue-600 text-white rounded-tr-none shadow-xs'
-                      : 'bg-white border border-slate-200/80 text-slate-700 rounded-tl-none shadow-xs'
+                      ? 'bg-[#2453FF] text-white rounded-tr-none shadow-xs'
+                      : 'bg-white border border-[#E7E5DF] text-[#14171F] rounded-tl-none shadow-xs'
                   }`}
                   style={{ whiteSpace: 'pre-line' }}
                 >
@@ -240,12 +241,12 @@ export default function ChatAssistant({ tripData }) {
             
             {/* Typing Loader */}
             {loading && (
-              <div className="flex items-center gap-1.5 p-3 rounded-2xl bg-white border border-slate-200/80 text-slate-500 text-xs w-20 rounded-tl-none shadow-xs">
+              <div className="flex items-center gap-1.5 p-3 rounded-xl bg-white border border-[#E7E5DF] text-[#737885] text-xs w-20 rounded-tl-none shadow-xs">
                 <span>typing</span>
                 <span className="flex gap-0.5 mt-1">
-                  <span className="h-1 w-1 bg-slate-400 rounded-full animate-bounce delay-75"></span>
-                  <span className="h-1 w-1 bg-slate-400 rounded-full animate-bounce delay-150"></span>
-                  <span className="h-1 w-1 bg-slate-400 rounded-full animate-bounce delay-300"></span>
+                  <span className="h-1 w-1 bg-[#737885] rounded-full animate-bounce delay-75"></span>
+                  <span className="h-1 w-1 bg-[#737885] rounded-full animate-bounce delay-150"></span>
+                  <span className="h-1 w-1 bg-[#737885] rounded-full animate-bounce delay-300"></span>
                 </span>
               </div>
             )}
@@ -253,27 +254,31 @@ export default function ChatAssistant({ tripData }) {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Quick Prompts list */}
-          <div className="p-2 bg-slate-50 border-t border-slate-200/80 flex gap-1.5 overflow-x-auto scrollbar-none whitespace-nowrap select-none">
-            {quickPrompts.map((qp, idx) => (
-              <button
-                key={idx}
-                type="button"
-                disabled={loading}
-                onClick={() => { if (!loading) handleSendMessage(qp.text); }}
-                className={`px-2.5 py-1.5 bg-white border border-slate-200/80 rounded-lg text-[11px] font-medium transition-colors ${
-                  loading
-                    ? 'opacity-50 cursor-not-allowed text-slate-400'
-                    : 'text-slate-700 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 cursor-pointer shadow-xs'
-                }`}
-              >
-                {qp.label}
-              </button>
-            ))}
+          {/* Quick Prompts list with active press-down scale(0.96) */}
+          <div className="p-2 bg-[#FAFAF8] border-t border-[#E7E5DF] flex gap-1.5 overflow-x-auto scrollbar-none whitespace-nowrap select-none">
+            {quickPrompts.map((qp, idx) => {
+              const PromptIcon = qp.icon;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => { if (!loading) handleSendMessage(qp.text); }}
+                  className={`px-2.5 py-1.5 bg-white border border-[#E7E5DF] rounded-lg text-[11px] font-medium transition-all active:scale-[0.96] inline-flex items-center gap-1.5 ${
+                    loading
+                      ? 'opacity-50 cursor-not-allowed text-[#737885]'
+                      : 'text-[#3E434D] hover:text-[#2453FF] hover:border-[#2453FF]/30 hover:bg-[#FAFAF8] cursor-pointer shadow-xs'
+                  }`}
+                >
+                  <PromptIcon className="w-3 h-3 text-[#737885]" />
+                  <span>{qp.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Input Box Footer */}
-          <div className="p-3 border-t border-slate-200/80 bg-white flex items-center gap-2">
+          <div className="p-3 border-t border-[#E7E5DF] bg-white flex items-center gap-2">
             <input
               type="text"
               value={inputText}
@@ -282,7 +287,7 @@ export default function ChatAssistant({ tripData }) {
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder={loading ? 'Waiting for assistant...' : 'Ask travel advice...'}
-              className={`flex-grow px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 placeholder:text-slate-400 transition-all ${
+              className={`flex-grow px-3 py-2 bg-[#FAFAF8] border border-[#E7E5DF] rounded-lg focus:outline-none focus:bg-white focus:border-[#2453FF] focus:ring-2 focus:ring-[#2453FF]/20 text-xs text-[#14171F] placeholder:text-[#737885] transition-all ${
                 loading ? 'opacity-60 cursor-not-allowed' : ''
               }`}
             />
@@ -291,7 +296,7 @@ export default function ChatAssistant({ tripData }) {
               onClick={() => handleSendMessage()}
               disabled={loading || !inputText.trim()}
               aria-label="Send message"
-              className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl disabled:opacity-50 disabled:hover:bg-blue-600 transition-colors shrink-0 shadow-xs cursor-pointer"
+              className="p-2 bg-[#2453FF] hover:bg-[#1A3ECC] text-white rounded-lg disabled:opacity-50 disabled:hover:bg-[#2453FF] transition-colors shrink-0 shadow-xs cursor-pointer"
             >
               <Send className="w-4 h-4" />
             </button>
@@ -305,7 +310,7 @@ export default function ChatAssistant({ tripData }) {
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         aria-label={isOpen ? 'Close chat assistant' : 'Open chat assistant'}
-        className="p-3.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20 transition-all duration-200 active:scale-95 hover:scale-105 shrink-0 z-40 flex items-center justify-center cursor-pointer"
+        className="p-3.5 rounded-full bg-[#2453FF] hover:bg-[#1A3ECC] text-white shadow-lg shadow-[#2453FF]/25 transition-all duration-150 active:scale-95 shrink-0 z-40 flex items-center justify-center cursor-pointer"
       >
         {isOpen ? <X className="w-5 h-5" /> : <MessageSquare className="w-5 h-5" />}
       </button>

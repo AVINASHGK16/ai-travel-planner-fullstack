@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
-import { HelpCircle, Sparkles, Plane, ShieldCheck, Mail, ExternalLink, FileText, Lock } from 'lucide-react';
+import { HelpCircle, Sparkles, Plane, ShieldCheck, Mail, ExternalLink, FileText, Lock, ChevronDown } from 'lucide-react';
 
 export function HelpModal({ isOpen, onClose, initialTab = 'help' }) {
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [expandedFaq, setExpandedFaq] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -33,54 +34,31 @@ export function HelpModal({ isOpen, onClose, initialTab = 'help' }) {
       }
       maxWidth="lg"
     >
-      <div className="space-y-5 text-sm text-slate-600">
-        {/* Tab Navigation */}
-        <div role="tablist" aria-label="Help and legal information" className="flex border-b border-slate-200 gap-2 pb-1">
-          <button
-            id="help-tab-help"
-            role="tab"
-            aria-selected={activeTab === 'help'}
-            aria-controls="help-tabpanel-help"
-            type="button"
-            onClick={() => setActiveTab('help')}
-            className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-              activeTab === 'help'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Help & FAQs
-          </button>
-          <button
-            id="help-tab-privacy"
-            role="tab"
-            aria-selected={activeTab === 'privacy'}
-            aria-controls="help-tabpanel-privacy"
-            type="button"
-            onClick={() => setActiveTab('privacy')}
-            className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-              activeTab === 'privacy'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Privacy Policy
-          </button>
-          <button
-            id="help-tab-terms"
-            role="tab"
-            aria-selected={activeTab === 'terms'}
-            aria-controls="help-tabpanel-terms"
-            type="button"
-            onClick={() => setActiveTab('terms')}
-            className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-              activeTab === 'terms'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Terms of Service
-          </button>
+      <div className="space-y-5 text-sm text-[#3E434D]">
+        {/* Tab Navigation with 150ms sliding indicator */}
+        <div role="tablist" aria-label="Help and legal information" className="flex border-b border-[#E7E5DF] gap-2 pb-1 relative">
+          {[
+            { id: 'help', label: 'Help & FAQs' },
+            { id: 'privacy', label: 'Privacy Policy' },
+            { id: 'terms', label: 'Terms of Service' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              id={`help-tab-${tab.id}`}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={`help-tabpanel-${tab.id}`}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`pb-2 px-3 text-xs font-semibold border-b-2 transition-all duration-150 cursor-pointer ${
+                activeTab === tab.id
+                  ? 'border-[#2453FF] text-[#2453FF]'
+                  : 'border-transparent text-[#737885] hover:text-[#14171F]'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Tab Content: Help & FAQs */}
@@ -91,62 +69,74 @@ export function HelpModal({ isOpen, onClose, initialTab = 'help' }) {
             aria-labelledby="help-tab-help"
             className="space-y-6"
           >
-            {/* Quick Highlights */}
+            {/* Quick Highlights — Capability callouts with distinctive top borders */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-100 space-y-1.5">
-                <div className="flex items-center gap-2 text-blue-700 font-semibold text-xs">
+              <div className="p-3.5 rounded-xl bg-[#FAFAF8] border border-[#E7E5DF] border-t-[2px] border-t-[#2453FF] space-y-1.5 shadow-xs">
+                <div className="flex items-center gap-2 text-[#2453FF] font-semibold text-xs">
                   <Plane className="w-4 h-4" />
                   <span>Live Flight Fares</span>
                 </div>
-                <p className="text-xs text-blue-900/80 leading-relaxed">
+                <p className="text-xs text-[#3E434D] leading-relaxed">
                   Google Flights inventory via SerpApi provides confirmed commercial flights across Indian domestic carriers (IndiGo, Air India, Akasa Air).
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-100 space-y-1.5">
-                <div className="flex items-center gap-2 text-purple-700 font-semibold text-xs">
+              <div className="p-3.5 rounded-xl bg-[#FAFAF8] border border-[#E7E5DF] border-t-[2px] border-t-[#1E9E6B] space-y-1.5 shadow-xs">
+                <div className="flex items-center gap-2 text-[#1E9E6B] font-semibold text-xs">
                   <Sparkles className="w-4 h-4" />
                   <span>AI Itineraries</span>
                 </div>
-                <p className="text-xs text-purple-900/80 leading-relaxed">
+                <p className="text-xs text-[#3E434D] leading-relaxed">
                   Gemini AI generates narrative daily activities and recommended spots bounded by authoritative road distances and real coordinates.
                 </p>
               </div>
             </div>
 
-            {/* FAQs */}
+            {/* FAQs — Accordion Collapse/Expand with 180deg rotating chevron */}
             <div className="space-y-3">
-              <h4 className="font-semibold text-xs uppercase tracking-wider text-slate-900">
+              <h4 className="font-semibold text-xs uppercase tracking-wider text-[#14171F]">
                 Frequently Asked Questions
               </h4>
 
               <div className="space-y-2 text-xs">
-                <div className="p-3 rounded-lg border border-slate-200 bg-white">
-                  <p className="font-semibold text-slate-800 mb-1">
-                    How do I compare different travel options?
-                  </p>
-                  <p className="text-slate-600 leading-relaxed">
-                    Use the "Compare & Book Transports" tabs on the Planner page to switch between Flights, Trains, Buses, Cabs, and Own Vehicle. The budget updates dynamically to reflect your chosen transport mode.
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-lg border border-slate-200 bg-white">
-                  <p className="font-semibold text-slate-800 mb-1">
-                    Are my saved trips kept when I am offline?
-                  </p>
-                  <p className="text-slate-600 leading-relaxed">
-                    Yes! Trips are automatically cached locally in your browser. When you log in with your account, your trips sync securely with the server database.
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-lg border border-slate-200 bg-white">
-                  <p className="font-semibold text-slate-800 mb-1">
-                    Why are flights unavailable for some cities?
-                  </p>
-                  <p className="text-slate-600 leading-relaxed">
-                    Commercial passenger flights do not operate on short corridors under 200 km (e.g. Bangalore to Mysore). Roamly truthfully directs you to Train, Bus, or Road transit.
-                  </p>
-                </div>
+                {[
+                  {
+                    q: 'How do I compare different travel options?',
+                    a: 'Use the "Compare & Book Transports" tabs on the Planner page to switch between Flights, Trains, Buses, Cabs, and Own Vehicle. The budget updates dynamically to reflect your chosen transport mode.'
+                  },
+                  {
+                    q: 'Are my saved trips kept when I am offline?',
+                    a: 'Yes! Trips are automatically cached locally in your browser. When you log in with your account, your trips sync securely with the server database.'
+                  },
+                  {
+                    q: 'Why are flights unavailable for some cities?',
+                    a: 'Commercial passenger flights do not operate on short corridors under 200 km (e.g. Bangalore to Mysore). Roamly truthfully directs you to Train, Bus, or Road transit.'
+                  }
+                ].map((faq, idx) => {
+                  const isExpanded = expandedFaq === idx;
+                  return (
+                    <div key={idx} className="rounded-lg border border-[#E7E5DF] bg-white overflow-hidden transition-all duration-150">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedFaq(isExpanded ? null : idx)}
+                        className="w-full flex items-center justify-between p-3 text-left font-semibold text-xs text-[#14171F] hover:bg-[#FAFAF8] cursor-pointer"
+                        aria-expanded={isExpanded}
+                      >
+                        <span>{faq.q}</span>
+                        <ChevronDown
+                          className={`w-4 h-4 text-[#737885] transition-transform duration-150 shrink-0 ml-2 ${
+                            isExpanded ? 'rotate-180 text-[#2453FF]' : ''
+                          }`}
+                        />
+                      </button>
+                      {isExpanded && (
+                        <div className="px-3 pb-3 text-xs text-[#3E434D] leading-relaxed border-t border-[#E7E5DF]/60 pt-2 bg-[#FAFAF8]/50 animate-fade-in">
+                          {faq.a}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

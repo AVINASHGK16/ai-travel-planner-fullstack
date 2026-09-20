@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Compass, Sparkles, AlertTriangle, Loader2, Plane, ArrowLeft, ArrowRight, Check, AlertCircle, Info, X } from 'lucide-react';
+import { Compass, Sparkles, AlertTriangle, Loader2, ArrowLeft, ArrowRight, Check, AlertCircle, Info, X } from 'lucide-react';
 import { 
   PlannerHeader, 
   TripConfigurationCard, 
@@ -295,33 +295,50 @@ export default function PlannerPage() {
       // 4. Enrich with AI itinerary if possible
       let aiEnrichedTrip = baselineMock;
       try {
-        const aiResult = await getAIGeneration(
-          params.from,
-          params.to,
-          params.date,
-          params.travelers,
-          params.budget,
-          controller.signal
-        );
+        console.log('[Roamly Planner] Calling getAIGeneration with parameters:', {
+          from: params.from,
+          to: params.to,
+          date: params.date,
+          travelers: params.travelers,
+          budget: params.budget,
+          preferredMode: effectiveMode
+        });
+        const aiResult = await getAIGeneration({
+          from: params.from,
+          to: params.to,
+          date: params.date,
+          returnDate: params.returnDate,
+          travelers: params.travelers,
+          budget: params.budget,
+          preferredMode: effectiveMode
+        }, controller.signal);
 
         if (!controller.signal.aborted && aiResult && Array.isArray(aiResult.itinerary) && aiResult.itinerary.length > 0) {
+          console.log('[Roamly Planner] AI generation successful. Source:', aiResult.source || 'ai', 'Days:', aiResult.itinerary.length);
           aiEnrichedTrip = {
             ...baselineMock,
             itinerary: aiResult.itinerary,
+            summary: aiResult.summary || baselineMock.summary,
             isAIGenerated: true,
+            source: 'ai',
             generationNotice: null
           };
         } else if (!controller.signal.aborted && aiResult?.isFallback) {
+          console.warn('[Roamly Planner] AI returned fallback flag:', aiResult.message);
           aiEnrichedTrip = {
             ...baselineMock,
+            isAIGenerated: false,
+            source: 'deterministic',
             generationNotice: aiResult.message || 'Gemini quota reached or service busy.'
           };
         }
       } catch (aiErr) {
         if (controller.signal.aborted) return;
-        console.warn('AI Itinerary enrichment unavailable:', aiErr.message);
+        console.warn('[Roamly Planner] AI Itinerary enrichment unavailable:', aiErr.message);
         aiEnrichedTrip = {
           ...baselineMock,
+          isAIGenerated: false,
+          source: 'deterministic',
           generationNotice: 'Deterministic itinerary loaded (AI offline).'
         };
       }
@@ -659,54 +676,119 @@ export default function PlannerPage() {
     <ErrorBoundary fallbackTitle="Travel Plan Error" onReset={handleBackToSearch}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 animate-fade-in">
 
-        {/* Workflow Stage Navigation: [ ✈ 1. Transport & Routes ] [ 🗺️ 2. Trip Overview & Itinerary ] */}
-        <div className="flex items-center justify-between border-b border-slate-200 pb-3 flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveView('transport')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                activeView === 'transport'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Plane className="w-3.5 h-3.5" />
-              <span>1. Transport &amp; Routes</span>
-            </button>
+        {/* Workflow Stage Progress Indicator: 1. Choose Transport → 2. Customize Itinerary */}
+        <div className="flex items-center justify-between border-b border-slate-200/90 pb-3 flex-wrap gap-4">
+          <nav aria-label="Trip planning workflow progress" className="flex items-center">
+            <ol className="flex items-center gap-2 sm:gap-4 list-none m-0 p-0">
+              {/* Step 1: Choose Transport */}
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('transport')}
+                  aria-current={activeView === 'transport' ? 'step' : undefined}
+                  className={`group flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer select-none text-left ${
+                    activeView === 'transport'
+                      ? 'bg-blue-50/80 border border-blue-200 text-blue-900 shadow-xs'
+                      : 'hover:bg-slate-50 border border-transparent text-slate-600'
+                  }`}
+                >
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors shrink-0 ${
+                      activeView === 'transport'
+                        ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-100'
+                        : 'bg-emerald-600 text-white'
+                    }`}
+                  >
+                    {activeView === 'overview' ? <Check className="w-3.5 h-3.5" /> : '1'}
+                  </span>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block leading-none font-mono">
+                      Step 1
+                    </span>
+                    <span
+                      className={`text-xs sm:text-sm font-bold leading-tight block ${
+                        activeView === 'transport' ? 'text-slate-900' : 'text-slate-700 group-hover:text-slate-900'
+                      }`}
+                    >
+                      1. Choose Transport
+                    </span>
+                  </div>
+                </button>
+              </li>
 
-            <button
-              type="button"
-              onClick={() => setActiveView('overview')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                activeView === 'overview'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Compass className="w-3.5 h-3.5" />
-              <span>2. Trip Overview &amp; Itinerary</span>
-            </button>
-          </div>
+              {/* Progress Connector / Divider */}
+              <li aria-hidden="true" className="flex items-center gap-1">
+                <div className="w-8 sm:w-12 h-1 bg-[#E7E5DF] rounded-full overflow-hidden relative">
+                  <div
+                    className={`h-full transition-all duration-300 ease-out ${
+                      activeView === 'overview' ? 'w-full bg-[#2453FF]' : 'w-0 bg-[#2453FF]'
+                    }`}
+                  />
+                </div>
+                <ArrowRight className={`w-3.5 h-3.5 shrink-0 transition-colors duration-200 ${activeView === 'overview' ? 'text-[#2453FF]' : 'text-[#737885]'}`} />
+              </li>
 
+              {/* Step 2: Customize Itinerary */}
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('overview')}
+                  aria-current={activeView === 'overview' ? 'step' : undefined}
+                  className={`group flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer select-none text-left ${
+                    activeView === 'overview'
+                      ? 'bg-[#2453FF]/8 border border-[#2453FF]/30 text-[#14171F] shadow-xs'
+                      : 'hover:bg-[#FAFAF8] border border-transparent text-[#737885]'
+                  }`}
+                >
+                  <span
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold font-mono transition-colors shrink-0 ${
+                      activeView === 'overview'
+                        ? 'bg-[#2453FF] text-white shadow-xs ring-2 ring-[#2453FF]/20'
+                        : 'bg-[#E7E5DF] text-[#737885] group-hover:bg-[#E7E5DF]/80'
+                    }`}
+                  >
+                    2
+                  </span>
+                  <div>
+                    <span
+                      className={`text-[10px] font-bold block leading-none font-mono ${
+                        activeView === 'overview' ? 'text-[#2453FF]' : 'text-[#737885]'
+                      }`}
+                    >
+                      Step 2
+                    </span>
+                    <span
+                      className={`text-xs sm:text-sm font-bold leading-tight block ${
+                        activeView === 'overview' ? 'text-[#14171F]' : 'text-[#3E434D] group-hover:text-[#14171F]'
+                      }`}
+                    >
+                      2. Customize Itinerary
+                    </span>
+                  </div>
+                </button>
+              </li>
+            </ol>
+          </nav>
+
+          {/* Quick Context Action Button */}
           {activeView === 'transport' ? (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setActiveView('overview')}
-              className="cursor-pointer font-semibold text-xs flex items-center gap-1.5"
+              className="cursor-pointer font-semibold text-xs flex items-center gap-1.5 hover:bg-[#FAFAF8] border-[#E7E5DF] text-[#14171F]"
             >
               <span>View Itinerary</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="w-3.5 h-3.5 text-[#2453FF]" />
             </Button>
           ) : (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setActiveView('transport')}
-              className="cursor-pointer font-semibold text-xs flex items-center gap-1.5"
+              className="cursor-pointer font-semibold text-xs flex items-center gap-1.5 hover:bg-[#FAFAF8] border-[#E7E5DF] text-[#14171F]"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
+              <ArrowLeft className="w-3.5 h-3.5 text-[#2453FF]" />
               <span>Change Transport</span>
             </Button>
           )}
@@ -724,10 +806,10 @@ export default function PlannerPage() {
         )}
 
         {/* Informational banner when deterministic fallback was used */}
-        {!activeTrip.isAIGenerated && activeTrip.generationNotice && (
-          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center gap-2.5 shadow-xs">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
-            <span>Notice: {activeTrip.generationNotice}. Displaying available flight options and deterministic itinerary.</span>
+        {(activeTrip.source === 'deterministic' || (!activeTrip.isAIGenerated && activeTrip.source !== 'ai')) && activeTrip.generationNotice && (
+          <div className="p-3.5 bg-[#E8A33D]/10 border border-[#E7E5DF] border-l-[3px] border-l-[#E8A33D] rounded-xl text-xs text-[#14171F] flex items-center gap-2.5 shadow-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-[#E8A33D]" />
+            <span className="leading-relaxed">Notice: {activeTrip.generationNotice}. Displaying available flight options and deterministic itinerary.</span>
           </div>
         )}
 

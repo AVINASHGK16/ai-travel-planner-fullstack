@@ -548,12 +548,31 @@ export function generateMockData(from, to, date, returnDate, travelers, budget, 
         { stop: 'Transit Corridor', temp: '29°C', condition: 'Sunny' },
         { stop: to, temp: '28°C', condition: 'Partly Cloudy' }
       ]
-    }
+    },
+    isAIGenerated: false,
+    source: 'deterministic'
   };
 }
 
 export async function getAIGeneration(searchParams, externalSignal) {
-  return generateTripPlan(searchParams, externalSignal);
+  let params = searchParams;
+  let signal = externalSignal;
+
+  // Support both object syntax getAIGeneration(params, signal)
+  // and legacy positional syntax getAIGeneration(from, to, date, travelers, budget, signal)
+  if (typeof searchParams === 'string') {
+    params = {
+      from: arguments[0],
+      to: arguments[1],
+      date: arguments[2],
+      travelers: arguments[3],
+      budget: arguments[4],
+      preferredMode: 'flight'
+    };
+    signal = arguments[5];
+  }
+
+  return generateTripPlan(params, signal);
 }
 
 export function buildTripAIPrompt(from, to, date, returnDate, travelers, budget, mode) {

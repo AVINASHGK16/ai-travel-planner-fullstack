@@ -9,7 +9,6 @@ import {
   AlertCircle, 
   Check, 
   Star, 
-  ChevronRight,
   ShieldCheck,
   TrendingDown,
   Calendar,
@@ -20,13 +19,16 @@ import {
   Sun,
   Sunset,
   Moon,
-  RotateCcw
+  RotateCcw,
+  Zap,
+  X
 } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
 import { Skeleton } from './ui/Skeleton';
 import { Modal } from './ui/Modal';
+import { Slider } from './ui/Slider';
 
 /**
  * Roamly TravelOptions Component — UI-3.2
@@ -222,16 +224,16 @@ export default function TravelOptions({
 
   const getFlightBadge = (flight, idx) => {
     if (flight.id === cheapestFlightId) {
-      return { label: 'CHEAPEST', icon: '🟢', color: 'emerald' };
+      return { label: 'CHEAPEST', icon: TrendingDown, color: 'emerald' };
     }
     if (flight.id === fastestFlightId && flight.id !== cheapestFlightId) {
-      return { label: 'FASTEST', icon: '⚡', color: 'blue' };
+      return { label: 'FASTEST', icon: Zap, color: 'blue' };
     }
     if (idx === 0 && flight.id !== cheapestFlightId && flight.id !== fastestFlightId) {
-      return { label: 'RECOMMENDED', icon: '✦', color: 'blue' };
+      return { label: 'RECOMMENDED', icon: Sparkles, color: 'blue' };
     }
     if (idx === 1 && flight.id !== cheapestFlightId && flight.id !== fastestFlightId) {
-      return { label: 'BEST VALUE', icon: '💎', color: 'blue' };
+      return { label: 'BEST VALUE', icon: Star, color: 'blue' };
     }
     return null;
   };
@@ -355,6 +357,128 @@ export default function TravelOptions({
     if (maxPriceFilter !== null && maxPriceFilter < maxRoutePrice) count++;
     return count;
   }, [selectedStops, selectedAirlines, departureTimeFilter, maxPriceFilter, maxRoutePrice]);
+
+  // Compute active filter chips for visibility and individual dismissal
+  const activeFilterChips = useMemo(() => {
+    const chips = [];
+
+    // Stops filter
+    const { nonstop, oneStop, twoPlus } = selectedStops;
+    if (!nonstop || !oneStop || !twoPlus) {
+      if (nonstop && !oneStop && !twoPlus) {
+        chips.push({
+          id: 'stops_nonstop',
+          label: 'Non-stop',
+          onRemove: () => setSelectedStops({ nonstop: true, oneStop: true, twoPlus: true })
+        });
+      } else if (!nonstop && oneStop && !twoPlus) {
+        chips.push({
+          id: 'stops_oneStop',
+          label: '1 stop',
+          onRemove: () => setSelectedStops({ nonstop: true, oneStop: true, twoPlus: true })
+        });
+      } else {
+        const parts = [];
+        if (nonstop) parts.push('Non-stop');
+        if (oneStop) parts.push('1 stop');
+        if (twoPlus) parts.push('2+ stops');
+        chips.push({
+          id: 'stops_custom',
+          label: `Stops: ${parts.join(', ')}`,
+          onRemove: () => setSelectedStops({ nonstop: true, oneStop: true, twoPlus: true })
+        });
+      }
+    }
+
+    // Airline filters
+    Object.entries(selectedAirlines).forEach(([airlineName, isSelected]) => {
+      if (isSelected) {
+        chips.push({
+          id: `airline_${airlineName}`,
+          label: airlineName,
+          onRemove: () => toggleAirline(airlineName)
+        });
+      }
+    });
+
+    // Departure time filter
+    if (departureTimeFilter !== 'all') {
+      const timeLabels = {
+        morning: 'Morning (<12)',
+        afternoon: 'Afternoon (12-18)',
+        evening: 'Evening (>18)'
+      };
+      chips.push({
+        id: 'departure',
+        label: timeLabels[departureTimeFilter] || departureTimeFilter,
+        onRemove: () => setDepartureTimeFilter('all')
+      });
+    }
+
+    // Max price filter
+    if (maxPriceFilter !== null && maxPriceFilter < maxRoutePrice) {
+      chips.push({
+        id: 'price',
+        label: `≤ ${formatPrice(maxPriceFilter)}`,
+        onRemove: () => setMaxPriceFilter(null)
+      });
+    }
+
+    // Sort order chip if not default
+    if (sortBy !== 'recommended') {
+      const sortLabels = {
+        price: 'Sort: Lowest Price',
+        duration: 'Sort: Shortest Duration',
+        departure: 'Sort: Earliest Departure'
+      };
+      chips.push({
+        id: 'sort',
+        label: sortLabels[sortBy] || sortBy,
+        onRemove: () => setSortBy('recommended')
+      });
+    }
+
+    return chips;
+  }, [selectedStops, selectedAirlines, departureTimeFilter, maxPriceFilter, maxRoutePrice, sortBy]);
+
+  // Render Active Filters Bar with individual dismiss chips and clear all action
+  const renderActiveFiltersBar = () => {
+    if (activeFilterChips.length === 0) return null;
+
+    return (
+      <div className="flex items-center gap-2 flex-wrap py-2 px-3 bg-blue-50/70 border border-blue-100 rounded-xl text-xs animate-fade-in">
+        <span className="text-[11px] font-bold text-blue-950 uppercase tracking-wider font-mono shrink-0">
+          Active Filters ({activeFilterChips.length}):
+        </span>
+        <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+          {activeFilterChips.map((chip) => (
+            <span
+              key={chip.id}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-blue-200/90 text-blue-800 shadow-2xs group"
+            >
+              <span>{chip.label}</span>
+              <button
+                type="button"
+                onClick={chip.onRemove}
+                className="text-blue-400 hover:text-blue-800 hover:bg-blue-100 rounded p-0.5 transition-colors cursor-pointer"
+                aria-label={`Remove ${chip.label} filter`}
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={handleResetFilters}
+          className="text-xs text-blue-700 hover:text-blue-950 font-semibold hover:underline cursor-pointer shrink-0 ml-auto flex items-center gap-1"
+        >
+          <RotateCcw className="w-3 h-3" />
+          <span>Clear all</span>
+        </button>
+      </div>
+    );
+  };
 
   // ── Render: Desktop Filter Rail (~240px) ──────────────────────────────────────────
   const renderFilterPanel = () => (
@@ -487,58 +611,46 @@ export default function TravelOptions({
       )}
 
       {/* 4. Departure Time */}
-      <div className="space-y-2.5 pt-3 border-t border-slate-100">
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-          Departure
+      <div className="space-y-2.5 pt-3 border-t border-[#E7E5DF]">
+        <label className="block text-xs font-semibold text-[#14171F]">
+          Departure time <span className="sr-only">Departure Time</span>
         </label>
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           {[
-            { id: 'all', label: 'Any' },
-            { id: 'morning', label: 'Morning (<12)', icon: <Sun className="w-3 h-3 text-amber-500" /> },
-            { id: 'afternoon', label: 'Afternoon', icon: <Sunset className="w-3 h-3 text-orange-500" /> },
-            { id: 'evening', label: 'Evening (>18)', icon: <Moon className="w-3 h-3 text-indigo-500" /> }
+            { id: 'morning', label: 'Morning', time: '6am - 12pm' },
+            { id: 'afternoon', label: 'Afternoon', time: '12pm - 6pm' },
+            { id: 'evening', label: 'Evening', time: 'After 6pm' }
           ].map(slot => (
             <button
               key={slot.id}
               type="button"
-              onClick={() => setDepartureTimeFilter(slot.id)}
-              className={`p-1.5 text-[11px] rounded-md border text-center transition-all cursor-pointer flex items-center justify-center gap-1 ${
+              onClick={() => setDepartureTimeFilter(prev => prev === slot.id ? 'all' : slot.id)}
+              className={`p-2 rounded-lg text-center border transition-all cursor-pointer select-none ${
                 departureTimeFilter === slot.id
-                  ? 'bg-blue-50 border-blue-300 text-blue-700 font-bold'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                  ? 'border-[#2453FF] bg-[#2453FF]/8 text-[#2453FF] font-semibold ring-1 ring-[#2453FF]/30'
+                  : 'border-[#E7E5DF] bg-white text-[#3E434D] hover:border-[#2453FF]/40'
               }`}
             >
-              {slot.icon}
-              <span>{slot.label}</span>
+              <div className="text-xs">{slot.label}</div>
+              <div className="text-[9px] text-[#737885] font-mono">{slot.time}</div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* 5. Price Filter */}
+      {/* 5. Max Price Slider */}
       {maxRoutePrice > minRoutePrice && (
-        <div className="space-y-2 pt-3 border-t border-slate-100">
-          <div className="flex items-center justify-between">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Price Range
-            </label>
-            <span className="text-xs font-bold text-slate-900 font-mono">
-              Up to {formatPrice(effectiveMaxPrice)}
-            </span>
-          </div>
-          <input
-            type="range"
+        <div className="pt-3 border-t border-[#E7E5DF]">
+          <Slider
+            label="Max price"
             min={minRoutePrice}
             max={maxRoutePrice}
             step={500}
             value={effectiveMaxPrice}
-            onChange={(e) => setMaxPriceFilter(parseInt(e.target.value, 10))}
-            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            onChange={(val) => setMaxPriceFilter(val)}
+            formatValue={(val) => formatPrice(val)}
+            showMinMax={true}
           />
-          <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-            <span>{formatPrice(minRoutePrice)}</span>
-            <span>{formatPrice(maxRoutePrice)}</span>
-          </div>
         </div>
       )}
 
@@ -553,16 +665,16 @@ export default function TravelOptions({
     return (
       <div className="space-y-4">
         {/* Card 1: YOUR TRIP */}
-        <Card className="p-4 bg-white border border-slate-200/90 shadow-xs space-y-3">
+        <Card className="p-4 bg-[#FAFAF8] border border-[#E7E5DF] rounded-xl shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase font-mono">
-              YOUR TRIP
+            <span className="text-xs font-semibold text-[#737885]">
+              Your trip <span className="sr-only">YOUR TRIP</span>
             </span>
             {onModifySearch && (
               <button
                 type="button"
                 onClick={onModifySearch}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 cursor-pointer"
+                className="text-xs font-semibold text-[#2453FF] hover:text-[#1A3ECC] transition-colors flex items-center gap-1 cursor-pointer"
               >
                 <Edit3 className="w-3 h-3" />
                 <span>Edit</span>
@@ -571,56 +683,56 @@ export default function TravelOptions({
           </div>
 
           <div className="space-y-1.5">
-            <h4 className="font-display font-bold text-base text-slate-900 leading-tight">
+            <h4 className="font-display font-bold text-base text-[#14171F] leading-tight">
               {originCity} → {destCity}
             </h4>
-            <div className="flex items-center gap-1.5 text-xs text-slate-600">
-              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-1.5 text-xs text-[#3E434D]">
+              <Calendar className="w-3.5 h-3.5 text-[#737885] shrink-0" />
               <span>{date || 'Upcoming'}{returnDate ? ` – ${returnDate}` : ''}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-slate-600">
-              <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-1.5 text-xs text-[#3E434D]">
+              <Users className="w-3.5 h-3.5 text-[#737885] shrink-0" />
               <span>{travelers} {travelers === 1 ? 'Traveler' : 'Travelers'}</span>
             </div>
           </div>
         </Card>
 
         {/* Card 2: PRICE INSIGHTS */}
-        <Card className="p-4 bg-white border border-slate-200/90 shadow-xs space-y-2.5">
-          <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase font-mono">
-            PRICE INSIGHTS
+        <Card className="p-4 bg-[#FAFAF8] border border-[#E7E5DF] rounded-xl shadow-xs space-y-2.5">
+          <span className="text-xs font-semibold text-[#737885]">
+            Price insights <span className="sr-only">PRICE INSIGHTS</span>
           </span>
 
           <div>
-            <div className="text-2xl font-black text-slate-900 font-mono tracking-tight">
+            <div className="text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight">
               {lowestFare !== null ? `₹${lowestFare.toLocaleString()}` : 'Live fares available'}
             </div>
             {priceComparison ? (
-              <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium mt-1">
-                <TrendingDown className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <div className="flex items-center gap-1.5 text-xs text-[#1E9E6B] font-semibold mt-1">
+                <TrendingDown className="w-3.5 h-3.5 text-[#1E9E6B] shrink-0" />
                 <span>{priceComparison}% lower than the average fare for this route.</span>
               </div>
             ) : (
-              <div className="text-xs text-slate-500 mt-1">
+              <div className="text-xs text-[#737885] mt-1">
                 Prices are dynamically queried for this route.
               </div>
             )}
           </div>
 
-          <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 text-[11px] text-slate-500">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+          <div className="pt-2 border-t border-[#E7E5DF] flex items-center gap-1.5 text-[11px] text-[#737885]">
+            <span className="w-2 h-2 rounded-full bg-[#1E9E6B] shrink-0" />
             <span>Prices are currently typical or low for this route.</span>
           </div>
         </Card>
 
         {/* Card 3: POPULAR TIMES */}
-        <Card className="p-4 bg-white border border-slate-200/90 shadow-xs space-y-2.5">
-          <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase font-mono">
-            POPULAR TIMES
+        <Card className="p-4 bg-[#FAFAF8] border border-[#E7E5DF] rounded-xl shadow-xs space-y-2.5">
+          <span className="text-xs font-semibold text-[#737885]">
+            Popular times <span className="sr-only">POPULAR TIMES</span>
           </span>
 
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Fares are typically cheaper on <strong className="text-slate-900">Tuesday</strong> &amp; <strong className="text-slate-900">Wednesday</strong> departures.
+          <p className="text-xs text-[#3E434D] leading-relaxed">
+            Fares are typically cheaper on <strong className="text-[#14171F]">Tuesday</strong> &amp; <strong className="text-[#14171F]">Wednesday</strong> departures.
           </p>
 
           {/* Compact visual chart */}
@@ -639,16 +751,16 @@ export default function TravelOptions({
                   <div 
                     style={{ height: bar.height }}
                     className={`w-full rounded-xs transition-all ${
-                      bar.low ? 'bg-emerald-400' : 'bg-slate-200'
+                      bar.low ? 'bg-[#1E9E6B]' : 'bg-[#E7E5DF]'
                     }`}
                   />
-                  <span className={`text-[9px] font-mono ${bar.low ? 'text-emerald-700 font-bold' : 'text-slate-400'}`}>
+                  <span className={`text-[9px] font-mono ${bar.low ? 'text-[#1E9E6B] font-bold' : 'text-[#737885]'}`}>
                     {bar.day}
                   </span>
                 </div>
               ))}
             </div>
-            <div className="text-[10px] text-slate-400 text-center font-mono pt-1">
+            <div className="text-[10px] text-[#737885] text-center font-mono pt-1">
               Low fares midweek
             </div>
           </div>
@@ -801,35 +913,44 @@ export default function TravelOptions({
       <div className="space-y-4">
         
         {/* Mobile Filter & Sort Action Bar (Hidden on desktop) */}
-        <div className="flex lg:hidden items-center justify-between gap-2.5 pb-2">
-          <button
-            type="button"
-            onClick={() => setShowMobileFilterModal(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 shadow-xs hover:bg-slate-50 transition-colors cursor-pointer"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
-            <span>Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}</span>
-          </button>
-          
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 font-medium">
-              <strong>{sortedFlights.length}</strong> options found
-            </span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="text-xs font-semibold border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 cursor-pointer outline-none focus:ring-1 focus:ring-blue-500"
-              aria-label="Sort options"
+        <div className="flex lg:hidden flex-col gap-2.5 pb-2">
+          <div className="flex items-center justify-between gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowMobileFilterModal(true)}
+              className={`inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+                activeFilterCount > 0
+                  ? 'border-blue-500 bg-blue-50/90 text-blue-800 shadow-xs ring-1 ring-blue-200'
+                  : 'border-slate-300 bg-white text-slate-700 shadow-xs hover:bg-slate-50'
+              }`}
             >
-              <option value="recommended">Sort: Recommended</option>
-              <option value="price">Lowest Price</option>
-              <option value="duration">Shortest Duration</option>
-              <option value="departure">Earliest Departure</option>
-            </select>
+              <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span>Filters {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}</span>
+            </button>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">
+                <strong>{sortedFlights.length}</strong> options found
+              </span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="text-xs font-semibold border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 cursor-pointer outline-none focus:ring-1 focus:ring-blue-500"
+                aria-label="Sort options"
+              >
+                <option value="recommended">Sort: Recommended</option>
+                <option value="price">Lowest Price</option>
+                <option value="duration">Shortest Duration</option>
+                <option value="departure">Earliest Departure</option>
+              </select>
+            </div>
           </div>
+
+          {/* Active Filter Chips Bar (Mobile) */}
+          {renderActiveFiltersBar()}
         </div>
 
-        {/* Mobile Filter Modal Sheet */}
+        {/* Mobile Filter Drawer / Modal Sheet */}
         <Modal
           isOpen={showMobileFilterModal}
           onClose={() => setShowMobileFilterModal(false)}
@@ -837,13 +958,42 @@ export default function TravelOptions({
           maxWidth="md"
         >
           <div className="space-y-4">
+            {/* Mobile Drawer Header Status Pill */}
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-xl border border-slate-200/80 text-xs">
+              <span className="font-semibold text-slate-700">
+                {activeFilterCount > 0 ? `${activeFilterCount} active filter${activeFilterCount > 1 ? 's' : ''}` : 'No filters applied'}
+              </span>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold cursor-pointer flex items-center gap-1"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset all</span>
+                </button>
+              )}
+            </div>
+
             {renderFilterPanel()}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+
+            {/* Sticky Action Footer */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+              {hasActiveFilters ? (
+                <Button
+                  variant="outline"
+                  size="md"
+                  onClick={handleResetFilters}
+                  className="w-1/3 text-xs font-semibold cursor-pointer"
+                >
+                  Reset
+                </Button>
+              ) : null}
               <Button
                 variant="primary"
                 size="md"
                 onClick={() => setShowMobileFilterModal(false)}
-                className="w-full sm:w-auto font-semibold px-6"
+                className={`${hasActiveFilters ? 'w-2/3' : 'w-full'} font-bold px-6 shadow-xs cursor-pointer`}
               >
                 Apply Filters ({sortedFlights.length} available)
               </Button>
@@ -864,25 +1014,25 @@ export default function TravelOptions({
 
             {/* Smart Picks Summary Chips Bar */}
             {smartPicks && (
-              <div className="bg-slate-50/80 rounded-xl border border-slate-200/80 p-3 space-y-2">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-900">
-                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+              <div className="bg-[#FAFAF8] rounded-xl border border-[#E7E5DF] p-3 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-[#14171F]">
+                  <Sparkles className="w-3.5 h-3.5 text-[#2453FF]" />
                   <span>✨ Smart picks</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   {smartPicks.bestValue && (
                     <button
                       type="button"
                       onClick={() => setSortBy('recommended')}
-                      className="p-2.5 rounded-lg bg-white border border-slate-200/90 text-left hover:border-purple-300 hover:shadow-xs transition-all cursor-pointer"
+                      className="p-3 rounded-lg bg-white border border-[#E7E5DF] border-t-[3px] border-t-[#2453FF] text-left hover:-translate-y-0.5 hover:shadow-xs transition-all duration-150 cursor-pointer"
                     >
-                      <div className="text-[11px] font-bold text-purple-700 uppercase tracking-wider font-mono">
+                      <div className="text-xs font-semibold text-[#2453FF]">
                         {smartPicks.bestValue.title}
                       </div>
-                      <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">
+                      <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
                         ₹{smartPicks.bestValue.price?.toLocaleString()}
                       </div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-[10px] text-[#737885] font-mono">
                         {smartPicks.bestValue.duration}
                       </div>
                     </button>
@@ -892,15 +1042,15 @@ export default function TravelOptions({
                     <button
                       type="button"
                       onClick={() => setSortBy('duration')}
-                      className="p-2.5 rounded-lg bg-white border border-slate-200/90 text-left hover:border-blue-300 hover:shadow-xs transition-all cursor-pointer"
+                      className="p-3 rounded-lg bg-white border border-[#E7E5DF] border-t-[3px] border-t-[#1E9E6B] text-left hover:-translate-y-0.5 hover:shadow-xs transition-all duration-150 cursor-pointer"
                     >
-                      <div className="text-[11px] font-bold text-blue-700 uppercase tracking-wider font-mono">
+                      <div className="text-xs font-semibold text-[#1E9E6B]">
                         {smartPicks.fastest.title}
                       </div>
-                      <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">
+                      <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
                         ₹{smartPicks.fastest.price?.toLocaleString()}
                       </div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-[10px] text-[#737885] font-mono">
                         {smartPicks.fastest.duration}
                       </div>
                     </button>
@@ -910,15 +1060,15 @@ export default function TravelOptions({
                     <button
                       type="button"
                       onClick={() => setSortBy('price')}
-                      className="p-2.5 rounded-lg bg-white border border-slate-200/90 text-left hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer"
+                      className="p-3 rounded-lg bg-white border border-[#E7E5DF] border-t-[3px] border-t-[#E8A33D] text-left hover:-translate-y-0.5 hover:shadow-xs transition-all duration-150 cursor-pointer"
                     >
-                      <div className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider font-mono">
+                      <div className="text-xs font-semibold text-[#E8A33D]">
                         {smartPicks.cheapest.title}
                       </div>
-                      <div className="text-sm font-bold text-slate-900 font-mono mt-0.5">
+                      <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
                         ₹{smartPicks.cheapest.price?.toLocaleString()}
                       </div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-[10px] text-[#737885]">
                         Lowest available
                       </div>
                     </button>
@@ -947,19 +1097,31 @@ export default function TravelOptions({
               </div>
             </div>
 
-            {/* Flight Results List (5-Question Immediate Result Card Hierarchy) */}
+            {/* Active Filters Bar (Desktop) */}
+            <div className="hidden lg:block">
+              {renderActiveFiltersBar()}
+            </div>
+
+            {/* Flight Results List (Target Structure: Left: Airline & Timeline, Center: Duration & Stops, Right: Price & CTA) */}
             <div className="space-y-3.5">
               {sortedFlights.length === 0 ? (
-                <Card className="p-8 text-center text-slate-500 border border-slate-200/90 bg-white space-y-2">
-                  <p className="text-sm font-medium text-slate-700">No flights match the selected filter criteria.</p>
-                  <p className="text-xs text-slate-400">Try loosening your stops, airlines, or departure time filters.</p>
-                  <button
-                    type="button"
-                    onClick={resetFilters}
-                    className="mt-2 text-xs text-blue-600 hover:underline font-semibold cursor-pointer"
+                <Card className="p-8 text-center text-slate-500 border border-slate-200/90 bg-white space-y-3">
+                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 mx-auto">
+                    <SlidersHorizontal className="w-5 h-5 text-slate-400" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-slate-800">No flights match the selected filter criteria.</p>
+                    <p className="text-xs text-slate-400">Try loosening your stops, airlines, or departure time filters.</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetFilters}
+                    className="mt-2 text-xs font-semibold cursor-pointer mx-auto"
                   >
-                    Reset filters
-                  </button>
+                    <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Reset filters</span>
+                  </Button>
                 </Card>
               ) : (
                 sortedFlights.map((flight, idx) => {
@@ -977,174 +1139,194 @@ export default function TravelOptions({
                   const isSelected = activeFlightId === flight.id || (!activeFlightId && idx === 0 && activeMode === 'flight');
                   const badgeMeta = getFlightBadge(flight, idx);
 
-                  const stopsLabel = typeof flight.stops === 'number'
-                    ? (flight.stops === 0 ? 'Non-stop' : (flight.stops === 1 ? '1 stop' : `${flight.stops} stops`))
-                    : '—';
+                  const stopsCount = typeof flight.stops === 'number' ? flight.stops : 0;
+                  const stopsLabel = stopsCount === 0 ? 'Non-stop' : (stopsCount === 1 ? '1 stop' : `${stopsCount} stops`);
                   const durationLabel = flight.duration || '—';
+                  const cabinLabel = flight.cabin ? flight.cabin.replace('_', ' ') : 'Economy';
+                  const layoverInfo = flight.layover || flight.layovers?.[0] || flight.stopsInfo || null;
 
                   return (
                     <Card
                       key={flight.id || idx}
-                      className={`p-4 sm:p-5 transition-all duration-150 bg-white border ${
+                      className={`p-4 sm:p-5 transition-all duration-150 bg-white border rounded-xl relative ${
                         isSelected 
-                          ? 'border-blue-600 ring-1 ring-blue-600 shadow-xs' 
-                          : 'border-slate-200/90 hover:border-blue-300 hover:shadow-xs'
+                          ? 'border-[#2453FF] ring-2 ring-[#2453FF]/20 shadow-xs' 
+                          : 'border-[#E7E5DF] hover:border-[#2453FF]/40 hover:shadow-xs'
                       }`}
                     >
-                      {/* 1. Header: Who (Airline & Flight #) + Semantic Recommendation Badge */}
-                      <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                        <div className="flex items-center gap-3">
+                      {/* Top Micro-Badges Bar: Semantic Recommendation + Live Verification (unobtrusive) */}
+                      {(badgeMeta || isLive) && (
+                        <div className="flex items-center justify-between gap-2 pb-2.5 mb-3 border-b border-[#E7E5DF]">
+                          <div className="flex items-center gap-2">
+                            {badgeMeta && (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[10px] font-bold tracking-wide uppercase font-mono border ${
+                                badgeMeta.color === 'emerald'
+                                  ? 'bg-[#1E9E6B]/10 text-[#1E9E6B] border-[#1E9E6B]/30'
+                                  : badgeMeta.color === 'blue'
+                                  ? 'bg-[#2453FF]/10 text-[#2453FF] border-[#2453FF]/30'
+                                  : 'bg-[#E8A33D]/10 text-[#E8A33D] border-[#E8A33D]/30'
+                              }`}>
+                                {badgeMeta.icon && <badgeMeta.icon className="w-3 h-3 shrink-0" />}
+                                <span>{badgeMeta.label}</span>
+                              </span>
+                            )}
+                          </div>
+
+                          {isLive && (
+                            <Badge variant="success" size="sm" className="font-mono text-[10px] py-0.5">
+                              <ShieldCheck className="w-3 h-3 text-[#1E9E6B]" />
+                              <span>Google Flights · Live</span>
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Main Ticket Information Grid: 3 explicit, non-overlapping columns */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:gap-4 items-center">
+                        
+                        {/* 1. Airline Identity + Departure → Arrival Timeline (sm:col-span-6) */}
+                        <div className="sm:col-span-6 flex items-start gap-3 min-w-0">
+                          {/* Airline Brand Icon/Logo */}
                           {flight.airlineLogo ? (
                             <img
                               src={flight.airlineLogo}
                               alt={flight.airline || 'Airline'}
-                              className="w-9 h-9 rounded-lg object-contain bg-slate-50 p-1 border border-slate-200/80 shrink-0"
+                              className="w-10 h-10 rounded-lg object-contain bg-[#FAFAF8] p-1.5 border border-[#E7E5DF] shrink-0"
                               onError={(e) => {
                                 e.currentTarget.style.display = 'none';
                               }}
                             />
                           ) : (
-                            <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 font-bold text-xs flex items-center justify-center font-mono shrink-0">
-                              {(flight.airlineCode || flight.airline || '✈').slice(0, 2).toUpperCase()}
+                            <div className="w-10 h-10 rounded-lg bg-[#2453FF]/10 border border-[#2453FF]/20 text-[#2453FF] font-bold text-xs flex items-center justify-center font-mono shrink-0">
+                              {(flight.airlineCode || flight.airline || 'FL').slice(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <div>
-                            <h4 className="font-bold text-sm sm:text-base text-slate-900 leading-tight">
-                              {flight.airline || '—'}
-                            </h4>
-                            {flight.flightNumber && (
-                              <span className="text-xs text-slate-400 font-mono">
-                                {flight.flightNumber}
-                              </span>
-                            )}
+
+                          {/* Flight Details & Timeline */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-bold text-sm text-[#14171F] truncate">
+                                {flight.airline || 'Commercial Airline'}
+                              </h4>
+                              {flight.flightNumber && (
+                                <span className="text-[11px] text-[#737885] font-mono">
+                                  {flight.flightNumber}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Timeline Flow: Departure → Arrival */}
+                            <div className="flex items-baseline gap-2 mt-1">
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-base sm:text-lg font-black font-mono tabular-nums tracking-tight text-[#14171F]">
+                                  {flight.depart || '—'}
+                                </span>
+                                <span className="text-xs font-bold text-[#3E434D] font-mono">
+                                  {originCode}
+                                </span>
+                              </div>
+
+                              <span className="text-[#737885] text-xs shrink-0 font-bold">→</span>
+
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-base sm:text-lg font-black font-mono tabular-nums tracking-tight text-[#14171F]">
+                                  {flight.arrive || '—'}
+                                </span>
+                                <span className="text-xs font-bold text-[#3E434D] font-mono">
+                                  {destCode}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="text-[11px] text-[#737885] truncate mt-0.5">
+                              {originCity} to {destCity}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Semantic Recommendation Badge */}
-                        <div className="flex items-center gap-2">
-                          {badgeMeta && (
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold tracking-wide uppercase font-mono border ${
-                              badgeMeta.color === 'emerald'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : badgeMeta.color === 'blue'
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : 'bg-amber-50 text-amber-800 border-amber-200'
-                            }`}>
-                              <span>{badgeMeta.icon}</span>
-                              <span>{badgeMeta.label}</span>
-                            </span>
-                          )}
-
-                          {isLive && (
-                            <Badge variant="success" size="sm" className="hidden sm:inline-flex font-mono">
-                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                              <span>Google Flights · Live</span>
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 2 & 3. Middle: When & How Long (Departure ── Route Graphic ── Arrival) */}
-                      <div className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        
-                        {/* Departure */}
-                        <div className="min-w-[90px]">
-                          <span className="text-2xl font-bold text-slate-900 font-mono tracking-tight block">
-                            {flight.depart || '—'}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-700 block">
-                            {originCity}
-                          </span>
-                          <span className="text-[11px] text-slate-400 font-mono font-bold">
-                            {originCode}
-                          </span>
-                        </div>
-
-                        {/* Route Line Graphic: How Long */}
-                        <div className="flex flex-col items-center px-2 flex-1 max-w-[240px] mx-auto text-center w-full">
-                          <span className="text-xs font-bold text-slate-700 mb-1 font-mono">
-                            {durationLabel} · {stopsLabel}
-                          </span>
-                          <div className="w-full flex items-center gap-1.5">
-                            <div className="h-px bg-slate-300 flex-1" />
-                            <Plane className="w-3.5 h-3.5 text-blue-600 rotate-90 shrink-0" />
-                            <div className="h-px bg-slate-300 flex-1" />
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-medium mt-1">
-                            {flight.cabin ? flight.cabin.replace('_', ' ') : 'Economy'}
-                          </span>
-                        </div>
-
-                        {/* Arrival */}
-                        <div className="min-w-[90px] text-left sm:text-right">
-                          <span className="text-2xl font-bold text-slate-900 font-mono tracking-tight block">
-                            {flight.arrive || '—'}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-700 block">
-                            {destCity}
-                          </span>
-                          <span className="text-[11px] text-slate-400 font-mono font-bold">
-                            {destCode}
-                          </span>
-                        </div>
-
-                      </div>
-
-                      {/* 4 & 5. Bottom: How Much (Price) & What Do I Do (Select CTA) */}
-                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500 font-medium">
-                            Google Flights
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <span className="text-xl sm:text-2xl font-extrabold text-slate-900 font-mono block leading-tight">
-                              {formatPrice(flight.price)}
-                            </span>
-                            <span className="text-[10px] text-slate-400 block uppercase tracking-wider font-medium">
-                              / traveler
-                            </span>
+                        {/* 2. Duration + Stops Region (sm:col-span-3 text-center) */}
+                        <div className="sm:col-span-3 flex flex-col items-center justify-center text-center px-1 border-t sm:border-t-0 pt-2 sm:pt-0 border-[#E7E5DF]">
+                          <div className="text-xs font-bold text-[#14171F] font-mono tracking-tight">
+                            {durationLabel}
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant={isSelected ? 'primary' : 'outline'}
-                              size="md"
-                              onClick={() => handleSelectFlight(flight)}
-                              className={`cursor-pointer font-bold px-5 ${
-                                isSelected
-                                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
-                                  : 'border-blue-600 text-blue-600 hover:bg-blue-50'
+                          {/* Route Bar Graphic */}
+                          <div className="w-full max-w-[100px] flex items-center gap-1.5 my-1">
+                            <div className="h-0.5 bg-[#E7E5DF] flex-1 rounded-full" />
+                            <Plane className="w-3.5 h-3.5 text-[#2453FF] rotate-90 shrink-0" />
+                            <div className="h-0.5 bg-[#E7E5DF] flex-1 rounded-full" />
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap justify-center text-[11px]">
+                            <span
+                              className={`font-semibold ${
+                                stopsCount === 0 ? 'text-[#1E9E6B]' : 'text-[#E8A33D]'
                               }`}
                             >
-                              {isSelected ? (
-                                <>
-                                  <Check className="w-4 h-4 mr-1.5" />
-                                  <span>Selected</span>
-                                </>
-                              ) : (
-                                <span>Select →</span>
-                              )}
-                            </Button>
-
-                            {flight.bookingUrl && (
-                              <a
-                                href={flight.bookingUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
-                                title="View on Google Flights"
-                                aria-label="View on Google Flights"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </a>
+                              {stopsLabel}
+                            </span>
+                            {layoverInfo && (
+                              <span className="text-[10px] text-[#737885] font-mono">
+                                ({layoverInfo})
+                              </span>
                             )}
+                            <span className="text-[#E7E5DF]">·</span>
+                            <span className="text-[10px] text-[#737885] capitalize">
+                              {cabinLabel}
+                            </span>
                           </div>
                         </div>
+
+                        {/* 3. Price Region (sm:col-span-3 text-right) */}
+                        <div className="sm:col-span-3 text-left sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-[#E7E5DF]">
+                          <div className="text-xl sm:text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight whitespace-nowrap">
+                            {formatPrice(flight.price)}
+                          </div>
+                          <span className="text-[10px] text-[#737885] uppercase tracking-wider font-semibold block mt-0.5">
+                            / traveler
+                          </span>
+                        </div>
+
                       </div>
 
+                      {/* 4. Independent Action Row: CTA + External Link */}
+                      <div className="flex items-center justify-end gap-2.5 pt-3 mt-3 border-t border-[#E7E5DF]">
+                        <Button
+                          variant={isSelected ? 'primary' : 'outline'}
+                          size="md"
+                          onClick={() => handleSelectFlight(flight)}
+                          className={`cursor-pointer font-bold px-4 sm:px-5 rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0 min-w-[140px] h-10 inline-flex items-center justify-center ${
+                            isSelected
+                              ? 'bg-[#2453FF] hover:bg-[#1A3ECC] text-white border-transparent'
+                              : 'border-[#2453FF] text-[#2453FF] hover:bg-[#2453FF]/8'
+                          }`}
+                        >
+                          {isSelected ? (
+                            <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
+                              <Check className="w-4 h-4 shrink-0" />
+                              <span>Selected</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
+                              <span>Select Flight →</span>
+                              <span className="sr-only">Select →</span>
+                            </span>
+                          )}
+                        </Button>
+
+                        {flight.bookingUrl && (
+                          <a
+                            href={flight.bookingUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors inline-flex items-center justify-center shrink-0"
+                            title="View on Google Flights"
+                            aria-label="View on Google Flights"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        )}
+                      </div>
                     </Card>
                   );
                 })

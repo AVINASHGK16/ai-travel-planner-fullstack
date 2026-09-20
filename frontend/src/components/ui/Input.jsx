@@ -29,7 +29,7 @@ export function Input({
       {label && (
         <label
           htmlFor={generatedId}
-          className="block text-xs font-semibold text-slate-700 tracking-wide"
+          className="block text-xs font-semibold text-[#14171F] tracking-wide"
         >
           {label}
           {required && <span className="text-red-500 ml-0.5">*</span>}
@@ -47,13 +47,13 @@ export function Input({
           id={generatedId}
           disabled={disabled}
           required={required}
-          className={`w-full bg-white text-slate-900 placeholder:text-slate-400 text-sm rounded-lg border transition-all duration-150 h-10 ${
+          className={`w-full bg-white text-[#14171F] placeholder:text-[#737885]/60 text-sm rounded-lg border transition-all duration-120 h-10 ${
             leftIcon ? 'pl-9' : 'pl-3.5'
           } ${rightIcon ? 'pr-9' : 'pr-3.5'} ${
             error
               ? 'border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-600'
-              : 'border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600'
-          } ${disabled ? 'bg-slate-50 text-slate-400 cursor-not-allowed border-slate-200' : 'shadow-xs'} ${className}`}
+              : 'border-[#E7E5DF] hover:border-[#2453FF]/40 focus:outline-none focus:ring-2 focus:ring-[#2453FF]/20 focus:border-[#2453FF]'
+          } ${disabled ? 'bg-[#FAFAF8] text-[#737885] cursor-not-allowed border-[#E7E5DF]' : 'shadow-xs'} ${className}`}
           {...props}
         />
 

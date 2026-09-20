@@ -675,7 +675,7 @@ export default function TripOverview({
             <button
               type="button"
               onClick={onBackToTrips || (() => navigate('/dashboard'))}
-              aria-label="← Back to Trips"
+              aria-label="Back to Trips"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors group cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
@@ -938,7 +938,7 @@ export default function TripOverview({
                 <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0 mt-0.5" />
                 <div>
                   <strong className="font-semibold block text-purple-950 font-mono text-[11px] uppercase tracking-wide">
-                    ✨ AI Suggestion
+                    AI Suggestion
                   </strong>
                   <span className="text-purple-800 mt-0.5 block leading-relaxed">
                     {dayAiSuggestion}
@@ -968,7 +968,7 @@ export default function TripOverview({
                           10:30 AM
                         </span>
                         <span className="text-xs font-semibold text-slate-900">
-                          ✈ Arrive in {destinationName}
+                          Arrive in {destinationName}
                         </span>
                       </div>
                       <span className="text-[11px] text-slate-400 font-mono">
@@ -1374,7 +1374,7 @@ export default function TripOverview({
                 />
 
                 {/* Destination pin */}
-                <Marker position={destCoords} icon={createTimelineMarkerIcon('★', '#dc2626')}>
+                <Marker position={destCoords} icon={createTimelineMarkerIcon('<svg width="13" height="13" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>', '#dc2626')}>
                   <Popup>
                     <div className="text-xs">
                       <strong>{destinationName}</strong> (Main Destination)

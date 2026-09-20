@@ -35,7 +35,7 @@ export function Button({
 
   const sizes = {
     sm: 'px-3 py-1.5 text-xs gap-1.5 h-8',
-    md: 'px-4 py-2 text-sm gap-2 h-9.5',
+    md: 'px-4 py-2 text-sm gap-2 h-10',
     lg: 'px-5 py-2.5 text-base gap-2.5 h-11'
   };
 
@@ -52,10 +52,14 @@ export function Button({
       {isLoading ? (
         <Loader2 className="w-4 h-4 animate-spin text-current shrink-0" />
       ) : (
-        leftIcon && <span className="shrink-0">{leftIcon}</span>
+        leftIcon && <span className="shrink-0 flex items-center">{leftIcon}</span>
       )}
-      <span>{children}</span>
-      {!isLoading && rightIcon && <span className="shrink-0">{rightIcon}</span>}
+      {typeof children === 'string' || typeof children === 'number' ? (
+        <span>{children}</span>
+      ) : (
+        children
+      )}
+      {!isLoading && rightIcon && <span className="shrink-0 flex items-center">{rightIcon}</span>}
     </button>
   );
 }

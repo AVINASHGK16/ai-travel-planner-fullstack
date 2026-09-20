@@ -37,7 +37,7 @@ export function PlanWithAICallout({ onApplyPrompt, className = '' }) {
           <div className="space-y-1.5 max-w-xl">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">
               <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-              <span>✨ Plan with AI</span>
+              <span>Plan with AI</span>
             </div>
             <h3 className="font-display font-bold text-base sm:text-lg text-slate-900 tracking-tight">
               Describe your dream trip in your own words
@@ -65,7 +65,7 @@ export function PlanWithAICallout({ onApplyPrompt, className = '' }) {
       <Modal
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
-        title="✨ Plan with AI Itinerary Assistant"
+        title="Plan with AI Itinerary Assistant"
         maxWidth="lg"
       >
         <div className="space-y-4">

@@ -8,13 +8,16 @@ import {
   Mic, 
   MicOff, 
   AlertCircle,
-  Compass,
-  Wand2
+  Wand2,
+  SlidersHorizontal,
+  User,
+  Diamond
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/Card';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
+import { Slider } from '../ui/Slider';
 
 /**
  * Roamly TripConfigurationCard Component — UI-3.1
@@ -260,7 +263,7 @@ export function TripConfigurationCard({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Compass className="w-3.5 h-3.5 text-blue-600" />
+              <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
               <span>Structured Search</span>
             </button>
             <button
@@ -276,7 +279,7 @@ export function TripConfigurationCard({
             >
               <Sparkles className="w-3.5 h-3.5 text-purple-600" />
               <span>Ask AI</span>
-              <span className="text-[9px] uppercase tracking-wider bg-purple-100 text-purple-700 px-1.5 py-0.2 rounded font-mono">
+              <span className="text-[9px] uppercase tracking-wider bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-mono font-bold">
                 AI
               </span>
             </button>
@@ -333,8 +336,8 @@ export function TripConfigurationCard({
                 }`}
               >
                 <span>Multi-city</span>
-                <span className="text-[9px] uppercase tracking-wider bg-blue-50 text-blue-700 px-1 py-0.2 rounded font-mono">
-                  Beta
+                <span className="text-[9px] uppercase tracking-wider bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono font-bold">
+                  BETA
                 </span>
               </button>
             </div>
@@ -376,9 +379,8 @@ export function TripConfigurationCard({
             </div>
 
             {/* Row 1: Location row (FROM, SWAP, TO) */}
-            <div className="relative">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 items-center">
-                {/* Origin / From Input */}
+            <div className="flex flex-col md:flex-row items-center gap-3">
+              <div className="flex-1 w-full">
                 <Input
                   label="FROM"
                   id="planner-from-input"
@@ -407,8 +409,25 @@ export function TripConfigurationCard({
                     </button>
                   }
                 />
+              </div>
 
-                {/* Destination / To Input */}
+              {/* Swap Button (Clean rounded button vertically aligned with input field) */}
+              <div className="shrink-0 flex items-center justify-center pt-0 md:pt-5">
+                <button
+                  id="planner-swap-btn"
+                  data-testid="planner-swap-btn"
+                  type="button"
+                  onClick={handleSwapLocations}
+                  disabled={loading}
+                  aria-label="Swap origin and destination"
+                  title="Swap origin and destination"
+                  className="w-10 h-10 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-400 text-slate-600 hover:text-blue-600 shadow-2xs transition-all cursor-pointer flex items-center justify-center"
+                >
+                  <ArrowLeftRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 w-full">
                 <Input
                   label="TO"
                   id="planner-to-input"
@@ -438,28 +457,10 @@ export function TripConfigurationCard({
                   }
                 />
               </div>
-
-              {/* Swap Button with ample hit area and no collision */}
-              <div className="flex justify-center md:absolute md:left-1/2 md:top-8 md:-translate-x-1/2 my-2 md:my-0 z-10">
-                <Button
-                  id="planner-swap-btn"
-                  data-testid="planner-swap-btn"
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSwapLocations}
-                  disabled={loading}
-                  aria-label="Swap origin and destination"
-                  title="Swap origin and destination"
-                  className="rounded-full w-9 h-9 p-0 bg-white hover:bg-slate-50 border-slate-300 shadow-xs cursor-pointer hover:border-blue-400 hover:text-blue-600 transition-all flex items-center justify-center"
-                >
-                  <ArrowLeftRight className="w-4 h-4 text-slate-600" />
-                </Button>
-              </div>
             </div>
 
             {/* Row 2: DEPARTURE | RETURN | TRAVELERS | TRIP TYPE (4 balanced columns) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
               <Input
                 label="DEPARTURE"
                 id="planner-departure-date"
@@ -479,7 +480,7 @@ export function TripConfigurationCard({
               />
 
               <Input
-                label={`RETURN ${tripType === 'oneWay' ? '(One Way)' : (tripType === 'multiCity' ? '(Multi-city)' : '')}`}
+                label="RETURN"
                 id="planner-return-date"
                 type="date"
                 disabled={tripType === 'oneWay'}
@@ -490,13 +491,13 @@ export function TripConfigurationCard({
                   if (validationError) setValidationError(null);
                 }}
                 leftIcon={<Calendar className="w-4 h-4 text-slate-400" />}
-                helperText={tripType === 'oneWay' ? 'Switch to Round Trip to select a return date' : undefined}
               />
 
               <Select
                 label="TRAVELERS"
                 id="planner-travelers-select"
                 value={travelers}
+                leftIcon={<User className="w-4 h-4 text-slate-400" />}
                 onChange={(e) => setTravelers(parseInt(e.target.value, 10) || 1)}
               >
                 <option value="1">1 Traveler (Solo)</option>
@@ -514,51 +515,53 @@ export function TripConfigurationCard({
                 id="planner-mode-select"
                 aria-label="Travel preferences and trip type"
                 value={preferredMode}
+                leftIcon={<Diamond className="w-4 h-4 text-slate-400" />}
                 onChange={(e) => setPreferredMode(e.target.value)}
                 options={travelModes}
               />
             </div>
 
-            {/* Row 3: BUDGET (Dedicated full-width section with generous room) */}
+            {/* Row 3: BUDGET (Dedicated full-width section with continuous transit track fill) */}
             <div className="space-y-2 pt-1">
               <div className="flex items-center justify-between">
                 <label
                   htmlFor="planner-budget-slider"
-                  className="block text-xs font-semibold text-slate-700 tracking-wide"
+                  className="block text-xs font-semibold text-[#14171F] tracking-wide"
                 >
                   BUDGET
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500 font-medium">Estimated Budget:</span>
-                  <span className="text-base font-bold text-slate-900 font-mono bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200/80">
+                  <span className="text-xs text-[#737885] font-medium">Estimated Budget:</span>
+                  <span className="text-sm font-bold text-[#14171F] font-mono tabular-nums bg-slate-100 px-3 py-1 rounded-lg border border-slate-200/80">
                     ₹{Number(budget || 0).toLocaleString()}
                   </span>
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200">
-                <input
+              <div className="p-4 sm:p-5 bg-white rounded-xl border border-slate-200/90">
+                <Slider
                   id="planner-budget-slider"
-                  type="range"
-                  min="5000"
-                  max="200000"
-                  step="5000"
+                  min={5000}
+                  max={200000}
+                  step={5000}
                   value={typeof budget === 'number' ? budget : 50000}
-                  onChange={(e) => setBudget(parseInt(e.target.value, 10))}
-                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  onChange={(val) => setBudget(val)}
+                  formatValue={(val) => `₹${Number(val || 0).toLocaleString()}`}
+                  showValue={false}
+                  showMinMax={true}
                 />
-                <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2.5 border-t border-slate-200/70">
-                  <span className="text-[11px] text-slate-500 font-medium">Quick Presets:</span>
+                <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-slate-100">
+                  <span className="text-xs text-slate-500 font-medium">Quick Presets:</span>
                   <div className="flex flex-wrap items-center gap-2">
                     {budgetPresets.map((preset) => (
                       <button
                         key={preset.value}
                         type="button"
                         onClick={() => setBudget(preset.value)}
-                        className={`text-xs font-mono px-3 py-1 rounded-md transition-all cursor-pointer ${
+                        className={`text-xs font-mono px-3.5 py-1.5 rounded-lg transition-all duration-150 cursor-pointer ${
                           budget === preset.value
-                            ? 'bg-blue-600 text-white font-bold shadow-xs'
-                            : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+                            ? 'bg-[#2453FF] text-white font-bold shadow-xs'
+                            : 'bg-white text-slate-700 hover:text-slate-950 hover:bg-slate-50 border border-slate-200'
                         }`}
                       >
                         {preset.label}
@@ -570,7 +573,7 @@ export function TripConfigurationCard({
             </div>
 
             {/* Row 4: Primary CTA [ Search Flights & Plan Trip → ] */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-3">
+            <div className="pt-2 flex items-center justify-end">
               <Button
                 id="planner-submit-btn"
                 data-testid="planner-submit-btn"
@@ -579,9 +582,9 @@ export function TripConfigurationCard({
                 size="lg"
                 isLoading={loading}
                 disabled={loading}
-                className="w-full sm:w-auto px-8 py-3 text-base font-bold tracking-tight shadow-sm hover:shadow-md transition-all cursor-pointer bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-8 py-3 text-base font-bold tracking-tight rounded-xl shadow-xs hover:shadow-sm transition-all cursor-pointer bg-[#2453FF] hover:bg-[#1A3ECC] text-white flex items-center justify-center gap-2"
               >
-                <span>{loading ? 'Searching Flights & Planning...' : 'Search Flights & Plan Trip →'}</span>
+                <span>{loading ? 'Searching flights & planning...' : 'Search Flights & Plan Trip →'}</span>
               </Button>
             </div>
 
@@ -596,7 +599,7 @@ export function TripConfigurationCard({
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200 mb-2">
                 <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                <span>✨ Plan with AI</span>
+                <span>Plan with AI</span>
               </div>
               <h2 className="font-semibold text-lg text-slate-900 tracking-tight">
                 Describe your dream trip in your own words

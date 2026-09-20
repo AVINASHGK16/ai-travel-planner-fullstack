@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { Star, ExternalLink, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Star, ExternalLink, AlertTriangle, ShieldCheck, MapPin, Fuel, Zap, Utensils, Camera, Hotel, ShieldAlert, Map } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
@@ -51,7 +51,9 @@ export class MapErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-700">
-          <span className="text-3xl mb-2">🗺️</span>
+          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-2">
+            <Map className="w-6 h-6" />
+          </div>
           <h4 className="font-semibold text-sm text-slate-900">Interactive Map Unavailable</h4>
           <p className="text-xs text-slate-500 mt-1 max-w-xs">
             Route coordinates could not be rendered. Detailed itinerary and stops are listed below.
@@ -79,12 +81,25 @@ function ChangeMapView({ center }) {
   return null;
 }
 
+// Crisp vector SVG templates for map markers (eliminates blurry platform emojis)
+const PIN_SVGS = {
+  start: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+  destination: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>',
+  fuel: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>',
+  ev: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+  food: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2v6a3 3 0 0 1-3 3 3 3 0 0 1-3-3V2"/><path d="M12 2v19"/><path d="M15 22v-8a3 3 0 0 0-3-3h0a3 3 0 0 0-3 3v8"/></svg>',
+  sights: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>',
+  hotel: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/><path d="m9 16 3-3 3 3"/><path d="M9 8h.01"/><path d="M15 8h.01"/></svg>',
+  hospital: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v12"/><path d="M6 12h12"/></svg>',
+  police: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>'
+};
+
 // Generate custom SVG DivIcon for Leaflet markers
 const createCustomIcon = (iconHtml, color) => {
   const safeColor = typeof color === 'string' && color.trim() ? color : '#2563eb';
-  const safeHtml = typeof iconHtml === 'string' && iconHtml.trim() ? iconHtml : '📍';
+  const safeHtml = typeof iconHtml === 'string' && iconHtml.trim() ? iconHtml : PIN_SVGS.start;
   return L.divIcon({
-    html: `<div style="background-color: ${safeColor}; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.25); font-size: 15px;">${safeHtml}</div>`,
+    html: `<div style="background-color: ${safeColor}; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.25);">${safeHtml}</div>`,
     className: 'custom-leaflet-icon',
     iconSize: [32, 32],
     iconAnchor: [16, 32],
@@ -126,8 +141,8 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
     const pins = [];
 
     // Start / End markers strictly using canonical locations
-    pins.push({ position: fromCoords, label: `Starting: ${tripData?.from || 'Origin'}`, iconHtml: '📍', color: '#2563eb' });
-    pins.push({ position: toCoords,   label: `Destination: ${tripData?.to || 'Destination'}`, iconHtml: '🏁', color: '#dc2626' });
+    pins.push({ position: fromCoords, label: `Starting: ${tripData?.from || 'Origin'}`, iconHtml: PIN_SVGS.start, color: '#2563eb' });
+    pins.push({ position: toCoords,   label: `Destination: ${tripData?.to || 'Destination'}`, iconHtml: PIN_SVGS.destination, color: '#dc2626' });
 
     // Petrol stations
     if (selectedLayer === 'all' || selectedLayer === 'fuel') {
@@ -139,7 +154,7 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 13) % 7) - 3) * 0.02,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 17) % 5) - 2) * 0.02
           ],
-          label: `${pumpName} (Petrol Pump)`, iconHtml: '⛽', color: '#d97706'
+          label: `${pumpName} (Petrol Pump)`, iconHtml: PIN_SVGS.fuel, color: '#d97706'
         });
       });
     }
@@ -154,7 +169,7 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 11) % 6) - 3) * 0.02,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 19) % 4) - 2) * 0.02
           ],
-          label: `${evName} (EV Station)`, iconHtml: '⚡', color: '#10b981'
+          label: `${evName} (EV Station)`, iconHtml: PIN_SVGS.ev, color: '#10b981'
         });
       });
     }
@@ -168,7 +183,7 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 7) % 9) - 4) * 0.025,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 3) % 7) - 3) * 0.025
           ],
-          label: `${rest.name || 'Dine Spot'} (${rest.cuisine || 'Local Cuisine'})`, iconHtml: '🍽️', color: '#ea580c'
+          label: `${rest.name || 'Dine Spot'} (${rest.cuisine || 'Local Cuisine'})`, iconHtml: PIN_SVGS.food, color: '#ea580c'
         });
       });
     }
@@ -182,7 +197,7 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 5) % 11) - 5) * 0.03,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 13) % 9) - 4) * 0.03
           ],
-          label: `${att.name || 'Attraction'} ★ ${att.rating ?? 4.0}`, iconHtml: '🎡', color: '#7c3aed'
+          label: `${att.name || 'Attraction'} ★ ${att.rating ?? 4.0}`, iconHtml: PIN_SVGS.sights, color: '#7c3aed'
         });
       });
     }
@@ -197,7 +212,7 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 2) % 5) - 2) * 0.015,
             fromCoords[1] + (toCoords[1] - fromCoords[1]) * ratio + (((idx * 8) % 3) - 1) * 0.015
           ],
-          label: `${hotel.name || 'Hotel'} — ${hotelPrice}`, iconHtml: '🏨', color: '#db2777'
+          label: `${hotel.name || 'Hotel'} — ${hotelPrice}`, iconHtml: PIN_SVGS.hotel, color: '#db2777'
         });
       });
     }
@@ -207,13 +222,13 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
       roadDetails.emergencies?.hospitals?.filter(Boolean).forEach((hosp, idx) => {
         pins.push({
           position: [mapCenter[0] + (idx * 0.04 - 0.02), mapCenter[1] + (idx * 0.05 - 0.02)],
-          label: `${hosp} (Hospital)`, iconHtml: '🏥', color: '#dc2626'
+          label: `${hosp} (Hospital)`, iconHtml: PIN_SVGS.hospital, color: '#dc2626'
         });
       });
       roadDetails.emergencies?.police?.filter(Boolean).forEach((pol, idx) => {
         pins.push({
           position: [toCoords[0] - 0.1 + idx * 0.05, toCoords[1] - 0.08 + idx * 0.03],
-          label: `${pol} (Police)`, iconHtml: '👮', color: '#1e3a8a'
+          label: `${pol} (Police)`, iconHtml: PIN_SVGS.police, color: '#1e3a8a'
         });
       });
     }
@@ -342,28 +357,31 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
             </h4>
             <div className="flex flex-wrap gap-1.5">
               {[
-                { id: 'all',          label: 'All',          icon: '📍' },
-                { id: 'fuel',         label: 'Petrol',       icon: '⛽' },
-                { id: 'ev',           label: 'EV Charge',    icon: '⚡' },
-                { id: 'restaurants',  label: 'Food',         icon: '🍽️' },
-                { id: 'attractions',  label: 'Sights',       icon: '🎡' },
-                { id: 'hotels',       label: 'Stays',        icon: '🏨' },
-                { id: 'emergencies',  label: 'Emergency',    icon: '🏥' }
-              ].map((layer) => (
-                <button
-                  key={layer.id}
-                  type="button"
-                  onClick={() => setSelectedLayer(layer.id)}
-                  className={`min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer select-none ${
-                    selectedLayer === layer.id
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                  }`}
-                >
-                  <span className="mr-1">{layer.icon}</span>
-                  {layer.label}
-                </button>
-              ))}
+                { id: 'all',          label: 'All',          icon: MapPin },
+                { id: 'fuel',         label: 'Petrol',       icon: Fuel },
+                { id: 'ev',           label: 'EV Charge',    icon: Zap },
+                { id: 'restaurants',  label: 'Food',         icon: Utensils },
+                { id: 'attractions',  label: 'Sights',       icon: Camera },
+                { id: 'hotels',       label: 'Stays',        icon: Hotel },
+                { id: 'emergencies',  label: 'Emergency',    icon: ShieldAlert }
+              ].map((layer) => {
+                const LayerIcon = layer.icon;
+                return (
+                  <button
+                    key={layer.id}
+                    type="button"
+                    onClick={() => setSelectedLayer(layer.id)}
+                    className={`min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer select-none inline-flex items-center gap-1.5 ${
+                      selectedLayer === layer.id
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                    }`}
+                  >
+                    <LayerIcon className="w-3.5 h-3.5" />
+                    <span>{layer.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -450,7 +468,8 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
         {roadDetails.restaurants?.length > 0 && (
           <div className="space-y-3">
             <h4 className="font-semibold text-sm text-slate-900 flex items-center gap-2">
-              <span>🍽️</span> Recommended Dining Along Route
+              <Utensils className="w-4 h-4 text-orange-600 shrink-0" />
+              <span>Recommended Dining Along Route</span>
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
               {(roadDetails.restaurants || []).filter(r => r && typeof r === 'object').map((rest, idx) => (
@@ -487,7 +506,8 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
         {roadDetails.attractions?.length > 0 && (
           <div className="space-y-3">
             <h4 className="font-semibold text-sm text-slate-900 flex items-center gap-2">
-              <span>🎡</span> Sightseeing &amp; Attractions Along Route
+              <Camera className="w-4 h-4 text-purple-600 shrink-0" />
+              <span>Sightseeing &amp; Attractions Along Route</span>
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {(roadDetails.attractions || []).filter(a => a && typeof a === 'object').map((att, idx) => (
@@ -527,7 +547,8 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
         {roadDetails.hotels?.length > 0 && (
           <div className="space-y-3">
             <h4 className="font-semibold text-sm text-slate-900 flex items-center gap-2">
-              <span>🏨</span> Hotels &amp; Accommodations
+              <Hotel className="w-4 h-4 text-pink-600 shrink-0" />
+              <span>Hotels &amp; Accommodations</span>
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {(roadDetails.hotels || []).filter(h => h && typeof h === 'object').map((hotel, idx) => {

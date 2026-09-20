@@ -3,7 +3,6 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Compass, Menu, User, LogOut, FolderHeart, Settings as SettingsIcon, ChevronDown } from 'lucide-react';
 import { Dropdown, DropdownItem, DropdownDivider } from '../ui/Dropdown';
 import { Button } from '../ui/Button';
-import { Badge } from '../ui/Badge';
 import { useAuth } from '../../context/AuthContext';
 
 export function AppHeader({ onToggleSidebar, onOpenSettings }) {
@@ -30,14 +29,14 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
     : (user?.email ? user.email.slice(0, 2).toUpperCase() : 'U');
 
   return (
-    <header className="sticky top-0 z-40 w-full h-[60px] bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between shadow-xs select-none">
+    <header className="sticky top-0 z-40 w-full h-[60px] bg-white border-b border-[#E7E5DF] px-4 sm:px-6 flex items-center justify-between shadow-[0_1px_2px_rgba(20,23,31,0.04)] select-none">
       
       {/* Left: Brand & Mobile Toggle */}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onToggleSidebar}
-          className="md:hidden p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="md:hidden p-2 text-[#737885] hover:text-[#14171F] hover:bg-[#FAFAF8] rounded-lg transition-colors duration-120 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2453FF]"
           aria-label="Toggle Navigation Menu"
         >
           <Menu className="w-5 h-5" />
@@ -45,28 +44,25 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
 
         <Link
           to="/"
-          className="flex items-center gap-2.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg"
+          className="flex items-center gap-2.5 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2453FF] rounded-lg"
           aria-label="Roamly Home"
         >
-          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs transition-transform group-hover:scale-105">
+          <div className="w-8 h-8 rounded-lg bg-[#2453FF] text-white flex items-center justify-center shadow-xs transition-transform duration-150 group-hover:scale-105">
             <Compass className="w-4.5 h-4.5" />
           </div>
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-lg tracking-tight text-slate-900">
+            <span className="font-display font-bold text-lg tracking-tight text-[#14171F]">
               Roamly
             </span>
-            <Badge variant="primary" size="sm" className="hidden sm:inline-flex text-[10px]">
-              SaaS
-            </Badge>
           </div>
         </Link>
       </div>
 
       {/* Center: Current Route Context */}
-      <div className="hidden lg:flex items-center gap-2 text-xs font-medium text-slate-500">
+      <div className="hidden lg:flex items-center gap-2 text-xs font-medium text-[#737885]">
         <span>Workspace</span>
         <span>/</span>
-        <span className="text-slate-800 font-semibold">{getPageTitle()}</span>
+        <span className="text-[#14171F] font-semibold">{getPageTitle()}</span>
       </div>
 
       {/* Right: Actions & Profile */}
@@ -77,7 +73,7 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
           onClick={onOpenSettings}
           title="Preferences & Settings"
           aria-label="Preferences and settings"
-          className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200/80 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="p-2 text-[#737885] hover:text-[#2453FF] hover:bg-[#FAFAF8] rounded-lg border border-[#E7E5DF] hover:border-[#2453FF]/30 transition-colors duration-120 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-[#2453FF]"
         >
           <SettingsIcon className="w-4 h-4" />
         </button>
@@ -89,23 +85,23 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
             trigger={
               <button
                 type="button"
-                className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-lg border border-[#E7E5DF] hover:border-[#2453FF]/40 hover:bg-[#FAFAF8] transition-all duration-120 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-[#2453FF]"
               >
-                <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full bg-[#2453FF] text-white text-[10px] font-bold flex items-center justify-center">
                   {userInitials}
                 </div>
-                <span className="text-xs font-medium text-slate-700 max-w-[120px] truncate hidden sm:inline">
+                <span className="text-xs font-medium text-[#14171F] max-w-[120px] truncate hidden sm:inline">
                   {user.name || user.email?.split('@')[0]}
                 </span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                <ChevronDown className="w-3.5 h-3.5 text-[#737885]" />
               </button>
             }
           >
-            <div className="px-3.5 py-2 border-b border-slate-100">
-              <p className="text-xs font-semibold text-slate-900 truncate">
+            <div className="px-3.5 py-2 border-b border-[#E7E5DF]">
+              <p className="text-xs font-semibold text-[#14171F] truncate">
                 {user.name || 'Account'}
               </p>
-              <p className="text-[11px] text-slate-500 truncate">
+              <p className="text-[11px] text-[#737885] truncate">
                 {user.email}
               </p>
             </div>
@@ -140,6 +136,7 @@ export function AppHeader({ onToggleSidebar, onOpenSettings }) {
             size="sm"
             onClick={openAuthModal}
             leftIcon={<User className="w-3.5 h-3.5" />}
+            className="bg-[#2453FF] hover:bg-[#1A3ECC] text-white rounded-lg shadow-xs"
           >
             Sign In
           </Button>

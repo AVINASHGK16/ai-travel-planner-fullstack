@@ -139,7 +139,7 @@ export function Modal({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className={`relative z-10 w-full bg-white rounded-2xl border border-slate-200/90 shadow-xl overflow-hidden animate-slide-up focus:outline-none ${
+        className={`relative z-10 w-full bg-white rounded-xl border border-[#E7E5DF] shadow-[0_4px_24px_rgba(20,23,31,0.08)] overflow-hidden animate-modal-scale focus:outline-none ${
           maxWidths[maxWidth] || maxWidths.md
         } ${className}`}
         role="dialog"

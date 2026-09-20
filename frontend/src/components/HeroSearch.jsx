@@ -1,6 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Search, MapPin, Calendar, Users, DollarSign, Navigation, Loader2, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Search, MapPin, Calendar, Users, IndianRupee, Navigation, AlertCircle } from 'lucide-react';
+import { Input } from './ui/Input';
+import { Select } from './ui/Select';
 import { Button } from './ui/Button';
+import { Slider } from './ui/Slider';
+
+const TRAVEL_MODE_OPTIONS = [
+  { value: 'any', label: 'Compare All Modes' },
+  { value: 'flight', label: 'Flights Only' },
+  { value: 'train', label: 'Trains Only' },
+  { value: 'bus', label: 'Buses Only' },
+  { value: 'cab', label: 'Cabs Only' },
+  { value: 'own', label: 'Own Vehicle (Road Trip)' }
+];
+
+const BUDGET_PRESETS = [
+  { label: '₹10,000', value: 10000 },
+  { label: '₹25,000', value: 25000 },
+  { label: '₹50,000', value: 50000 },
+  { label: '₹1,00,000', value: 100000 }
+];
 
 export default function HeroSearch({ onSearch, loading = false }) {
   const [from, setFrom] = useState('');
@@ -9,8 +28,11 @@ export default function HeroSearch({ onSearch, loading = false }) {
   const [returnDate, setReturnDate] = useState('');
   const [travelers, setTravelers] = useState(1);
   const [budget, setBudget] = useState(25000);
-  const [preferredMode, setPreferredMode] = useState('any'); // 'any' | 'flight' | 'train' | 'bus' | 'cab' | 'own'
-  const [validationError, setValidationError] = useState(null);
+  const [preferredMode, setPreferredMode] = useState('any');
+  
+  // Field-level errors to eliminate Cumulative Layout Shift (CLS)
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [generalError, setGeneralError] = useState(null);
   
   // Voice recognition states & ref
   const [listeningField, setListeningField] = useState(null); // 'from' | 'to' | null
@@ -28,7 +50,7 @@ export default function HeroSearch({ onSearch, loading = false }) {
   const handleVoiceSearch = (field) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setValidationError('Speech Recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
+      setGeneralError('Speech Recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.');
       return;
     }
 
@@ -68,11 +90,17 @@ export default function HeroSearch({ onSearch, loading = false }) {
       if (recognitionRef.current !== recognition) return;
       const speechToText = event.results[0][0].transcript;
       const cleanText = speechToText.replace(/\.$/g, '').trim();
-      if (field === 'from') setFrom(cleanText);
-      if (field === 'to') setTo(cleanText);
+      if (field === 'from') {
+        setFrom(cleanText);
+        setFieldErrors((prev) => ({ ...prev, from: null }));
+      }
+      if (field === 'to') {
+        setTo(cleanText);
+        setFieldErrors((prev) => ({ ...prev, to: null }));
+      }
       recognitionRef.current = null;
       setListeningField(null);
-      setValidationError(null);
+      setGeneralError(null);
     };
 
     recognition.onerror = (event) => {
@@ -81,11 +109,11 @@ export default function HeroSearch({ onSearch, loading = false }) {
       setListeningField(null);
       const errorType = event?.error;
       if (errorType === 'not-allowed') {
-        setValidationError('Microphone access was denied. Please allow microphone permissions in your browser.');
+        setGeneralError('Microphone access was denied. Please allow microphone permissions in your browser.');
       } else if (errorType === 'no-speech') {
-        setValidationError('No speech was detected. Please try speaking again.');
+        setGeneralError('No speech was detected. Please try speaking again.');
       } else {
-        setValidationError('Voice search was interrupted. Please try again or type manually.');
+        setGeneralError('Voice search was interrupted. Please try again or type manually.');
       }
     };
 
@@ -103,43 +131,55 @@ export default function HeroSearch({ onSearch, loading = false }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (loading) return;
-    if (!from.trim() || !to.trim() || !date) {
-      setValidationError('Please fill out Starting Location, Destination, and Departure Date.');
-      return;
+
+    const errors = {};
+    if (!from.trim()) {
+      errors.from = 'Starting location is required';
     }
-    if (from.trim().toLowerCase() === to.trim().toLowerCase()) {
-      setValidationError('Starting location and Destination must be different.');
-      return;
+    if (!to.trim()) {
+      errors.to = 'Destination is required';
+    } else if (from.trim() && from.trim().toLowerCase() === to.trim().toLowerCase()) {
+      errors.to = 'Destination must differ from starting location';
     }
-    if (date < todayLocalStr) {
-      setValidationError('Departure date cannot be in the past.');
-      return;
+
+    if (!date) {
+      errors.date = 'Departure date is required';
+    } else if (date < todayLocalStr) {
+      errors.date = 'Departure cannot be in the past';
     }
+
     if (returnDate && returnDate < date) {
-      setValidationError('Return date cannot be earlier than departure date.');
+      errors.returnDate = 'Return cannot be earlier than departure';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
-    setValidationError(null);
+
+    setFieldErrors({});
+    setGeneralError(null);
     const cleanTravelers = Math.min(50, Math.max(1, parseInt(travelers, 10) || 1));
     const cleanBudget = Math.max(100, Math.min(10000000, parseInt(budget, 10) || 25000));
-    onSearch({ from: from.trim(), to: to.trim(), date, returnDate: returnDate || null, travelers: cleanTravelers, budget: cleanBudget, preferredMode });
+    onSearch({ 
+      from: from.trim(), 
+      to: to.trim(), 
+      date, 
+      returnDate: returnDate || null, 
+      travelers: cleanTravelers, 
+      budget: cleanBudget, 
+      preferredMode 
+    });
   };
-
-  const budgetPresets = [
-    { label: '₹10,000', value: 10000 },
-    { label: '₹25,000', value: 25000 },
-    { label: '₹50,000', value: 50000 },
-    { label: '₹1,00,000', value: 100000 }
-  ];
 
   return (
     <div className="w-full">
       
       {/* Dynamic Title Hero */}
       <div className="text-center mb-8">
-        <h1 className="font-semibold text-3xl sm:text-5xl text-slate-900 tracking-tight leading-tight">
+        <h1 className="font-display font-bold text-3xl sm:text-5xl text-slate-900 tracking-tight leading-tight">
           Plan Your Next Journey with{' '}
-          <span className="text-blue-600 font-bold">
+          <span className="text-blue-600 font-extrabold">
             Intelligent AI
           </span>
         </h1>
@@ -154,49 +194,28 @@ export default function HeroSearch({ onSearch, loading = false }) {
         onSubmit={handleSubmit} 
         className="w-full bg-white rounded-2xl border border-slate-200/90 shadow-md p-6 sm:p-8 space-y-5 text-slate-800"
       >
-        {/* In-form Validation Alert */}
-        {validationError && (
-          <div
-            role="alert"
-            className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center justify-between gap-2 animate-fade-in"
-          >
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-              <span>{validationError}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setValidationError(null)}
-              className="text-xs text-red-600 hover:text-red-800 font-semibold px-2 py-0.5 rounded hover:bg-red-100/60 cursor-pointer"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
         {/* From & To inputs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
           {/* Starting Location */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-              Starting Location
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-3 text-blue-600">
-                <MapPin className="w-4.5 h-4.5" />
-              </span>
-              <input
-                type="text"
-                required
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                placeholder="e.g. Bengaluru, IN"
-                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-sm text-slate-900 placeholder:text-slate-400 transition-all"
-              />
+          <Input
+            id="hero-search-from"
+            label="Starting Location"
+            required
+            placeholder="e.g. Bengaluru, IN"
+            value={from}
+            onChange={(e) => {
+              setFrom(e.target.value);
+              if (fieldErrors.from) {
+                setFieldErrors((prev) => ({ ...prev, from: null }));
+              }
+            }}
+            leftIcon={<MapPin className="w-4 h-4 text-blue-600" />}
+            rightIcon={
               <button
                 type="button"
                 disabled={loading}
                 onClick={() => handleVoiceSearch('from')}
-                className={`absolute right-3 top-2.5 p-1 rounded-lg transition-colors ${
+                className={`p-1 rounded-lg transition-colors cursor-pointer ${
                   loading ? 'opacity-50 cursor-not-allowed text-slate-400' :
                   listeningField === 'from' 
                     ? 'bg-red-50 text-red-600 animate-pulse' 
@@ -207,31 +226,30 @@ export default function HeroSearch({ onSearch, loading = false }) {
               >
                 {listeningField === 'from' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
-            </div>
-          </div>
+            }
+            error={fieldErrors.from}
+          />
 
           {/* Destination */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-              Destination
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-3 text-indigo-600">
-                <Navigation className="w-4.5 h-4.5" />
-              </span>
-              <input
-                type="text"
-                required
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                placeholder="e.g. Hyderabad, IN"
-                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-sm text-slate-900 placeholder:text-slate-400 transition-all"
-              />
+          <Input
+            id="hero-search-to"
+            label="Destination"
+            required
+            placeholder="e.g. Hyderabad, IN"
+            value={to}
+            onChange={(e) => {
+              setTo(e.target.value);
+              if (fieldErrors.to) {
+                setFieldErrors((prev) => ({ ...prev, to: null }));
+              }
+            }}
+            leftIcon={<Navigation className="w-4 h-4 text-indigo-600" />}
+            rightIcon={
               <button
                 type="button"
                 disabled={loading}
                 onClick={() => handleVoiceSearch('to')}
-                className={`absolute right-3 top-2.5 p-1 rounded-lg transition-colors ${
+                className={`p-1 rounded-lg transition-colors cursor-pointer ${
                   loading ? 'opacity-50 cursor-not-allowed text-slate-400' :
                   listeningField === 'to' 
                     ? 'bg-red-50 text-red-600 animate-pulse' 
@@ -242,138 +260,121 @@ export default function HeroSearch({ onSearch, loading = false }) {
               >
                 {listeningField === 'to' ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               </button>
-            </div>
-          </div>
+            }
+            error={fieldErrors.to}
+          />
         </div>
 
         {/* Dates, Travelers, Preferred Mode */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-start">
           
           {/* Departure Date */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-              Departure Date
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-3 text-slate-400">
-                <Calendar className="w-4 h-4" />
-              </span>
-              <input
-                type="date"
-                required
-                min={todayLocalStr}
-                value={date}
-                onChange={(e) => {
-                  const newDate = e.target.value;
-                  setDate(newDate);
-                  if (returnDate && newDate > returnDate) {
-                    setReturnDate('');
-                  }
-                }}
-                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 transition-all"
-              />
-            </div>
-          </div>
+          <Input
+            id="hero-search-date"
+            label="Departure Date"
+            type="date"
+            required
+            min={todayLocalStr}
+            value={date}
+            onChange={(e) => {
+              const newDate = e.target.value;
+              setDate(newDate);
+              if (returnDate && newDate > returnDate) {
+                setReturnDate('');
+              }
+              if (fieldErrors.date) {
+                setFieldErrors((prev) => ({ ...prev, date: null }));
+              }
+            }}
+            leftIcon={<Calendar className="w-4 h-4 text-slate-400" />}
+            error={fieldErrors.date}
+          />
 
           {/* Return Date (Optional) */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-              Return Date (Optional)
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-3 text-slate-400">
-                <Calendar className="w-4 h-4" />
-              </span>
-              <input
-                type="date"
-                min={date || todayLocalStr}
-                value={returnDate}
-                onChange={(e) => setReturnDate(e.target.value)}
-                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 transition-all"
-              />
-            </div>
-          </div>
+          <Input
+            id="hero-search-return-date"
+            label="Return Date (Optional)"
+            type="date"
+            min={date || todayLocalStr}
+            value={returnDate}
+            onChange={(e) => {
+              setReturnDate(e.target.value);
+              if (fieldErrors.returnDate) {
+                setFieldErrors((prev) => ({ ...prev, returnDate: null }));
+              }
+            }}
+            leftIcon={<Calendar className="w-4 h-4 text-slate-400" />}
+            error={fieldErrors.returnDate}
+          />
 
           {/* Number of Travelers */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-              Travelers
-            </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-3 text-slate-400">
-                <Users className="w-4 h-4" />
-              </span>
-              <input
-                type="number"
-                min="1"
-                max="50"
-                value={travelers}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value, 10);
-                  if (Number.isNaN(val)) setTravelers('');
-                  else setTravelers(Math.min(50, Math.max(1, val)));
-                }}
-                onBlur={() => {
-                  if (!travelers || travelers < 1) setTravelers(1);
-                  else if (travelers > 50) setTravelers(50);
-                }}
-                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 transition-all"
-              />
-            </div>
-          </div>
+          <Input
+            id="hero-search-travelers"
+            label="Travelers"
+            type="number"
+            min="1"
+            max="50"
+            value={travelers}
+            onChange={(e) => {
+              const val = parseInt(e.target.value, 10);
+              if (Number.isNaN(val)) setTravelers('');
+              else setTravelers(Math.min(50, Math.max(1, val)));
+              if (fieldErrors.travelers) {
+                setFieldErrors((prev) => ({ ...prev, travelers: null }));
+              }
+            }}
+            onBlur={() => {
+              if (!travelers || travelers < 1) setTravelers(1);
+              else if (travelers > 50) setTravelers(50);
+            }}
+            leftIcon={<Users className="w-4 h-4 text-slate-400" />}
+            error={fieldErrors.travelers}
+          />
 
           {/* Preferred Mode Selection */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-              Travel Mode
-            </label>
-            <select
-              value={preferredMode}
-              onChange={(e) => setPreferredMode(e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:bg-white focus:border-blue-600 focus:ring-2 focus:ring-blue-100 text-xs text-slate-900 transition-all cursor-pointer"
-            >
-              <option value="any">Compare All Modes</option>
-              <option value="flight">Flights Only</option>
-              <option value="train">Trains Only</option>
-              <option value="bus">Buses Only</option>
-              <option value="cab">Cabs Only</option>
-              <option value="own">Own Vehicle (Road Trip)</option>
-            </select>
-          </div>
+          <Select
+            id="hero-search-mode"
+            label="Travel Mode"
+            value={preferredMode}
+            onChange={(e) => setPreferredMode(e.target.value)}
+            options={TRAVEL_MODE_OPTIONS}
+          />
         </div>
 
         {/* Budget Slider */}
-        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+        <div className="p-4 bg-[#FAFAF8] border border-[#E7E5DF] rounded-xl space-y-3">
           <div className="flex justify-between items-center">
-            <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <DollarSign className="w-4 h-4 text-emerald-600" />
+            <label className="text-xs font-semibold text-[#14171F] flex items-center gap-1.5">
+              <IndianRupee className="w-4 h-4 text-[#1E9E6B]" />
               Estimated Budget
             </label>
-            <span className="text-xs font-bold text-emerald-700 font-mono bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
+            <span className="text-xs font-bold text-[#14171F] font-mono tabular-nums bg-white border border-[#E7E5DF] px-2.5 py-1 rounded-lg">
               ₹{Number(budget || 0).toLocaleString()}
             </span>
           </div>
-          <input
-            type="range"
-            min="5000"
-            max="150000"
-            step="2500"
-            value={budget}
-            onChange={(e) => setBudget(parseInt(e.target.value, 10) || 5000)}
-            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+          <Slider
+            id="hero-budget-slider"
+            min={5000}
+            max={150000}
+            step={2500}
+            value={typeof budget === 'number' ? budget : 25000}
+            onChange={(val) => setBudget(val || 5000)}
+            formatValue={(val) => `₹${Number(val || 0).toLocaleString()}`}
+            showValue={false}
+            showMinMax={true}
           />
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/70">
-            <span className="text-[11px] text-slate-500 font-medium">Quick Presets:</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#E7E5DF]">
+            <span className="text-[11px] text-[#737885] font-medium">Quick Presets:</span>
             <div className="flex flex-wrap items-center gap-1.5">
-              {budgetPresets.map((preset) => (
+              {BUDGET_PRESETS.map((preset) => (
                 <button
                   key={preset.value}
                   type="button"
                   onClick={() => setBudget(preset.value)}
-                  className={`text-xs font-mono px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                  className={`text-xs font-mono px-2.5 py-1 rounded-md transition-colors duration-150 cursor-pointer ${
                     budget === preset.value
-                      ? 'bg-blue-600 text-white font-bold shadow-xs'
-                      : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+                      ? 'bg-[#2453FF] text-white font-bold shadow-xs'
+                      : 'bg-white text-[#3E434D] hover:text-[#14171F] hover:bg-[#FAFAF8] border border-[#E7E5DF]'
                   }`}
                 >
                   {preset.label}
@@ -383,17 +384,38 @@ export default function HeroSearch({ onSearch, loading = false }) {
           </div>
         </div>
 
-        {/* Action Button */}
-        <div className="flex justify-center pt-2">
+        {/* Action Button & Reserved Status Slot */}
+        <div className="flex flex-col items-center pt-2 space-y-3">
+          {/* Reserved Status Feedback Slot to Eliminate Cumulative Layout Shift */}
+          <div className="min-h-[26px] flex items-center justify-center">
+            {generalError && (
+              <div
+                role="alert"
+                className="text-xs text-red-600 bg-red-50 border border-red-200 px-3.5 py-1.5 rounded-lg flex items-center gap-2 animate-fade-in"
+              >
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{generalError}</span>
+                <button
+                  type="button"
+                  onClick={() => setGeneralError(null)}
+                  className="text-red-500 hover:text-red-700 ml-1.5 text-xs font-semibold cursor-pointer"
+                  aria-label="Dismiss error"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+          </div>
+
           <Button
             type="submit"
             size="lg"
             variant="primary"
             isLoading={loading}
             leftIcon={!loading && <Search className="w-4 h-4" />}
-            className="w-full md:w-auto px-8 py-3 text-sm font-semibold rounded-xl shadow-xs"
+            className="w-full md:w-auto px-8 py-3 text-sm font-bold rounded-lg shadow-xs bg-[#2453FF] hover:bg-[#1A3ECC] text-white cursor-pointer"
           >
-            {loading ? 'Planning Trip...' : 'Plan Trip →'}
+            {loading ? 'Planning trip...' : 'Plan trip'}
           </Button>
         </div>
 

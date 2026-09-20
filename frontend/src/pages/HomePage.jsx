@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import HeroSearch from '../components/HeroSearch';
-import { QuickStartSuggestions } from '../components/planner';
+import { Plane, MapPin, Wallet, Fuel, CloudSun } from 'lucide-react';
+import { QuickStartSuggestions, PlannerHeader, TripConfigurationCard } from '../components/planner';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -10,9 +10,21 @@ export default function HomePage() {
     navigate('/plan', { state: { searchParams: params } });
   };
 
+  const handleApplyAIPrompt = (prompt) => {
+    navigate('/plan', { state: { aiPrompt: prompt } });
+  };
+
   const handleSelectSuggestion = (params) => {
     navigate('/plan', { state: { searchParams: params } });
   };
+
+  const featureBadges = [
+    { icon: Plane, label: 'AI Itineraries', color: 'text-blue-600' },
+    { icon: MapPin, label: 'Live Route Maps', color: 'text-indigo-600' },
+    { icon: Wallet, label: 'Budget Optimizer', color: 'text-emerald-600' },
+    { icon: Fuel, label: 'Road Trip Guide', color: 'text-amber-600' },
+    { icon: CloudSun, label: 'Weather Alerts', color: 'text-sky-600' },
+  ];
 
   return (
     <div className="relative min-h-[calc(100vh-60px)] flex flex-col items-center justify-start overflow-hidden py-10 px-4">
@@ -31,25 +43,34 @@ export default function HomePage() {
         }}
       />
 
-      {/* Feature badges */}
+      {/* Feature badges (Quick-link wayfinding pills) */}
       <div className="relative z-10 flex items-center gap-2.5 mb-6 flex-wrap justify-center max-w-2xl">
-        {[
-          { icon: '✈️', label: 'AI Itineraries' },
-          { icon: '🗺️', label: 'Live Route Maps' },
-          { icon: '💰', label: 'Budget Optimizer' },
-          { icon: '⛽', label: 'Road Trip Guide' },
-          { icon: '🌤️', label: 'Weather Alerts' },
-        ].map((badge, i) => (
-          <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 border border-slate-200 shadow-xs text-xs font-medium text-slate-700">
-            <span>{badge.icon}</span>
-            <span>{badge.label}</span>
-          </div>
-        ))}
+        {featureBadges.map((badge, i) => {
+          const IconComp = badge.icon;
+          return (
+            <div
+              key={i}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white border border-[#E7E5DF] shadow-[0_1px_2px_rgba(20,23,31,0.04)] text-xs font-medium text-[#3E434D] hover:border-[#2453FF]/40 hover:-translate-y-[1px] hover:text-[#14171F] transition-all duration-150 select-none cursor-default"
+            >
+              <IconComp className={`w-3.5 h-3.5 ${badge.color}`} />
+              <span>{badge.label}</span>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Main search form */}
-      <div className="relative z-10 w-full max-w-4xl">
-        <HeroSearch onSearch={handleSearch} loading={false} />
+      {/* Hero Heading */}
+      <div className="relative z-10 w-full max-w-[1180px] mb-8">
+        <PlannerHeader />
+      </div>
+
+      {/* Main search form matching reference design */}
+      <div className="relative z-10 w-full max-w-[1180px]">
+        <TripConfigurationCard 
+          onSearch={handleSearch} 
+          onApplyPrompt={handleApplyAIPrompt}
+          loading={false} 
+        />
       </div>
 
       {/* Destination Inspiration */}

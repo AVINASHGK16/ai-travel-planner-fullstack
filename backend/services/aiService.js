@@ -2,6 +2,14 @@ import { geocodeLocation } from './geoService.js';
 
 const sanitize = (str, maxLen = 500) => (typeof str === 'string' ? str.trim().slice(0, maxLen) : '');
 
+const CANDIDATE_MODELS = [
+  process.env.GEMINI_MODEL,
+  'gemini-flash-latest',
+  'gemini-flash-lite-latest',
+  'gemini-2.5-flash',
+  'gemini-1.5-flash'
+].filter(Boolean);
+
 export const generateTrip = async ({ from, to, date, returnDate, travelers, budget, preferredMode }, user = null) => {
   const keyToUse = process.env.GEMINI_API_KEY;
 
@@ -88,44 +96,70 @@ export const generateTrip = async ({ from, to, date, returnDate, travelers, budg
   `;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${keyToUse}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      }),
-      signal: AbortSignal.timeout(18000)
-    });
+    let lastError = null;
+    let responseData = null;
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        const err = new Error('Gemini AI quota or rate limit exceeded. Please try again later.');
-        err.statusCode = 429;
-        err.code = 'AI_QUOTA_EXCEEDED';
-        throw err;
+    for (const model of CANDIDATE_MODELS) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: { responseMimeType: 'application/json' }
+          }),
+          signal: AbortSignal.timeout(18000)
+        });
+
+        if (!response.ok) {
+          if (response.status === 429) {
+            const err = new Error('Gemini AI quota or rate limit exceeded. Please try again later.');
+            err.statusCode = 429;
+            err.code = 'AI_QUOTA_EXCEEDED';
+            throw err;
+          }
+          if (response.status === 404 || response.status === 503 || response.status === 500) {
+            console.warn(`Gemini model ${model} returned ${response.status}, attempting fallback model...`);
+            lastError = new Error(`Gemini AI service error (${response.status}) on model ${model}.`);
+            lastError.statusCode = response.status === 404 ? 502 : 503;
+            lastError.code = response.status === 404 ? 'AI_MODEL_NOT_FOUND' : 'AI_OVERLOADED';
+            continue;
+          }
+          if (response.status === 400 || response.status === 403) {
+            const err = new Error('Gemini AI service configuration or authentication error on server.');
+            err.statusCode = 503;
+            err.code = 'AI_UNCONFIGURED';
+            throw err;
+          }
+          const err = new Error(`Gemini AI returned error status ${response.status}.`);
+          err.statusCode = 502;
+          err.code = 'AI_UPSTREAM_ERROR';
+          throw err;
+        }
+
+        responseData = await response.json();
+        break;
+      } catch (err) {
+        if (err.code === 'AI_QUOTA_EXCEEDED' || err.code === 'AI_UNCONFIGURED') {
+          throw err;
+        }
+        lastError = err;
+        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+          break;
+        }
       }
-      if (response.status === 503 || response.status === 500) {
-        const err = new Error('Gemini AI service is temporarily overloaded. Please try again later.');
-        err.statusCode = 503;
-        err.code = 'AI_OVERLOADED';
-        throw err;
-      }
-      if (response.status === 400 || response.status === 403) {
-        const err = new Error('Gemini AI service configuration or authentication error on server.');
-        err.statusCode = 503;
-        err.code = 'AI_UNCONFIGURED';
-        throw err;
-      }
-      const err = new Error(`Gemini AI returned error status ${response.status}.`);
+    }
+
+    if (!responseData) {
+      if (lastError) throw lastError;
+      const err = new Error('Gemini AI generation failed across all available models.');
       err.statusCode = 502;
       err.code = 'AI_UPSTREAM_ERROR';
       throw err;
     }
 
-    const data = await response.json();
-    const candidate = data?.candidates?.[0];
+    const candidate = responseData?.candidates?.[0];
     const finishReason = candidate?.finishReason;
 
     // Check for safety block or non-standard termination
@@ -188,7 +222,8 @@ export const generateTrip = async ({ from, to, date, returnDate, travelers, budg
 
     return {
       ...parsed,
-      isAIGenerated: true
+      isAIGenerated: true,
+      source: 'ai'
     };
   } catch (error) {
     if (error.name === 'TimeoutError' || error.name === 'AbortError') {
@@ -248,26 +283,49 @@ Answer the user's question accurately, offering safety tips, restaurant choices,
   });
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${keyToUse}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents }),
-      signal: AbortSignal.timeout(10000)
-    });
+    let lastError = null;
+    let responseData = null;
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        const err = new Error('AI chat quota or rate limit exceeded.');
-        err.statusCode = 429;
-        err.code = 'AI_QUOTA_EXCEEDED';
-        throw err;
+    for (const model of CANDIDATE_MODELS) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents }),
+          signal: AbortSignal.timeout(10000)
+        });
+
+        if (!response.ok) {
+          if (response.status === 429) {
+            const err = new Error('AI chat quota or rate limit exceeded.');
+            err.statusCode = 429;
+            err.code = 'AI_QUOTA_EXCEEDED';
+            throw err;
+          }
+          if (response.status === 404 || response.status === 503 || response.status === 500) {
+            console.warn(`Gemini chat model ${model} returned ${response.status}, attempting fallback model...`);
+            lastError = new Error(`Gemini API error: ${response.status}`);
+            continue;
+          }
+          throw new Error(`Gemini API error: ${response.status}`);
+        }
+
+        responseData = await response.json();
+        break;
+      } catch (err) {
+        if (err.code === 'AI_QUOTA_EXCEEDED') throw err;
+        lastError = err;
+        if (err.name === 'TimeoutError' || err.name === 'AbortError') break;
       }
-      throw new Error(`Gemini API error: ${response.status}`);
     }
 
-    const data = await response.json();
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseData) {
+      if (lastError) throw lastError;
+      throw new Error('Gemini AI chat service unavailable.');
+    }
+
+    const reply = responseData?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     return { reply: reply || "I'm sorry, I couldn't process that. Can you try again?" };
   } catch (error) {
