@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { Trip } from '../models/Trip.js';
-import { isMongoConnected, loadLocalTrips, saveLocalTrips } from '../models/db.js';
+import { isMongoConnected, assertDatabaseAvailable, loadLocalTrips, saveLocalTrips } from '../models/db.js';
 import { geocodeLocation, isValidCoordinate } from './geoService.js';
 
 /**
@@ -73,6 +73,7 @@ export const createTrip = async (tripData, userEmail) => {
     await savedTrip.save();
     return normalizeTrip(savedTrip);
   } else {
+    assertDatabaseAvailable();
     const trips = loadLocalTrips();
     const newTrip = { ...data, _id: Date.now().toString(), createdAt: new Date().toISOString() };
     trips.unshift(newTrip);
@@ -92,6 +93,7 @@ export const getUserTrips = async (userEmail) => {
     const trips = await Trip.find({ userEmail }).sort({ createdAt: -1 });
     return trips.map(normalizeTrip);
   } else {
+    assertDatabaseAvailable();
     const trips = loadLocalTrips();
     const filtered = trips.filter(t => t.userEmail === userEmail);
     filtered.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -122,6 +124,7 @@ export const getTrip = async (tripId, userEmail) => {
     }
     return normalizeTrip(trip);
   } else {
+    assertDatabaseAvailable();
     const trips = loadLocalTrips();
     const trip = trips.find(t => (t._id === tripId || t.id === tripId));
     if (!trip) {
@@ -162,6 +165,7 @@ export const deleteTrip = async (tripId, userEmail) => {
     await Trip.findByIdAndDelete(tripId);
     return { message: 'Trip successfully deleted.' };
   } else {
+    assertDatabaseAvailable();
     const trips = loadLocalTrips();
     const tripIndex = trips.findIndex(t => t._id === tripId || t.id === tripId);
     if (tripIndex === -1) {

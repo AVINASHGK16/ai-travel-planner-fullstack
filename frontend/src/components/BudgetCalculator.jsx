@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PiggyBank, Sparkles, TrendingDown, ArrowRight, Lightbulb, Plane, Train, Bus, Car, Navigation } from 'lucide-react';
+import { usePreferences } from '../context/PreferencesContext';
 
 const MODE_LABELS = {
   flight: { label: 'Flight', icon: Plane, ticketLabel: 'Flight Airfare' },
@@ -10,6 +11,7 @@ const MODE_LABELS = {
 };
 
 export default function BudgetCalculator({ budgetDetails, travelers, activeMode = 'flight', onOptimize }) {
+  const { currency: activeCurrency, convertAndFormat } = usePreferences();
   const [optimized, setOptimized] = useState(false);
 
   if (!budgetDetails) return null;
@@ -130,7 +132,7 @@ export default function BudgetCalculator({ budgetDetails, travelers, activeMode 
               <div key={idx} className="space-y-1">
                 <div className="flex justify-between text-xs font-medium">
                   <span className="text-slate-700">{item.label}</span>
-                  <span className="font-mono font-bold text-slate-900">₹{item.value.toLocaleString()}</span>
+                  <span className="font-mono font-bold text-slate-900">{convertAndFormat(item.value, 'INR')}</span>
                 </div>
                 <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div 
@@ -150,10 +152,12 @@ export default function BudgetCalculator({ budgetDetails, travelers, activeMode 
           <div className="text-center py-2">
             <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold block">Total Estimated Cost</span>
             <span className="text-3xl font-extrabold text-slate-900 font-mono block my-1">
-              ₹{(Number(activeDetails.total) || 0).toLocaleString()}
+              {convertAndFormat(Number(activeDetails.total) || 0, 'INR')}
             </span>
             <span className="text-[10px] text-slate-500 font-mono">
-              ~ USD ${Math.round((Number(activeDetails.total) || 0) / 80)} total
+              {activeCurrency !== 'USD' 
+                ? `~ ${convertAndFormat(Number(activeDetails.total) || 0, 'INR', 'USD')}`
+                : `~ ${convertAndFormat(Number(activeDetails.total) || 0, 'INR', 'INR')}`}
             </span>
           </div>
 
@@ -171,7 +175,7 @@ export default function BudgetCalculator({ budgetDetails, travelers, activeMode 
                 </p>
                 <div className="text-xs text-emerald-700 font-semibold flex items-center gap-1 mt-1 font-mono">
                   <TrendingDown className="w-3.5 h-3.5" />
-                  Saved ₹{(Number(savings) || 0).toLocaleString()}!
+                  Saved {convertAndFormat(Number(savings) || 0, 'INR')}!
                 </div>
               </div>
             ) : (

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { jsPDF } from 'jspdf';
 import { Download, Share2, Trash2, Calendar, Users, Compass, ArrowRight, Loader2, Plus, Check } from 'lucide-react';
 import { Button, Badge, Modal } from './ui';
+import { usePreferences } from '../context/PreferencesContext';
 
 export default function Dashboard({
   savedTrips = [],
@@ -11,6 +12,7 @@ export default function Dashboard({
   deletingTripId = null,
   loadingTrips = false
 }) {
+  const { currency: activeCurrency, convertAndFormat } = usePreferences();
   const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'past' | 'saved'
   const [copiedTripId, setCopiedTripId] = useState(null);
   const [shareErrorTripId, setShareErrorTripId] = useState(null);
@@ -110,7 +112,7 @@ export default function Dashboard({
       doc.text(`Travel Dates: ${dateDisplay}`, 20, 86);
       doc.text(`No. of Travelers: ${trip?.travelers || 1}`, 20, 93);
       doc.text(`Approx. Distance: ${trip?.distance || 'N/A'} km`, 20, 100);
-      doc.text(`Budget Tier Level: INR ${Number(trip?.budget || 0).toLocaleString()}`, 20, 107);
+      doc.text(`Budget Tier Level: ${convertAndFormat(Number(trip?.budget || 0), trip?.currency || 'INR')}`, 20, 107);
 
       // Cost Breakdown Section
       doc.line(20, 114, 190, 114);
@@ -122,17 +124,17 @@ export default function Dashboard({
       doc.setFontSize(11);
       const budget = trip?.budgetDetails;
       if (budget) {
-        doc.text(`- Transportation Tickets: INR ${Number(budget.tickets || 0).toLocaleString()}`, 25, 134);
-        doc.text(`- Road Fuel / Energy Charges: INR ${Number(budget.fuel || 0).toLocaleString()}`, 25, 141);
-        doc.text(`- Hotel / Lodging Stays: INR ${Number(budget.hotel || 0).toLocaleString()}`, 25, 148);
-        doc.text(`- Fooding & Daily Meals: INR ${Number(budget.food || 0).toLocaleString()}`, 25, 155);
-        doc.text(`- Highway Tolls / Passes: INR ${Number(budget.toll || 0).toLocaleString()}`, 25, 162);
-        doc.text(`- Miscellaneous Buffers: INR ${Number(budget.misc || 0).toLocaleString()}`, 25, 169);
+        doc.text(`- Transportation Tickets: ${convertAndFormat(Number(budget.tickets || 0), trip?.currency || 'INR')}`, 25, 134);
+        doc.text(`- Road Fuel / Energy Charges: ${convertAndFormat(Number(budget.fuel || 0), trip?.currency || 'INR')}`, 25, 141);
+        doc.text(`- Hotel / Lodging Stays: ${convertAndFormat(Number(budget.hotel || 0), trip?.currency || 'INR')}`, 25, 148);
+        doc.text(`- Fooding & Daily Meals: ${convertAndFormat(Number(budget.food || 0), trip?.currency || 'INR')}`, 25, 155);
+        doc.text(`- Highway Tolls / Passes: ${convertAndFormat(Number(budget.toll || 0), trip?.currency || 'INR')}`, 25, 162);
+        doc.text(`- Miscellaneous Buffers: ${convertAndFormat(Number(budget.misc || 0), trip?.currency || 'INR')}`, 25, 169);
 
         doc.setFont('Helvetica', 'bold');
-        doc.text(`TOTAL ESTIMATED BUDGET: INR ${Number(budget.total || 0).toLocaleString()}`, 20, 180);
+        doc.text(`TOTAL ESTIMATED BUDGET: ${convertAndFormat(Number(budget.total || 0), trip?.currency || 'INR')}`, 20, 180);
       } else {
-        doc.text(`- Total Allocated Budget Cap: INR ${Number(trip?.budget || 0).toLocaleString()}`, 25, 134);
+        doc.text(`- Total Allocated Budget Cap: ${convertAndFormat(Number(trip?.budget || 0), trip?.currency || 'INR')}`, 25, 134);
       }
 
       // Add a page for the detailed Itinerary
@@ -368,7 +370,7 @@ export default function Dashboard({
                       {isUpcoming ? 'Upcoming' : 'Completed'}
                     </Badge>
                     <span className="text-xs font-semibold text-[#737885] font-mono tabular-nums">
-                      Est. ₹{safeTotalStr}
+                      Est. {convertAndFormat(totalCost, trip.currency || 'INR')}
                     </span>
                   </div>
 

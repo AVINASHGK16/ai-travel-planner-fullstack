@@ -1,7 +1,9 @@
 import React from 'react';
 import { DollarSign, Zap, Armchair, BadgePercent, Leaf, ArrowRight } from 'lucide-react';
+import { usePreferences } from '../context/PreferencesContext';
 
 export default function SmartSuggestions({ suggestions, onSelectMode, isAIGenerated = false }) {
+  const { convertAndFormat } = usePreferences();
   if (!suggestions || typeof suggestions !== 'object') return null;
 
   const cardConfig = {
@@ -63,9 +65,9 @@ export default function SmartSuggestions({ suggestions, onSelectMode, isAIGenera
           .map(([key, item]) => {
             const config = cardConfig[key] || cardConfig.value;
             const IconComponent = config.icon;
-            const priceText = typeof item.price === 'number' && !Number.isNaN(item.price)
-              ? `₹${item.price.toLocaleString()}`
-              : (item.price ? (String(item.price).startsWith('₹') ? item.price : `₹${item.price}`) : 'N/A');
+            const priceText = item.price !== undefined && item.price !== null
+              ? convertAndFormat(item.price, item.currency || 'INR')
+              : 'N/A';
 
             return (
               <div

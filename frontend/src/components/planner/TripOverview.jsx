@@ -38,6 +38,7 @@ import {
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { jsPDF } from 'jspdf';
+import { usePreferences } from '../../context/PreferencesContext';
 import { Card, Button, Skeleton, Modal, Dropdown, Input, Select } from '../ui';
 import { isValidCoord, sanitizeCoord, MapErrorBoundary } from '../RoadTripDetails';
 
@@ -122,16 +123,6 @@ function getDayDate(startDateStr, dayNumber) {
 }
 
 /**
- * Shared cost formatter: returns '—' for undefined/null/invalid, preserves ₹0 for legitimate 0
- */
-function formatCost(val) {
-  if (typeof val === 'number' && !isNaN(val)) {
-    return `₹${val.toLocaleString()}`;
-  }
-  return '—';
-}
-
-/**
  * Extract valid coordinates from an activity object or null
  */
 function getActivityCoordinates(act) {
@@ -175,6 +166,15 @@ export default function TripOverview({
   error = null,
   onChangeItinerary
 }) {
+  const { currency: activeCurrency, currencySymbol, convertAndFormat, convertCurrency } = usePreferences();
+  const sourceCurrency = trip?.currency || 'INR';
+
+  // Bound cost formatter using active currency preference
+  const formatCost = (val, source = sourceCurrency) => {
+    if (val === undefined || val === null || val === '') return '—';
+    return convertAndFormat(val, source);
+  };
+
   const navigate = useNavigate();
   const [selectedDay, setSelectedDay] = useState(1);
   const [fullMapOpen, setFullMapOpen] = useState(false);
@@ -237,11 +237,15 @@ export default function TripOverview({
     setModalMode('edit');
     setEditingIndex(idx);
     setFormError('');
+    const rawCost = typeof act.cost === 'number' ? act.cost : (parseFloat(act.cost) || 0);
+    const initialCost = activeCurrency === sourceCurrency
+      ? rawCost
+      : (convertCurrency(rawCost, sourceCurrency, activeCurrency) ?? 0);
     setActivityForm({
       title: act.title || '',
       time: act.time || '10:00 AM',
       duration: act.duration || '1h 30m',
-      cost: typeof act.cost === 'number' ? act.cost : 0,
+      cost: initialCost,
       icon: act.icon || 'MapPin',
       desc: act.desc || ''
     });
@@ -255,6 +259,11 @@ export default function TripOverview({
       return;
     }
 
+    const enteredCost = Math.max(0, Number(activityForm.cost) || 0);
+    const storedCost = activeCurrency === sourceCurrency
+      ? enteredCost
+      : (convertCurrency(enteredCost, activeCurrency, sourceCurrency) ?? 0);
+
     const updated = localItinerary.map((dayItem, dIdx) => {
       const dayNum = dayItem.day ?? (dIdx + 1);
       if (dayNum !== selectedDay) return dayItem;
@@ -265,7 +274,7 @@ export default function TripOverview({
         title: activityForm.title.trim(),
         time: activityForm.time.trim() || '10:00 AM',
         duration: activityForm.duration.trim() || '1h',
-        cost: Math.max(0, Number(activityForm.cost) || 0),
+        cost: storedCost,
         icon: activityForm.icon || 'MapPin',
         desc: activityForm.desc.trim(),
         isCustom: true
@@ -437,7 +446,7 @@ export default function TripOverview({
     : undefined;
 
   const localTransportCost = transportMode === 'own'
-    ? (ownRoadCost !== undefined ? `₹${ownRoadCost.toLocaleString()}` : '—')
+    ? (ownRoadCost !== undefined ? formatCost(ownRoadCost) : '—')
     : 'included';
 
   // Active day plan
@@ -518,7 +527,7 @@ export default function TripOverview({
       doc.setFont('Helvetica', 'normal');
       doc.setFontSize(10);
       doc.text(`Dates: ${dateRangeStr} | Travelers: ${travelersCount} | Duration: ${daysLabel}`, 20, 65);
-      doc.text(`Estimated Total Budget: ${totalEstimatedCost !== undefined ? `INR ${totalEstimatedCost.toLocaleString()}` : 'N/A'}`, 20, 72);
+      doc.text(`Estimated Total Budget: ${totalEstimatedCost !== undefined ? formatCost(totalEstimatedCost) : 'N/A'}`, 20, 72);
 
       let yPos = 85;
       rawItinerary.forEach((d) => {
@@ -1031,7 +1040,7 @@ export default function TripOverview({
                           </span>
                           {activity.cost > 0 && (
                             <span className="font-mono font-medium text-slate-700 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">
-                              ₹{activity.cost.toLocaleString()}
+                              {formatCost(activity.cost)}
                             </span>
                           )}
 
@@ -1271,7 +1280,7 @@ export default function TripOverview({
                 Budget
               </h3>
               <span className="text-xs text-slate-500 font-medium font-mono">
-                {totalEstimatedCost !== undefined ? `₹${totalEstimatedCost.toLocaleString()} estimated` : '—'}
+                {totalEstimatedCost !== undefined ? `${formatCost(totalEstimatedCost)} estimated` : '—'}
               </span>
             </div>
 
@@ -1282,7 +1291,7 @@ export default function TripOverview({
                   {formatCost(totalEstimatedCost)}
                 </span>
                 <span className="text-[11px] text-slate-500">
-                  {plannedBudget !== undefined ? `of ₹${plannedBudget.toLocaleString()} planned` : 'Planned budget not set'}
+                  {plannedBudget !== undefined ? `of ${formatCost(plannedBudget)} planned` : 'Planned budget not set'}
                 </span>
               </div>
               
@@ -1295,8 +1304,8 @@ export default function TripOverview({
                   {remainingBudget === undefined
                     ? '—'
                     : remainingBudget >= 0 
-                      ? `₹${remainingBudget.toLocaleString()} remaining`
-                      : `₹${Math.abs(remainingBudget).toLocaleString()} over budget`
+                      ? `${formatCost(remainingBudget)} remaining`
+                      : `${formatCost(Math.abs(remainingBudget))} over budget`
                   }
                 </span>
                 <span className="text-[11px] text-slate-400 block">
@@ -1462,7 +1471,7 @@ export default function TripOverview({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="Estimated Cost (₹)"
+              label={`Estimated Cost (${currencySymbol})`}
               type="number"
               min="0"
               step="50"

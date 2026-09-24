@@ -5,6 +5,7 @@ import { Star, ExternalLink, AlertTriangle, ShieldCheck, MapPin, Fuel, Zap, Uten
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
+import { usePreferences } from '../context/PreferencesContext';
 
 // Strict coordinate validator: prevents Leaflet unrecoverable NaN / invalid coordinate crashes
 export const isValidCoord = (coord) => {
@@ -108,6 +109,7 @@ const createCustomIcon = (iconHtml, color) => {
 };
 
 export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
+  const { convertAndFormat } = usePreferences();
   // ── ALL HOOKS BEFORE ANY CONDITIONAL RETURNS ──────────────────
   const [activeRoute, setActiveRoute] = useState(0);
   const [selectedLayer, setSelectedLayer] = useState('all');
@@ -206,7 +208,7 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
     if (selectedLayer === 'all' || selectedLayer === 'hotels') {
       (roadDetails.hotels || []).filter(h => h && typeof h === 'object').forEach((hotel, idx) => {
         const ratio = (idx + 0.85) / ((roadDetails.hotels.length || 1) + 1);
-        const hotelPrice = typeof hotel.price === 'number' ? `₹${hotel.price.toLocaleString()}` : (hotel.price ? `₹${hotel.price}` : 'N/A');
+        const hotelPrice = hotel.price ? convertAndFormat(hotel.price, 'INR') : 'N/A';
         pins.push({
           position: [
             fromCoords[0] + (toCoords[0] - fromCoords[0]) * ratio + (((idx * 2) % 5) - 2) * 0.015,
@@ -235,7 +237,7 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
 
     const validPins = pins.filter(pin => isValidCoord(pin?.position));
     setMarkers(validPins);
-  }, [selectedLayer, fromCoords, toCoords, roadDetails, hasValidRouteCoords]);
+  }, [selectedLayer, fromCoords, toCoords, roadDetails, hasValidRouteCoords, convertAndFormat, mapCenter]);
 
   // ── NOW safe to return null if data missing ────────────────────
   if (!own || !roadDetails) return null;
@@ -325,7 +327,7 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
 
                     <div className="flex justify-between items-center text-xs text-slate-500">
                       <span>Drive: {route.time || 'N/A'}</span>
-                      <span>Tolls: {typeof route.tolls === 'number' ? `₹${route.tolls}` : (route.tolls ? (String(route.tolls).startsWith('₹') ? route.tolls : `₹${route.tolls}`) : '₹0')}</span>
+                      <span>Tolls: {convertAndFormat(route.tolls || 0, 'INR')}</span>
                       <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-medium text-slate-700">
                         {route.roadCondition || 'Standard'}
                       </span>
@@ -552,7 +554,7 @@ export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {(roadDetails.hotels || []).filter(h => h && typeof h === 'object').map((hotel, idx) => {
-                const hotelPrice = typeof hotel.price === 'number' ? `₹${hotel.price.toLocaleString()}` : (hotel.price ? `₹${hotel.price}` : 'N/A');
+                const hotelPrice = hotel.price ? convertAndFormat(hotel.price, 'INR') : 'N/A';
                 return (
                   <Card key={idx} className="border-slate-200 shadow-xs bg-white overflow-hidden hover:border-blue-300 transition-all flex flex-col sm:flex-row">
                     {hotel.image && (

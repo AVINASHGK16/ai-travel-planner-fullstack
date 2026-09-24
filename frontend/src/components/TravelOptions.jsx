@@ -29,6 +29,7 @@ import { Button } from './ui/Button';
 import { Skeleton } from './ui/Skeleton';
 import { Modal } from './ui/Modal';
 import { Slider } from './ui/Slider';
+import { usePreferences } from '../context/PreferencesContext';
 
 /**
  * Roamly TravelOptions Component — UI-3.2
@@ -82,14 +83,11 @@ export default function TravelOptions({
   const [activeTrainId, setActiveTrainId] = useState(null);
   const [activeBusId, setActiveBusId] = useState(null);
 
-  // Safe currency / price formatter
-  const formatPrice = (p, currency = 'INR') => {
-    const symbol = currency === 'USD' ? '$' : (currency === 'EUR' ? '€' : (currency === 'GBP' ? '£' : '₹'));
-    if (typeof p === 'number' && !Number.isNaN(p)) return `${symbol}${p.toLocaleString()}`;
-    if (typeof p === 'string' && p.trim()) {
-      return p.trim().startsWith(symbol) ? p.trim() : `${symbol}${p.trim()}`;
-    }
-    return 'N/A';
+  const { currency: activeCurrency, convertAndFormat, convertCurrency, formatMoney } = usePreferences();
+
+  // Safe currency / price formatter using global currency preferences
+  const formatPrice = (p, sourceCurrency = 'INR') => {
+    return convertAndFormat(p, sourceCurrency || 'INR');
   };
 
   // Safe city name extractor
@@ -144,18 +142,18 @@ export default function TravelOptions({
     return match ? parseInt(match[1], 10) : 12;
   };
 
-  // Route price range
+  // Route price range (computed in active currency)
   const minRoutePrice = useMemo(() => {
     if (flightList.length === 0) return 0;
-    const prices = flightList.map(f => f.price || 0).filter(p => p > 0);
+    const prices = flightList.map(f => convertCurrency(f.price || 0, f.currency || 'INR', activeCurrency)).filter(p => typeof p === 'number' && p > 0);
     return prices.length > 0 ? Math.min(...prices) : 0;
-  }, [flightList]);
+  }, [flightList, activeCurrency, convertCurrency]);
 
   const maxRoutePrice = useMemo(() => {
     if (flightList.length === 0) return 100000;
-    const prices = flightList.map(f => f.price || 0).filter(p => p > 0);
-    return prices.length > 0 ? Math.max(...prices) : 100000;
-  }, [flightList]);
+    const prices = flightList.map(f => convertCurrency(f.price || 0, f.currency || 'INR', activeCurrency)).filter(p => typeof p === 'number' && p > 0);
+    return prices.length > 0 ? Math.max(...prices) : (activeCurrency === 'INR' ? 100000 : 1200);
+  }, [flightList, activeCurrency, convertCurrency]);
 
   const effectiveMaxPrice = maxPriceFilter !== null ? maxPriceFilter : maxRoutePrice;
 
@@ -184,14 +182,15 @@ export default function TravelOptions({
         if (departureTimeFilter === 'evening' && hour < 18) return false;
       }
 
-      // 4. Price filter
+      // 4. Price filter (evaluated in user's active display currency)
       if (maxPriceFilter !== null && typeof f.price === 'number') {
-        if (f.price > maxPriceFilter) return false;
+        const flightConverted = convertCurrency(f.price, f.currency || 'INR', activeCurrency);
+        if (flightConverted > maxPriceFilter) return false;
       }
 
       return true;
     });
-  }, [flightList, selectedStops, selectedAirlines, departureTimeFilter, maxPriceFilter]);
+  }, [flightList, selectedStops, selectedAirlines, departureTimeFilter, maxPriceFilter, activeCurrency, convertCurrency]);
 
   // Sort filtered flights
   const sortedFlights = useMemo(() => {
@@ -250,29 +249,32 @@ export default function TravelOptions({
       bestValue: bestValueFlight ? {
         title: 'Best value',
         price: bestValueFlight.price,
+        currency: bestValueFlight.currency || 'INR',
         duration: bestValueFlight.duration || '2h 50m',
         flightId: bestValueFlight.id
       } : null,
       fastest: fastestFlight ? {
         title: 'Fastest',
         price: fastestFlight.price,
+        currency: fastestFlight.currency || 'INR',
         duration: fastestFlight.duration || '2h 35m',
         flightId: fastestFlight.id
       } : null,
       cheapest: cheapestFlight ? {
         title: 'Cheapest',
         price: cheapestFlight.price,
+        currency: cheapestFlight.currency || 'INR',
         duration: cheapestFlight.duration,
         flightId: cheapestFlight.id
       } : null
     };
   }, [flightList]);
 
-  // Lowest fare and comparative calculation for Price Insights
-  const lowestFare = useMemo(() => {
-    const validPrices = flightList.map(f => f.price).filter(p => typeof p === 'number' && p > 0);
-    if (validPrices.length === 0) return null;
-    return Math.min(...validPrices);
+  // Lowest fare flight and comparative calculation for Price Insights
+  const lowestFareFlight = useMemo(() => {
+    const validFlights = flightList.filter(f => typeof f.price === 'number' && f.price > 0);
+    if (validFlights.length === 0) return null;
+    return validFlights.reduce((min, f) => (!min || f.price < min.price ? f : min), null);
   }, [flightList]);
 
   const priceComparison = useMemo(() => {
@@ -419,7 +421,7 @@ export default function TravelOptions({
     if (maxPriceFilter !== null && maxPriceFilter < maxRoutePrice) {
       chips.push({
         id: 'price',
-        label: `≤ ${formatPrice(maxPriceFilter)}`,
+        label: `≤ ${formatMoney(maxPriceFilter, activeCurrency)}`,
         onRemove: () => setMaxPriceFilter(null)
       });
     }
@@ -439,7 +441,7 @@ export default function TravelOptions({
     }
 
     return chips;
-  }, [selectedStops, selectedAirlines, departureTimeFilter, maxPriceFilter, maxRoutePrice, sortBy]);
+  }, [selectedStops, selectedAirlines, departureTimeFilter, maxPriceFilter, maxRoutePrice, sortBy, activeCurrency, formatMoney]);
 
   // Render Active Filters Bar with individual dismiss chips and clear all action
   const renderActiveFiltersBar = () => {
@@ -645,10 +647,10 @@ export default function TravelOptions({
             label="Max price"
             min={minRoutePrice}
             max={maxRoutePrice}
-            step={500}
+            step={activeCurrency === 'INR' ? 500 : 10}
             value={effectiveMaxPrice}
             onChange={(val) => setMaxPriceFilter(val)}
-            formatValue={(val) => formatPrice(val)}
+            formatValue={(val) => formatMoney(val, activeCurrency)}
             showMinMax={true}
           />
         </div>
@@ -705,7 +707,7 @@ export default function TravelOptions({
 
           <div>
             <div className="text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight">
-              {lowestFare !== null ? `₹${lowestFare.toLocaleString()}` : 'Live fares available'}
+              {lowestFareFlight ? formatPrice(lowestFareFlight.price, lowestFareFlight.currency || 'INR') : 'Live fares available'}
             </div>
             {priceComparison ? (
               <div className="flex items-center gap-1.5 text-xs text-[#1E9E6B] font-semibold mt-1">
@@ -1030,7 +1032,7 @@ export default function TravelOptions({
                         {smartPicks.bestValue.title}
                       </div>
                       <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
-                        ₹{smartPicks.bestValue.price?.toLocaleString()}
+                        {formatPrice(smartPicks.bestValue.price, smartPicks.bestValue.currency || 'INR')}
                       </div>
                       <div className="text-[10px] text-[#737885] font-mono">
                         {smartPicks.bestValue.duration}
@@ -1048,7 +1050,7 @@ export default function TravelOptions({
                         {smartPicks.fastest.title}
                       </div>
                       <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
-                        ₹{smartPicks.fastest.price?.toLocaleString()}
+                        {formatPrice(smartPicks.fastest.price, smartPicks.fastest.currency || 'INR')}
                       </div>
                       <div className="text-[10px] text-[#737885] font-mono">
                         {smartPicks.fastest.duration}
@@ -1066,7 +1068,7 @@ export default function TravelOptions({
                         {smartPicks.cheapest.title}
                       </div>
                       <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
-                        ₹{smartPicks.cheapest.price?.toLocaleString()}
+                        {formatPrice(smartPicks.cheapest.price, smartPicks.cheapest.currency || 'INR')}
                       </div>
                       <div className="text-[10px] text-[#737885]">
                         Lowest available
@@ -1280,7 +1282,8 @@ export default function TravelOptions({
                         {/* 3. Price Region (sm:col-span-3 text-right) */}
                         <div className="sm:col-span-3 text-left sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-[#E7E5DF]">
                           <div className="text-xl sm:text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight whitespace-nowrap">
-                            {formatPrice(flight.price)}
+                            {/* formatPrice(flight.price) source-currency aware */}
+                            {formatPrice(flight.price, flight.currency || 'INR')}
                           </div>
                           <span className="text-[10px] text-[#737885] uppercase tracking-wider font-semibold block mt-0.5">
                             / traveler

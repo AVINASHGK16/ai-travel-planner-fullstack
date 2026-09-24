@@ -2,6 +2,7 @@ import React from 'react';
 import { Compass, ArrowRight } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
+import { usePreferences } from '../../context/PreferencesContext';
 
 /**
  * QuickStartSuggestions Component — Roamly UI-3.1
@@ -9,6 +10,7 @@ import { Badge } from '../ui/Badge';
  * clear typography hierarchy, duration, route, and budget.
  */
 export function QuickStartSuggestions({ onSelectSuggestion, className = '' }) {
+  const { convertAndFormat } = usePreferences();
   // Compute safe future dates (e.g., departing in 7 days, returning in 10-11 days)
   const now = new Date();
   const formatYMD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -157,7 +159,7 @@ export function QuickStartSuggestions({ onSelectSuggestion, className = '' }) {
                   {item.from} <span className="text-blue-600 font-semibold">→ {item.to}</span>
                 </span>
                 <span className="font-bold text-slate-900 font-mono text-sm">
-                  ₹{item.budget.toLocaleString()}
+                  {convertAndFormat(item.budget, 'INR')}
                 </span>
               </div>
 

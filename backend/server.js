@@ -17,6 +17,7 @@ import aiRoutes from './routes/aiRoutes.js';
 import weatherRoutes from './routes/weatherRoutes.js';
 import geoRoutes from './routes/geoRoutes.js';
 import flightRoutes from './routes/flightRoutes.js';
+import currencyRoutes from './routes/currencyRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -90,6 +91,7 @@ app.use('/api', aiRoutes);
 app.use('/api', weatherRoutes);
 app.use('/api/geo', geoRoutes);
 app.use('/api/flights', flightRoutes);
+app.use('/api/currency', currencyRoutes);
 
 // ─── Serve frontend React application in production ─────────────
 const distPath = path.join(__dirname, 'dist');

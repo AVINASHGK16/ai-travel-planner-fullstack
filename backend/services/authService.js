@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
-import { isMongoConnected, loadLocalUsers, saveLocalUsers } from '../models/db.js';
+import { isMongoConnected, assertDatabaseAvailable, loadLocalUsers, saveLocalUsers } from '../models/db.js';
 
 // In-memory token revocation blacklist (for server-side invalidation on logout)
 const revokedTokens = new Set();
@@ -70,6 +70,7 @@ export const registerUser = async ({ name, email, password }) => {
       user: { id: userIdStr, _id: userIdStr, name: user.name, email: user.email }
     };
   } else {
+    assertDatabaseAvailable();
     // JSON fallback
     const users = loadLocalUsers();
     const existing = users.find(u => u.email === normalizedEmail);
@@ -110,6 +111,7 @@ export const loginUser = async ({ email, password }) => {
   if (isMongoConnected()) {
     user = await User.findOne({ email: normalizedEmail });
   } else {
+    assertDatabaseAvailable();
     const users = loadLocalUsers();
     user = users.find(u => u.email === normalizedEmail);
   }

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Sparkles, Backpack, ShieldCheck, Utensils, CloudSun } from 'lucide-react';
 import { getAIChatResponse } from '../utils/planner';
+import { usePreferences } from '../context/PreferencesContext';
 
 // Safe markdown-bold renderer — strictly prevents XSS without dangerouslySetInnerHTML
 const renderMessageText = (text) => {
@@ -15,10 +16,11 @@ const renderMessageText = (text) => {
 };
 
 // Local fallback rules engine when backend AI is offline or key is unconfigured
-const getLocalChatFallback = (text, tripData) => {
+const getLocalChatFallback = (text, tripData, formatFn) => {
   const lower = typeof text === 'string' ? text.toLowerCase() : '';
   const from = tripData?.from || 'Origin';
   const to = tripData?.to || 'Destination';
+  const fmt = typeof formatFn === 'function' ? formatFn : (v => `₹${v}`);
   
   if (lower.includes('packing') || lower.includes('what should i bring') || lower.includes('pack')) {
     return `Here is a custom **Packing Checklist** for your trip to ${to}:
@@ -33,10 +35,11 @@ const getLocalChatFallback = (text, tripData) => {
 - **Night Driving**: Moderate safety. We recommend completing the journey by 9:00 PM due to active heavy truck freight traffic.
 - **Support**: Mechanics and trauma hubs are situated every 50-80 km on NH 44.`;
   } else if (lower.includes('route') || lower.includes('scenic') || lower.includes('fastest') || lower.includes('highway')) {
+    const tollsVal = tripData?.options?.own?.routes?.[0]?.tolls || 700;
     return `Based on the route data between **${from}** and **${to}**:
 - 🛣️ **Fastest Route**: via national highway (NH 44). Drive takes around ${tripData?.options?.own?.time || '8.5 hours'}, covering ${tripData?.distance || '570'} km. Excellent 4-lane condition.
 - 🌳 **Scenic Route**: Diverges at the midway point into state routes, offering beautiful hill vistas but adds about 40 km and 1.5 hours to travel duration.
-- 🪙 **Tolls**: Total toll charges estimated around ₹${tripData?.options?.own?.routes?.[0]?.tolls || '700'}.`;
+- 🪙 **Tolls**: Total toll charges estimated around ${fmt(tollsVal, 'INR')}.`;
   } else if (lower.includes('restaurant') || lower.includes('eat') || lower.includes('food') || lower.includes('cuisine') || lower.includes('dine')) {
     return `Here are popular dining spots near the route to **${to}**:
 1. **Saravana Bhavan** - Rating: 4.6⭐. Outstanding traditional South Indian vegetarian breakfast and meals.
@@ -48,10 +51,11 @@ const getLocalChatFallback = (text, tripData) => {
 - Transit points forecast: stops like Midpoint average **34°C** and dry skies.
 - **Precipitation**: ${tripData?.weather?.rainAlert || 'No rain expected'}. Great weather for travel!`;
   } else if (lower.includes('budget') || lower.includes('cost') || lower.includes('cheap')) {
+    const trainVal = tripData?.options?.train?.[1]?.price || 350;
     return `💰 **Budget Optimization Tips**:
-- 🚆 **Travel**: Choose Train Sleeper class (₹${tripData?.options?.train?.[1]?.price || '350'} per head) over flights.
+- 🚆 **Travel**: Choose Train Sleeper class (${fmt(trainVal, 'INR')} per head) over flights.
 - 🏨 **Stay**: Choose transit stays or 3-star lodging to lower lodging costs by up to 40%.
-- 🍽️ **Food**: Dine at highway plazas rather than fine-dining resorts to save ₹1,000+ daily.`;
+- 🍽️ **Food**: Dine at highway plazas rather than fine-dining resorts to save ${fmt(1000, 'INR')}+ daily.`;
   }
   return `I can assist you with your trip to **${to}**! You can ask about:
 1. 🎒 **Packing list Suggestions**
@@ -65,6 +69,7 @@ Try asking: *"What should I pack for this trip?"* or *"Are there any good restau
 };
 
 export default function ChatAssistant({ tripData }) {
+  const { convertAndFormat } = usePreferences();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { sender: 'assistant', text: "Hello! I'm your AI Travel Assistant. Ask me anything about your trip, packing tips, safety scores, local cuisines, or weather forecasts!" }
@@ -150,7 +155,7 @@ export default function ChatAssistant({ tripData }) {
       }
 
       // Fallback local rules engine for chat queries
-      const localReply = getLocalChatFallback(boundedText, tripData);
+      const localReply = getLocalChatFallback(boundedText, tripData, convertAndFormat);
       const finalReply = `${fallbackPrefix}${localReply}`;
       if (isMounted.current) {
         setMessages(prev => [...prev, { sender: 'assistant', text: finalReply }]);

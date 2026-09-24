@@ -18,6 +18,7 @@ import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import { Slider } from '../ui/Slider';
+import { usePreferences } from '../../context/PreferencesContext';
 
 /**
  * Roamly TripConfigurationCard Component — UI-3.1
@@ -34,6 +35,7 @@ export function TripConfigurationCard({
   initialValues = null,
   className = ''
 }) {
+  const { convertAndFormat } = usePreferences();
   const [planningMode, setPlanningMode] = useState('structured'); // 'structured' | 'ai'
   const [tripType, setTripType] = useState('roundTrip'); // 'roundTrip' | 'oneWay' | 'multiCity'
   const [from, setFrom] = useState('');
@@ -533,7 +535,7 @@ export function TripConfigurationCard({
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-[#737885] font-medium">Estimated Budget:</span>
                   <span className="text-sm font-bold text-[#14171F] font-mono tabular-nums bg-slate-100 px-3 py-1 rounded-lg border border-slate-200/80">
-                    ₹{Number(budget || 0).toLocaleString()}
+                    {convertAndFormat(budget || 0, 'INR')}
                   </span>
                 </div>
               </div>
@@ -546,7 +548,7 @@ export function TripConfigurationCard({
                   step={5000}
                   value={typeof budget === 'number' ? budget : 50000}
                   onChange={(val) => setBudget(val)}
-                  formatValue={(val) => `₹${Number(val || 0).toLocaleString()}`}
+                  formatValue={(val) => convertAndFormat(val || 0, 'INR')}
                   showValue={false}
                   showMinMax={true}
                 />
@@ -564,7 +566,7 @@ export function TripConfigurationCard({
                             : 'bg-white text-slate-700 hover:text-slate-950 hover:bg-slate-50 border border-slate-200'
                         }`}
                       >
-                        {preset.label}
+                        {convertAndFormat(preset.value, 'INR')}
                       </button>
                     ))}
                   </div>

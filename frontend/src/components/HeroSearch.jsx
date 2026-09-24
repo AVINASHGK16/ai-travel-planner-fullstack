@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, MicOff, Search, MapPin, Calendar, Users, IndianRupee, Navigation, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Search, MapPin, Calendar, Users, Coins, Navigation, AlertCircle } from 'lucide-react';
 import { Input } from './ui/Input';
 import { Select } from './ui/Select';
 import { Button } from './ui/Button';
 import { Slider } from './ui/Slider';
+import { usePreferences } from '../context/PreferencesContext';
 
 const TRAVEL_MODE_OPTIONS = [
   { value: 'any', label: 'Compare All Modes' },
@@ -22,6 +23,7 @@ const BUDGET_PRESETS = [
 ];
 
 export default function HeroSearch({ onSearch, loading = false }) {
+  const { convertAndFormat } = usePreferences();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [date, setDate] = useState('');
@@ -345,11 +347,11 @@ export default function HeroSearch({ onSearch, loading = false }) {
         <div className="p-4 bg-[#FAFAF8] border border-[#E7E5DF] rounded-xl space-y-3">
           <div className="flex justify-between items-center">
             <label className="text-xs font-semibold text-[#14171F] flex items-center gap-1.5">
-              <IndianRupee className="w-4 h-4 text-[#1E9E6B]" />
+              <Coins className="w-4 h-4 text-[#1E9E6B]" />
               Estimated Budget
             </label>
             <span className="text-xs font-bold text-[#14171F] font-mono tabular-nums bg-white border border-[#E7E5DF] px-2.5 py-1 rounded-lg">
-              ₹{Number(budget || 0).toLocaleString()}
+              {convertAndFormat(budget || 0, 'INR')}
             </span>
           </div>
           <Slider
@@ -359,7 +361,7 @@ export default function HeroSearch({ onSearch, loading = false }) {
             step={2500}
             value={typeof budget === 'number' ? budget : 25000}
             onChange={(val) => setBudget(val || 5000)}
-            formatValue={(val) => `₹${Number(val || 0).toLocaleString()}`}
+            formatValue={(val) => convertAndFormat(val || 0, 'INR')}
             showValue={false}
             showMinMax={true}
           />
@@ -377,7 +379,7 @@ export default function HeroSearch({ onSearch, loading = false }) {
                       : 'bg-white text-[#3E434D] hover:text-[#14171F] hover:bg-[#FAFAF8] border border-[#E7E5DF]'
                   }`}
                 >
-                  {preset.label}
+                  {convertAndFormat(preset.value, 'INR')}
                 </button>
               ))}
             </div>

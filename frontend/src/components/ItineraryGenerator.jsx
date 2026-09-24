@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { 
   Utensils, Navigation, MapPin, Eye, Moon, Home, 
-  Coffee, ShoppingBag, Camera, Compass, ChevronDown, ChevronUp, Clock, DollarSign,
+  Coffee, ShoppingBag, Camera, Compass, ChevronDown, ChevronUp, Clock,
   Pencil, Trash2, Plus
 } from 'lucide-react';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
+import { usePreferences } from '../context/PreferencesContext';
 
 const iconMap = {
   Utensils: Utensils,
@@ -21,6 +22,7 @@ const iconMap = {
 };
 
 export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
+  const { currency, currencySymbol, convertCurrency, convertAndFormat } = usePreferences();
   const [expandedDay, setExpandedDay] = useState(1);
   const [editingActivity, setEditingActivity] = useState(null); // { day, actIdx }
   const [activityToDelete, setActivityToDelete] = useState(null); // { day, actIdx, title }
@@ -44,7 +46,9 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
     setFormTime(activity.time || '10:00 AM');
     setFormTitle(activity.title || '');
     setFormDesc(activity.desc || '');
-    setFormCost(activity.cost || 0);
+    const rawCost = typeof activity.cost === 'number' ? activity.cost : (parseFloat(activity.cost) || 0);
+    const initialCost = currency === 'INR' ? rawCost : (convertCurrency(rawCost, 'INR', currency) ?? 0);
+    setFormCost(initialCost);
     setFormIcon(activity.icon || 'Compass');
     setTitleError('');
   };
@@ -76,6 +80,9 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
     }
     setTitleError('');
 
+    const enteredCost = parseFloat(formCost) || 0;
+    const storedCostInINR = currency === 'INR' ? enteredCost : (convertCurrency(enteredCost, currency, 'INR') ?? 0);
+
     const newItinerary = itinerary.map((dayPlan, dayIdx) => {
       const planDay = dayPlan.day ?? (dayIdx + 1);
       if (planDay !== day) return dayPlan;
@@ -85,7 +92,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
         time: formTime || '10:00 AM',
         title: formTitle.trim(),
         desc: formDesc.trim(),
-        cost: parseFloat(formCost) || 0,
+        cost: storedCostInINR,
         icon: formIcon
       };
 
@@ -205,7 +212,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                   />
                                 </div>
                                 <div>
-                                  <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">Cost (₹)</label>
+                                  <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">Cost ({currencySymbol})</label>
                                   <input 
                                     type="number" 
                                     value={formCost}
@@ -295,7 +302,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                                 </span>
                                 {!Number.isNaN(Number(activity.cost)) && Number(activity.cost) > 0 && (
                                   <span className="text-emerald-700 font-bold">
-                                    ₹{Number(activity.cost).toLocaleString()}
+                                    {convertAndFormat(activity.cost, 'INR')}
                                   </span>
                                 )}
                               </div>
@@ -346,7 +353,7 @@ export default function ItineraryGenerator({ itinerary, onChangeItinerary }) {
                             />
                           </div>
                           <div>
-                            <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">Cost (₹)</label>
+                            <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">Cost ({currencySymbol})</label>
                             <input 
                               type="number" 
                               value={formCost}

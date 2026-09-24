@@ -250,7 +250,13 @@ export function SettingsForm({
               id={isModal ? 'modal-settings-currency' : 'page-settings-currency'}
               label="Default Currency"
               value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
+              onChange={(e) => {
+                const newCurr = e.target.value;
+                setCurrency(newCurr);
+                if (updatePreferences) {
+                  updatePreferences({ currency: newCurr });
+                }
+              }}
               options={CURRENCY_OPTIONS}
             />
 

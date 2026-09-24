@@ -388,8 +388,8 @@ export function generateMockData(from, to, date, returnDate, travelers, budget, 
     mode: 'own',
     distance: `${distance} km`,
     time: cabTime,
-    tollInfo: `Estimated Toll: ₹${tollCost}`,
-    fuelEstimate: `Estimated Fuel: ₹${ownFuelCost}`,
+    tollInfo: 'Estimated Expressway Tolls',
+    fuelEstimate: 'Calculated Fuel Consumption',
     roadCondition: distance > 300 ? 'National Highway 4-Lane' : 'State / Expressway Corridor',
     source: 'estimate',
     status: 'estimated',
@@ -477,7 +477,7 @@ export function generateMockData(from, to, date, returnDate, travelers, budget, 
         price: trainSLCost,
         icon: 'Train',
         badge: 'Lowest Price',
-        desc: `Sleeper class ticket on Express Train for ₹${trainSLCost}`
+        desc: 'Sleeper class ticket on Express Train'
       },
       fastest: {
         title: 'Fastest Option',
@@ -501,7 +501,7 @@ export function generateMockData(from, to, date, returnDate, travelers, budget, 
         price: train3ACost,
         icon: 'Train',
         badge: 'Recommended',
-        desc: `Balanced comfort and speed in AC 3-Tier Train for ₹${train3ACost}`
+        desc: 'Balanced comfort and speed in AC 3-Tier Train'
       },
       eco: {
         title: 'Eco-Friendly',

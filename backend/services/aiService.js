@@ -6,8 +6,8 @@ const CANDIDATE_MODELS = [
   process.env.GEMINI_MODEL,
   'gemini-flash-latest',
   'gemini-flash-lite-latest',
-  'gemini-2.5-flash',
-  'gemini-1.5-flash'
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite'
 ].filter(Boolean);
 
 export const generateTrip = async ({ from, to, date, returnDate, travelers, budget, preferredMode }, user = null) => {

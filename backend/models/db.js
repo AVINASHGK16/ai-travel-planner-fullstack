@@ -13,6 +13,15 @@ let mongoConnected = false;
 
 export const isMongoConnected = () => mongoConnected;
 
+export const assertDatabaseAvailable = () => {
+  if (process.env.NODE_ENV === 'production' && !mongoConnected) {
+    const err = new Error('Database service is temporarily unavailable. Please try again later.');
+    err.statusCode = 503;
+    err.code = 'DATABASE_UNAVAILABLE';
+    throw err;
+  }
+};
+
 export const initDatabase = () => {
   const MONGO_URI = process.env.MONGO_URI;
 
@@ -101,10 +110,12 @@ export const loadLocalTrips = () => {
 };
 
 export const saveLocalTrips = (trips) => {
+  assertDatabaseAvailable();
   atomicWriteJson(LOCAL_DB_PATH, trips);
 };
 
 export const loadLocalUsers = () => {
+  assertDatabaseAvailable();
   if (!fs.existsSync(LOCAL_USERS_PATH)) {
     try {
       atomicWriteJson(LOCAL_USERS_PATH, []);
@@ -122,5 +133,6 @@ export const loadLocalUsers = () => {
 };
 
 export const saveLocalUsers = (users) => {
+  assertDatabaseAvailable();
   atomicWriteJson(LOCAL_USERS_PATH, users);
 };
