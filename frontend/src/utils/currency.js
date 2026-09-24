@@ -80,13 +80,17 @@ export function convertCurrency(
   const fromCode = (fromCurrency || DEFAULT_CURRENCY).toUpperCase();
   const toCode = (toCurrency || DEFAULT_CURRENCY).toUpperCase();
 
+  const effectiveRates = rates && typeof rates === 'object' ? rates : BASELINE_RATES;
+  const fromRate = effectiveRates[fromCode] ?? BASELINE_RATES[fromCode];
+  const toRate = effectiveRates[toCode] ?? BASELINE_RATES[toCode];
+
+  if (typeof fromRate !== 'number' || typeof toRate !== 'number' || fromRate <= 0 || toRate <= 0) {
+    return null;
+  }
+
   if (fromCode === toCode) {
     return round ? Math.round(num) : num;
   }
-
-  const effectiveRates = rates && typeof rates === 'object' ? rates : BASELINE_RATES;
-  const fromRate = effectiveRates[fromCode] || BASELINE_RATES[fromCode] || 1;
-  const toRate = effectiveRates[toCode] || BASELINE_RATES[toCode] || 1;
 
   // Amount in base currency (INR) = amount / fromRate
   // Converted amount in target currency = inBase * toRate
@@ -122,7 +126,10 @@ export function formatMoney(amount, currency = DEFAULT_CURRENCY, options = {}) {
   }
 
   const code = (currency || DEFAULT_CURRENCY).toUpperCase();
-  const config = CURRENCY_CONFIG[code] || CURRENCY_CONFIG.INR;
+  const config = CURRENCY_CONFIG[code];
+  if (!config) {
+    return fallback;
+  }
 
   const isWhole = num % 1 === 0;
   const maxDecimals = options.maxDecimals !== undefined 

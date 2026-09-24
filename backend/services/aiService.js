@@ -146,7 +146,8 @@ export const generateTrip = async ({ from, to, date, returnDate, travelers, budg
         }
         lastError = err;
         if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-          break;
+          console.warn(`Gemini model ${model} timed out, attempting fallback candidate model...`);
+          continue;
         }
       }
     }
@@ -316,7 +317,10 @@ Answer the user's question accurately, offering safety tips, restaurant choices,
       } catch (err) {
         if (err.code === 'AI_QUOTA_EXCEEDED') throw err;
         lastError = err;
-        if (err.name === 'TimeoutError' || err.name === 'AbortError') break;
+        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+          console.warn(`Gemini chat model ${model} timed out, attempting fallback candidate model...`);
+          continue;
+        }
       }
     }
 

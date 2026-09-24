@@ -13,39 +13,47 @@ async function testGemini() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.log('Status: SKIPPED (GEMINI_API_KEY not set)');
-    return;
+    return 'skip';
   }
-  const model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
-  const start = Date.now();
-  try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: 'Respond with raw JSON: {"status": "ok", "message": "hello"}' }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      }),
-      signal: AbortSignal.timeout(15000)
-    });
-    const latency = Date.now() - start;
-    console.log(`HTTP Status: ${res.status}`);
-    console.log(`Latency: ${latency}ms`);
-    console.log(`Model tested: ${model}`);
-    if (res.ok) {
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsed = JSON.parse(text);
-      console.log('Result: SUCCESS');
-      console.log('Parsed JSON output valid:', Boolean(parsed && parsed.status === 'ok'));
-    } else {
+  const candidateModels = [
+    process.env.GEMINI_MODEL,
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite'
+  ].filter(Boolean);
+
+  for (const model of candidateModels) {
+    const start = Date.now();
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'Respond with raw JSON: {"status": "ok", "message": "hello"}' }] }],
+          generationConfig: { responseMimeType: 'application/json' }
+        }),
+        signal: AbortSignal.timeout(15000)
+      });
+      const latency = Date.now() - start;
+      console.log(`Model tested: ${model} -> HTTP Status: ${res.status}, Latency: ${latency}ms`);
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parsed = JSON.parse(text);
+        console.log('Result: SUCCESS');
+        console.log('Parsed JSON output valid:', Boolean(parsed && parsed.status === 'ok'));
+        return 'pass';
+      }
       const errText = await res.text();
-      console.log('Result: FAILURE');
-      console.log('Error summary:', errText.slice(0, 200));
+      console.log(`Model ${model} unavailable: ${errText.slice(0, 150)}`);
+    } catch (err) {
+      console.log(`Model ${model} error: ${err.message}`);
     }
-  } catch (err) {
-    console.log(`Result: ERROR (${err.name}: ${err.message})`);
   }
+  console.log('Result: FAILURE (all candidate models exhausted)');
+  return 'fail';
 }
 
 async function testOpenWeather() {
@@ -53,7 +61,7 @@ async function testOpenWeather() {
   const apiKey = process.env.WEATHER_API_KEY;
   if (!apiKey) {
     console.log('Status: SKIPPED (WEATHER_API_KEY not set)');
-    return;
+    return 'skip';
   }
   const city = 'Bengaluru';
   const start = Date.now();
@@ -69,13 +77,16 @@ async function testOpenWeather() {
       console.log(`Temperature received: ${data?.main?.temp}°C`);
       console.log(`Weather condition received: ${data?.weather?.[0]?.main} (${data?.weather?.[0]?.description})`);
       console.log(`City: ${data?.name}, Country: ${data?.sys?.country}`);
+      return 'pass';
     } else {
       const errText = await res.text();
       console.log('Result: FAILURE');
       console.log('Error summary:', errText.slice(0, 200));
+      return 'fail';
     }
   } catch (err) {
     console.log(`Result: ERROR (${err.name}: ${err.message})`);
+    return 'fail';
   }
 }
 
@@ -84,7 +95,7 @@ async function testSerpApi() {
   const apiKey = process.env.SERPAPI_KEY || process.env.SERPAPI_API_KEY;
   if (!apiKey) {
     console.log('Status: SKIPPED (SERPAPI_KEY / SERPAPI_API_KEY not set)');
-    return;
+    return 'skip';
   }
   const start = Date.now();
   try {
@@ -117,13 +128,16 @@ async function testSerpApi() {
         const sample = (data.best_flights || data.other_flights)[0];
         console.log(`Sample flight: ${sample?.flights?.[0]?.airline} (${sample?.flights?.[0]?.flight_number}), Price: ${sample?.price}`);
       }
+      return 'pass';
     } else {
       const errText = await res.text();
       console.log('Result: FAILURE');
       console.log('Error summary:', errText.slice(0, 200));
+      return 'fail';
     }
   } catch (err) {
     console.log(`Result: ERROR (${err.name}: ${err.message})`);
+    return 'fail';
   }
 }
 
@@ -143,36 +157,52 @@ async function testCurrency() {
       console.log('Result: SUCCESS');
       console.log(`Base: ${data.base_code || data.base}`);
       console.log(`Rates available: USD=${data.rates?.USD}, EUR=${data.rates?.EUR}, GBP=${data.rates?.GBP}, INR=${data.rates?.INR}`);
+      return 'pass';
     } else {
       console.log('Result: FAILURE');
+      return 'fail';
     }
   } catch (err) {
     console.log(`Result: ERROR (${err.name}: ${err.message})`);
+    return 'fail';
   }
 }
 
 async function testNominatim() {
   console.log('\n--- 5. Nominatim Geocoding Smoke Test ---');
   const cities = ['Bengaluru', 'Delhi', 'Goa'];
-  for (const city of cities) {
-    const start = Date.now();
+  let allPassed = true;
+  for (let i = 0; i < cities.length; i++) {
+    const city = cities[i];
+    const reqStart = Date.now();
     try {
       const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city)}&limit=1`;
       const res = await fetch(url, {
         headers: { 'User-Agent': 'AITravelPlanner-Backend/1.0' },
         signal: AbortSignal.timeout(5000)
       });
-      const latency = Date.now() - start;
+      const latency = Date.now() - reqStart;
       if (res.ok) {
         const data = await res.json();
         console.log(`City: ${city} -> Status: ${res.status}, Latency: ${latency}ms, Lat: ${data[0]?.lat}, Lon: ${data[0]?.lon}`);
       } else {
+        allPassed = false;
         console.log(`City: ${city} -> Status: ${res.status}, Latency: ${latency}ms, FAIL`);
       }
     } catch (err) {
+      allPassed = false;
       console.log(`City: ${city} -> ERROR: ${err.message}`);
     }
+    // Space requests in the loop over cities at least 1 second apart, accounting for request duration
+    if (i < cities.length - 1) {
+      const elapsed = Date.now() - reqStart;
+      const waitTime = Math.max(0, 1000 - elapsed);
+      if (waitTime > 0) {
+        await new Promise(r => setTimeout(r, waitTime));
+      }
+    }
   }
+  return allPassed ? 'pass' : 'fail';
 }
 
 async function testOSRM() {
@@ -198,11 +228,14 @@ async function testOSRM() {
       console.log('Result: SUCCESS');
       console.log(`Distance: ${distKm} km, Duration: ${durMin} mins (${Math.floor(durMin/60)}h ${durMin%60}m)`);
       console.log(`Geometry points: ${route?.geometry?.coordinates?.length || 0}`);
+      return 'pass';
     } else {
       console.log(`Result: FAILURE (${res.status})`);
+      return 'fail';
     }
   } catch (err) {
     console.log(`Result: ERROR (${err.name}: ${err.message})`);
+    return 'fail';
   }
 }
 
@@ -211,7 +244,7 @@ async function testMongo() {
   const uri = process.env.MONGO_URI;
   if (!uri) {
     console.log('Status: SKIPPED (MONGO_URI not set)');
-    return;
+    return 'skip';
   }
   const mongoose = (await import('../backend/node_modules/mongoose/index.js')).default;
   const start = Date.now();
@@ -224,44 +257,61 @@ async function testMongo() {
     console.log(`Host: ${conn.connection.host}`);
     console.log(`Database name: ${conn.connection.name}`);
     await mongoose.disconnect();
+    return 'pass';
   } catch (err) {
     const latency = Date.now() - start;
     console.log(`Result: FAILURE after ${latency}ms`);
     console.log(`Error: ${err.name} - ${err.message}`);
+    return 'fail';
   }
 }
 
 async function testAuthJWT() {
   console.log('\n--- 8. Auth / JWT Smoke Test ---');
   const jwt = (await import('../backend/node_modules/jsonwebtoken/index.js')).default;
-  const secret = process.env.JWT_SECRET || 'test_secret_dev';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    console.log('Status: SKIPPED (JWT_SECRET not set in environment)');
+    return 'skip';
+  }
   try {
     const token = jwt.sign({ id: 'test_user_1', email: 'test@example.com', name: 'Tester' }, secret, { expiresIn: '7d' });
     const decoded = jwt.verify(token, secret);
     console.log('Token generation & verification: SUCCESS');
     console.log(`Decoded user email: ${decoded.email}, name: ${decoded.name}`);
-    // Test invalid secret
+    // Test invalid secret rejection
     try {
       jwt.verify(token, 'wrong_secret');
       console.log('Invalid secret rejection: FAILED');
+      return 'fail';
     } catch {
       console.log('Invalid secret rejection: SUCCESS (correctly rejected)');
+      return 'pass';
     }
   } catch (err) {
     console.log(`Auth test error: ${err.message}`);
+    return 'fail';
   }
 }
 
 async function run() {
-  await testGemini();
-  await testOpenWeather();
-  await testSerpApi();
-  await testCurrency();
-  await testNominatim();
-  await testOSRM();
-  await testMongo();
-  await testAuthJWT();
+  const results = {
+    gemini: await testGemini(),
+    weather: await testOpenWeather(),
+    serpApi: await testSerpApi(),
+    currency: await testCurrency(),
+    nominatim: await testNominatim(),
+    osrm: await testOSRM(),
+    mongo: await testMongo(),
+    authJWT: await testAuthJWT()
+  };
   console.log('\n=== SMOKE TESTS COMPLETE ===');
+  console.log(JSON.stringify(results, null, 2));
+
+  const hasFail = Object.values(results).some(outcome => outcome === 'fail');
+  if (hasFail) {
+    process.exitCode = 1;
+  }
 }
 
 run();

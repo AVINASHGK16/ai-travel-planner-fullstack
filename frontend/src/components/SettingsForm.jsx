@@ -253,6 +253,9 @@ export function SettingsForm({
               onChange={(e) => {
                 const newCurr = e.target.value;
                 setCurrency(newCurr);
+                if (settings && typeof settings === 'object') {
+                  settings.currency = newCurr;
+                }
                 if (updatePreferences) {
                   updatePreferences({ currency: newCurr });
                 }

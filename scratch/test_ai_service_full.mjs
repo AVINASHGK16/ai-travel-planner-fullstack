@@ -30,4 +30,5 @@ try {
   console.log(`Coordinates present:`, Boolean(result.coordinates?.from && result.coordinates?.to));
 } catch (err) {
   console.log(`generateTrip failed: ${err.message} (${err.code}, status: ${err.statusCode})`);
+  process.exitCode = 1;
 }

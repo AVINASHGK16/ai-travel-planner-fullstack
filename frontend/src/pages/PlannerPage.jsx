@@ -211,6 +211,10 @@ export default function PlannerPage() {
         geoData
       );
 
+      // Initialize the baseline trip with baselineMock before launching asynchronous flight/AI requests
+      setActiveTrip(baselineMock);
+      storage.setJSON('activePlan', baselineMock);
+
       // 3. Initiate provider-backed flight search if corridor supports commercial flights (>= 200 km)
       const currentFlightRequestId = ++flightRequestIdRef.current;
       latestFlightResultRef.current = { requestId: currentFlightRequestId, offers: null, status: null, provider: null };
@@ -246,8 +250,9 @@ export default function PlannerPage() {
             };
 
             setActiveTrip(prev => {
-              if (!prev || flightRequestIdRef.current !== currentFlightRequestId) return prev;
-              const updated = mergeFlightOffersIntoTrip(prev, offers);
+              if (flightRequestIdRef.current !== currentFlightRequestId) return prev;
+              const targetTrip = prev || baselineMock;
+              const updated = mergeFlightOffersIntoTrip(targetTrip, offers);
               storage.setJSON('activePlan', updated);
               return updated;
             });

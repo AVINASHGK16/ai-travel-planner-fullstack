@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { 
   Plane, 
   Car, 
@@ -84,6 +84,24 @@ export default function TravelOptions({
   const [activeBusId, setActiveBusId] = useState(null);
 
   const { currency: activeCurrency, convertAndFormat, convertCurrency, formatMoney } = usePreferences();
+
+  // Handle currency changes for maxPriceFilter
+  const prevCurrencyRef = useRef(activeCurrency);
+  useEffect(() => {
+    if (prevCurrencyRef.current !== activeCurrency) {
+      if (maxPriceFilter !== null) {
+        const converted = convertCurrency(maxPriceFilter, prevCurrencyRef.current, activeCurrency, { round: true });
+        setMaxPriceFilter(typeof converted === 'number' ? converted : null);
+      }
+      prevCurrencyRef.current = activeCurrency;
+    }
+  }, [activeCurrency, convertCurrency, maxPriceFilter]);
+
+  // Shared converted price helper for consistent cross-currency comparison and sorting
+  const getFlightPrice = useCallback((flight) => {
+    if (!flight || typeof flight.price !== 'number') return 0;
+    return convertCurrency(flight.price, flight.currency || 'INR', activeCurrency) ?? flight.price;
+  }, [convertCurrency, activeCurrency]);
 
   // Safe currency / price formatter using global currency preferences
   const formatPrice = (p, sourceCurrency = 'INR') => {
@@ -196,7 +214,7 @@ export default function TravelOptions({
   const sortedFlights = useMemo(() => {
     return [...filteredFlights].sort((a, b) => {
       if (sortBy === 'price') {
-        return (a.price || 0) - (b.price || 0);
+        return getFlightPrice(a) - getFlightPrice(b);
       }
       if (sortBy === 'duration') {
         return getDurationMinutes(a) - getDurationMinutes(b);
@@ -206,14 +224,14 @@ export default function TravelOptions({
       }
       return 0; // 'recommended' uses natural API rank
     });
-  }, [filteredFlights, sortBy]);
+  }, [filteredFlights, sortBy, getFlightPrice]);
 
   // Cheapest & fastest flight IDs for semantic badges
   const cheapestFlightId = useMemo(() => {
     if (flightList.length === 0) return null;
-    const sorted = [...flightList].sort((a, b) => (a.price || 0) - (b.price || 0));
+    const sorted = [...flightList].sort((a, b) => getFlightPrice(a) - getFlightPrice(b));
     return sorted[0]?.id || null;
-  }, [flightList]);
+  }, [flightList, getFlightPrice]);
 
   const fastestFlightId = useMemo(() => {
     if (flightList.length === 0) return null;
@@ -241,7 +259,7 @@ export default function TravelOptions({
   const smartPicks = useMemo(() => {
     if (flightList.length === 0) return null;
 
-    const cheapestFlight = [...flightList].sort((a, b) => (a.price || 0) - (b.price || 0))[0];
+    const cheapestFlight = [...flightList].sort((a, b) => getFlightPrice(a) - getFlightPrice(b))[0];
     const fastestFlight = [...flightList].sort((a, b) => getDurationMinutes(a) - getDurationMinutes(b))[0];
     const bestValueFlight = flightList[0];
 
@@ -268,24 +286,24 @@ export default function TravelOptions({
         flightId: cheapestFlight.id
       } : null
     };
-  }, [flightList]);
+  }, [flightList, getFlightPrice]);
 
   // Lowest fare flight and comparative calculation for Price Insights
   const lowestFareFlight = useMemo(() => {
     const validFlights = flightList.filter(f => typeof f.price === 'number' && f.price > 0);
     if (validFlights.length === 0) return null;
-    return validFlights.reduce((min, f) => (!min || f.price < min.price ? f : min), null);
-  }, [flightList]);
+    return validFlights.reduce((min, f) => (!min || getFlightPrice(f) < getFlightPrice(min) ? f : min), null);
+  }, [flightList, getFlightPrice]);
 
   const priceComparison = useMemo(() => {
-    const validPrices = flightList.map(f => f.price).filter(p => typeof p === 'number' && p > 0);
+    const validPrices = flightList.map(f => getFlightPrice(f)).filter(p => typeof p === 'number' && p > 0);
     if (validPrices.length < 2) return null;
     const min = Math.min(...validPrices);
     const avg = Math.round(validPrices.reduce((sum, p) => sum + p, 0) / validPrices.length);
     if (avg <= min) return null;
     const percent = Math.round(((avg - min) / avg) * 100);
     return percent > 0 ? percent : null;
-  }, [flightList]);
+  }, [flightList, getFlightPrice]);
 
   // Handle selecting a flight
   const handleSelectFlight = (flight) => {

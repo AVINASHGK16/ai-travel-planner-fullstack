@@ -100,9 +100,19 @@ export const resolveAirport = (input, field = 'location') => {
     return { ...AIRPORTS[upper] };
   }
 
-  // 2. Normalize city key (lowercase, alphanumeric only)
+  // 2. Check for parenthetical 3-letter IATA code, e.g. "Bengaluru (BLR)", "Goa (GOI)"
+  const parenIataMatch = trimmed.match(/\(([A-Za-z]{3})\)/);
+  if (parenIataMatch) {
+    const code = parenIataMatch[1].toUpperCase();
+    if (AIRPORTS[code]) {
+      return { ...AIRPORTS[code] };
+    }
+  }
+
+  // 3. Normalize city key (strip parentheticals, lowercase, alphanumeric only)
   // Handle queries with comma separators like "Bangalore, Karnataka, India" -> "bangalore"
-  const primaryName = trimmed.split(',')[0].trim();
+  const cleanName = trimmed.replace(/\([^)]*\)/g, ' ').trim();
+  const primaryName = cleanName.split(',')[0].trim();
   const normalizedKey = primaryName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   if (CITY_TO_IATA[normalizedKey]) {
@@ -111,13 +121,13 @@ export const resolveAirport = (input, field = 'location') => {
   }
 
   // Full string normalized check if comma-split was not enough
-  const fullNormalized = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const fullNormalized = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (CITY_TO_IATA[fullNormalized]) {
     const code = CITY_TO_IATA[fullNormalized];
     return { ...AIRPORTS[code] };
   }
 
-  // 3. Unresolvable location (e.g. Ooty, Coorg, unknown place)
+  // 4. Unresolvable location (e.g. Ooty, Coorg, unknown place)
   throw new AirportNotFoundError(trimmed, field);
 };
 

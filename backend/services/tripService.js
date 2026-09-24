@@ -22,6 +22,7 @@ export const normalizeTrip = (trip) => {
  * Origin and destination coordinates are validated and canonicalized authoritatively.
  */
 export const createTrip = async (tripData, userEmail) => {
+  assertDatabaseAvailable();
   const data = { ...tripData };
   data.userEmail = userEmail;
   delete data._id;
