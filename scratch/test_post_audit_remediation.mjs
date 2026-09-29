@@ -65,14 +65,14 @@ console.log('\n--- Test A: Currency Response Contract ---');
 console.log('\n--- Test B: Gemini Frontend Timeout ---');
 {
   const aiServiceCode = fs.readFileSync(path.join(__dirname, '../frontend/src/services/aiService.js'), 'utf-8');
-  assert(aiServiceCode.includes('timeoutMs: 35000'), 'Frontend generateTrip timeoutMs is 35000 (35s)');
-  assert(aiServiceCode.includes('timed out after 35 seconds'), 'Frontend timeout error message reflects 35 seconds');
+  assert(aiServiceCode.includes('timeoutMs: 60000'), 'Frontend generateTrip timeoutMs is 60000 (60s)');
+  assert(aiServiceCode.includes('timed out after 60 seconds'), 'Frontend timeout error message reflects 60 seconds');
   assert(!aiServiceCode.includes('timeoutMs: 20000'), 'Old 20000ms timeout has been replaced');
 
-  // Mathematical assertion: 22s backend rollover < 35s client timeout
+  // Mathematical assertion: 22s backend rollover < 60s client timeout
   const sampleRolloverDurationMs = 22214;
-  const clientTimeoutMs = 35000;
-  assert(sampleRolloverDurationMs < clientTimeoutMs, `22.2s backend rollover (${sampleRolloverDurationMs}ms) safely completes within 35s (${clientTimeoutMs}ms) timeout`);
+  const clientTimeoutMs = 60000;
+  assert(sampleRolloverDurationMs < clientTimeoutMs, `22.2s backend rollover (${sampleRolloverDurationMs}ms) safely completes within 60s (${clientTimeoutMs}ms) timeout`);
 }
 
 // ─── TEST C: Gemini Candidate Rollover & Model Cleanliness ─────

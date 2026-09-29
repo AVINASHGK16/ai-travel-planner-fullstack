@@ -22,7 +22,7 @@ export const generateTrip = async (searchParams, signal = null) => {
       method: 'POST',
       body,
       signal,
-      timeoutMs: 35000
+      timeoutMs: 60000
     });
 
     if (!res.ok) {
@@ -35,7 +35,7 @@ export const generateTrip = async (searchParams, signal = null) => {
       if (signal?.aborted) {
         throw new ApiError('Search cancelled by user', 499, 'CANCELLED');
       }
-      throw new ApiError('AI generation timed out after 35 seconds', 408, 'AI_TIMEOUT');
+      throw new ApiError('AI generation timed out after 60 seconds', 408, 'AI_TIMEOUT');
     }
     throw error;
   }

@@ -340,11 +340,25 @@ export default function PlannerPage() {
       } catch (aiErr) {
         if (controller.signal.aborted) return;
         console.warn('[Roamly Planner] AI Itinerary enrichment unavailable:', aiErr.message);
+
+        let notice = 'AI service temporarily unavailable';
+        if (aiErr?.code === 'AI_TIMEOUT' || aiErr?.code === 'REQUEST_TIMEOUT' || aiErr?.status === 408 || aiErr?.name === 'TimeoutError' || aiErr?.message?.toLowerCase().includes('timed out')) {
+          notice = 'AI request timed out';
+        } else if (aiErr?.code === 'NETWORK_UNAVAILABLE' || aiErr?.status === 503) {
+          notice = 'Network unavailable';
+        } else if (aiErr?.code === 'FORBIDDEN' || aiErr?.status === 403) {
+          notice = 'AI service access restricted';
+        } else if (aiErr?.code === 'RATE_LIMIT_EXCEEDED' || aiErr?.status === 429) {
+          notice = 'AI rate limit reached';
+        } else if (aiErr?.message && typeof aiErr.message === 'string' && !/failed to fetch|\[object/i.test(aiErr.message)) {
+          notice = aiErr.message;
+        }
+
         aiEnrichedTrip = {
           ...baselineMock,
           isAIGenerated: false,
           source: 'deterministic',
-          generationNotice: 'Deterministic itinerary loaded (AI offline).'
+          generationNotice: notice
         };
       }
 
