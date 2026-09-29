@@ -55,6 +55,7 @@ export default function TravelOptions({
   setActiveMode,
   children, // RoadTripDetails
   flightLoading = false,
+  flightStatus = null,
   flightError = null,
   onModifySearch = null,
   onRetrySearch = null,
@@ -128,6 +129,14 @@ export default function TravelOptions({
   const flightList = useMemo(() => {
     return (options?.flight || []).filter(f => f && typeof f === 'object');
   }, [options?.flight]);
+
+  const effectiveFlightStatus = useMemo(() => {
+    if (flightStatus) return flightStatus;
+    if (flightLoading) return 'loading';
+    if (flightError) return 'error';
+    if (flightList.length > 0) return 'success';
+    return 'idle';
+  }, [flightStatus, flightLoading, flightError, flightList.length]);
 
   const trainList = (options?.train || []).filter(t => t && typeof t === 'object');
   const busList = (options?.bus || []).filter(b => b && typeof b === 'object');
@@ -794,7 +803,7 @@ export default function TravelOptions({
     <div className="space-y-4 animate-fade-in" aria-busy="true" aria-label="Searching flights">
       <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 py-1">
         <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-ping" />
-        <span>Searching available routes...</span>
+        <span>Searching live flights...</span>
       </div>
 
       {[1, 2, 3].map((n) => (
@@ -841,12 +850,13 @@ export default function TravelOptions({
   // ── Render: Flight Tab (3-Column Layout) ──────────────────────────────────────────
   const renderFlightTab = () => {
     // 1. Loading State (Multi-line Skeletons, No giant spinner)
-    if (flightLoading) {
+    // Render skeleton UI when loading OR when in initial/idle state with no offers yet
+    if (effectiveFlightStatus === 'loading' || (effectiveFlightStatus === 'idle' && flightList.length === 0)) {
       return renderSkeletonList();
     }
 
     // 2. Error State (Friendly, zero implementation secret leaks)
-    if (flightError && flightList.length === 0) {
+    if ((effectiveFlightStatus === 'error' || flightError) && flightList.length === 0) {
       return (
         <Card className="p-8 sm:p-12 text-center border border-slate-200/90 shadow-xs bg-white space-y-4 animate-fade-in">
           <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mx-auto">
@@ -887,7 +897,8 @@ export default function TravelOptions({
     }
 
     // 3. Empty State (Clean, helpful, no scary error styling)
-    if (flightList.length === 0) {
+    // Only rendered if search explicitly completed with zero offers
+    if (effectiveFlightStatus === 'empty' || (effectiveFlightStatus === 'success' && flightList.length === 0)) {
       return (
         <Card className="p-8 sm:p-12 text-center border border-slate-200/90 shadow-xs bg-white space-y-4 animate-fade-in">
           <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 mx-auto">
@@ -1588,7 +1599,7 @@ export default function TravelOptions({
         >
           <Plane className="w-4 h-4" />
           <span>Flights</span>
-          {!flightLoading && flightList.length > 0 && (
+          {effectiveFlightStatus !== 'loading' && !(effectiveFlightStatus === 'idle' && flightList.length === 0) && flightList.length > 0 && (
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
               activeMode === 'flight' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
             }`}>

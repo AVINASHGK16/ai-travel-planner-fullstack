@@ -59,6 +59,11 @@ export default function PlannerPage() {
 
   const [loading, setLoading] = useState(false);
   const [flightLoading, setFlightLoading] = useState(false);
+  const [flightStatus, setFlightStatus] = useState(() => {
+    if (tripId) return 'idle';
+    const initialTrip = storage.getJSON('activePlan', null);
+    return (initialTrip?.options?.flight && initialTrip.options.flight.length > 0) ? 'success' : 'idle';
+  });
   const [flightError, setFlightError] = useState(null);
   const [savingTrip, setSavingTrip] = useState(false);
   const [searchError, setSearchError] = useState(null);
@@ -126,6 +131,7 @@ export default function PlannerPage() {
       setActiveMode(savedMode);
       setActiveView('overview');
       setLoading(false);
+      setFlightStatus(routeTrip.options?.flight?.length > 0 ? 'success' : 'idle');
     }
   }, [tripId, routeTrip]);
 
@@ -171,6 +177,8 @@ export default function PlannerPage() {
     searchControllerRef.current = controller;
 
     setLoading(true);
+    setFlightStatus('loading');
+    setFlightLoading(true);
     setSearchError(null);
     setShowEditForm(false);
     setActiveView('transport');
@@ -184,6 +192,8 @@ export default function PlannerPage() {
         if (controller.signal.aborted) return;
         setSearchError(geoErr.message || 'Geographic location could not be resolved. Please verify city spelling.');
         setLoading(false);
+        setFlightLoading(false);
+        setFlightStatus('idle');
         return;
       }
 
@@ -223,6 +233,7 @@ export default function PlannerPage() {
         const flightController = new AbortController();
         flightControllerRef.current = flightController;
         setFlightLoading(true);
+        setFlightStatus('loading');
         setFlightError(null);
 
         const originCity = geoData?.fromLocation?.name || (typeof params.from === 'string' ? params.from.split(',')[0].trim() : params.from);
@@ -242,6 +253,7 @@ export default function PlannerPage() {
             if (flightController.signal.aborted) return;
             if (flightRequestIdRef.current !== currentFlightRequestId) return;
             const offers = Array.isArray(res?.offers) ? res.offers : [];
+            const newStatus = offers.length > 0 ? 'success' : 'empty';
             latestFlightResultRef.current = {
               requestId: currentFlightRequestId,
               offers,
@@ -257,6 +269,7 @@ export default function PlannerPage() {
               return updated;
             });
             setFlightLoading(false);
+            setFlightStatus(newStatus);
           })
           .catch(err => {
             if (flightController.signal.aborted) return;
@@ -264,6 +277,7 @@ export default function PlannerPage() {
             console.warn('Flight provider query warning:', err?.message || err);
             setFlightError(err?.message || 'Could not retrieve live flight offers.');
             setFlightLoading(false);
+            setFlightStatus('error');
 
             // Explicitly mark provider-error state
             latestFlightResultRef.current = {
@@ -294,6 +308,7 @@ export default function PlannerPage() {
           });
       } else {
         setFlightLoading(false);
+        setFlightStatus('empty');
         setFlightError(null);
       }
 
@@ -350,8 +365,9 @@ export default function PlannerPage() {
           notice = 'AI service access restricted';
         } else if (aiErr?.code === 'RATE_LIMIT_EXCEEDED' || aiErr?.status === 429) {
           notice = 'AI rate limit reached';
-        } else if (aiErr?.message && typeof aiErr.message === 'string' && !/failed to fetch|\[object/i.test(aiErr.message)) {
-          notice = aiErr.message;
+        } else {
+          console.warn('[Roamly Planner] Unrecognized AI error:', aiErr?.message || aiErr);
+          notice = 'AI service temporarily unavailable';
         }
 
         aiEnrichedTrip = {
@@ -501,6 +517,7 @@ export default function PlannerPage() {
     }
     flightRequestIdRef.current++;
     setFlightLoading(false);
+    setFlightStatus('idle');
     setFlightError(null);
     setActiveTrip(null);
     setSearchError(null);
@@ -924,7 +941,8 @@ export default function PlannerPage() {
                 options={activeTrip.options}
                 activeMode={activeMode}
                 setActiveMode={handleSelectMode}
-                flightLoading={flightLoading}
+                flightLoading={flightLoading || flightStatus === 'loading'}
+                flightStatus={flightStatus}
                 flightError={flightError}
                 onModifySearch={() => setShowEditForm(true)}
                 onRetrySearch={() => {
