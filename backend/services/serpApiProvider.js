@@ -7,7 +7,7 @@
 
 import { FlightProviderError } from './duffelProvider.js';
 
-export const SERPAPI_DEFAULT_TIMEOUT_MS = 12000;
+export const SERPAPI_DEFAULT_TIMEOUT_MS = 35000;
 export const SERPAPI_BASE_URL = 'https://serpapi.com/search.json';
 
 /**

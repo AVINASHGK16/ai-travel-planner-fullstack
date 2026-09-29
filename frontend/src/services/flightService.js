@@ -34,7 +34,7 @@ export const searchFlights = async ({
   const res = await request(`/api/flights/search?${params.toString()}`, {
     method: 'GET',
     signal,
-    timeoutMs: 30000
+    timeoutMs: 40000
   });
 
   if (!res.ok) {
