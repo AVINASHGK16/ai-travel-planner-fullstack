@@ -652,7 +652,18 @@ export function TripConfigurationCard({
                 type="button"
                 disabled={!aiPromptText.trim() || loading}
                 isLoading={loading}
-                onClick={() => handleApplyAIPrompt(aiPromptText)}
+                onClick={() => handleApplyAIPrompt({
+                  promptText: aiPromptText,
+                  currentValues: {
+                    from,
+                    to,
+                    date,
+                    returnDate,
+                    travelers,
+                    budget,
+                    preferredMode
+                  }
+                })}
                 className="w-full sm:w-auto px-8 py-3 text-base font-bold tracking-tight shadow-sm hover:shadow-md transition-all cursor-pointer bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center gap-2"
               >
                 <Sparkles className="w-4 h-4 text-purple-200" />

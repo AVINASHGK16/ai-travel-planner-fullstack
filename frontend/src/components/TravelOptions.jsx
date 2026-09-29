@@ -84,6 +84,13 @@ export default function TravelOptions({
   const [activeTrainId, setActiveTrainId] = useState(null);
   const [activeBusId, setActiveBusId] = useState(null);
 
+  // Sync activeFlightId when selectedFlightOffer prop changes
+  useEffect(() => {
+    if (selectedFlightOffer?.id) {
+      setActiveFlightId(selectedFlightOffer.id);
+    }
+  }, [selectedFlightOffer?.id]);
+
   const { currency: activeCurrency, convertAndFormat, convertCurrency, formatMoney } = usePreferences();
 
   // Handle currency changes for maxPriceFilter
@@ -100,8 +107,9 @@ export default function TravelOptions({
 
   // Shared converted price helper for consistent cross-currency comparison and sorting
   const getFlightPrice = useCallback((flight) => {
-    if (!flight || typeof flight.price !== 'number') return 0;
-    return convertCurrency(flight.price, flight.currency || 'INR', activeCurrency) ?? flight.price;
+    if (!flight || typeof flight.price !== 'number' || flight.price <= 0) return Infinity;
+    const converted = convertCurrency(flight.price, flight.currency || 'INR', activeCurrency);
+    return typeof converted === 'number' && converted > 0 ? converted : flight.price;
   }, [convertCurrency, activeCurrency]);
 
   // Safe currency / price formatter using global currency preferences
@@ -170,16 +178,26 @@ export default function TravelOptions({
   };
 
   // Route price range (computed in active currency)
+  const hasPricedFlights = useMemo(() => {
+    return flightList.some(f => typeof f.price === 'number' && f.price > 0);
+  }, [flightList]);
+
   const minRoutePrice = useMemo(() => {
     if (flightList.length === 0) return 0;
-    const prices = flightList.map(f => convertCurrency(f.price || 0, f.currency || 'INR', activeCurrency)).filter(p => typeof p === 'number' && p > 0);
+    const prices = flightList
+      .filter(f => typeof f.price === 'number' && f.price > 0)
+      .map(f => convertCurrency(f.price, f.currency || 'INR', activeCurrency))
+      .filter(p => typeof p === 'number' && p > 0);
     return prices.length > 0 ? Math.min(...prices) : 0;
   }, [flightList, activeCurrency, convertCurrency]);
 
   const maxRoutePrice = useMemo(() => {
-    if (flightList.length === 0) return 100000;
-    const prices = flightList.map(f => convertCurrency(f.price || 0, f.currency || 'INR', activeCurrency)).filter(p => typeof p === 'number' && p > 0);
-    return prices.length > 0 ? Math.max(...prices) : (activeCurrency === 'INR' ? 100000 : 1200);
+    if (flightList.length === 0) return 0;
+    const prices = flightList
+      .filter(f => typeof f.price === 'number' && f.price > 0)
+      .map(f => convertCurrency(f.price, f.currency || 'INR', activeCurrency))
+      .filter(p => typeof p === 'number' && p > 0);
+    return prices.length > 0 ? Math.max(...prices) : 0;
   }, [flightList, activeCurrency, convertCurrency]);
 
   const effectiveMaxPrice = maxPriceFilter !== null ? maxPriceFilter : maxRoutePrice;
@@ -210,7 +228,8 @@ export default function TravelOptions({
       }
 
       // 4. Price filter (evaluated in user's active display currency)
-      if (maxPriceFilter !== null && typeof f.price === 'number') {
+      if (maxPriceFilter !== null) {
+        if (typeof f.price !== 'number' || f.price <= 0) return false;
         const flightConverted = convertCurrency(f.price, f.currency || 'INR', activeCurrency);
         if (flightConverted > maxPriceFilter) return false;
       }
@@ -223,7 +242,10 @@ export default function TravelOptions({
   const sortedFlights = useMemo(() => {
     return [...filteredFlights].sort((a, b) => {
       if (sortBy === 'price') {
-        return getFlightPrice(a) - getFlightPrice(b);
+        const priceA = getFlightPrice(a);
+        const priceB = getFlightPrice(b);
+        if (priceA !== priceB) return priceA - priceB;
+        return getDurationMinutes(a) - getDurationMinutes(b);
       }
       if (sortBy === 'duration') {
         return getDurationMinutes(a) - getDurationMinutes(b);
@@ -237,8 +259,9 @@ export default function TravelOptions({
 
   // Cheapest & fastest flight IDs for semantic badges
   const cheapestFlightId = useMemo(() => {
-    if (flightList.length === 0) return null;
-    const sorted = [...flightList].sort((a, b) => getFlightPrice(a) - getFlightPrice(b));
+    const validPriced = flightList.filter(f => typeof f.price === 'number' && f.price > 0);
+    if (validPriced.length === 0) return null;
+    const sorted = [...validPriced].sort((a, b) => getFlightPrice(a) - getFlightPrice(b));
     return sorted[0]?.id || null;
   }, [flightList, getFlightPrice]);
 
@@ -249,7 +272,8 @@ export default function TravelOptions({
   }, [flightList]);
 
   const getFlightBadge = (flight, idx) => {
-    if (flight.id === cheapestFlightId) {
+    const hasValidPrice = typeof flight.price === 'number' && flight.price > 0;
+    if (hasValidPrice && flight.id === cheapestFlightId) {
       return { label: 'CHEAPEST', icon: TrendingDown, color: 'emerald' };
     }
     if (flight.id === fastestFlightId && flight.id !== cheapestFlightId) {
@@ -258,7 +282,7 @@ export default function TravelOptions({
     if (idx === 0 && flight.id !== cheapestFlightId && flight.id !== fastestFlightId) {
       return { label: 'RECOMMENDED', icon: Sparkles, color: 'blue' };
     }
-    if (idx === 1 && flight.id !== cheapestFlightId && flight.id !== fastestFlightId) {
+    if (hasValidPrice && idx === 1 && flight.id !== cheapestFlightId && flight.id !== fastestFlightId) {
       return { label: 'BEST VALUE', icon: Star, color: 'blue' };
     }
     return null;
@@ -268,32 +292,41 @@ export default function TravelOptions({
   const smartPicks = useMemo(() => {
     if (flightList.length === 0) return null;
 
-    const cheapestFlight = [...flightList].sort((a, b) => getFlightPrice(a) - getFlightPrice(b))[0];
+    const validPricedFlights = flightList.filter(f => typeof f.price === 'number' && f.price > 0);
+    const cheapestFlight = validPricedFlights.length > 0
+      ? [...validPricedFlights].sort((a, b) => getFlightPrice(a) - getFlightPrice(b))[0]
+      : null;
     const fastestFlight = [...flightList].sort((a, b) => getDurationMinutes(a) - getDurationMinutes(b))[0];
-    const bestValueFlight = flightList[0];
+    const bestValueFlight = validPricedFlights.length > 0 ? validPricedFlights[0] : null;
 
     return {
-      bestValue: bestValueFlight ? {
+      bestValue: {
         title: 'Best value',
-        price: bestValueFlight.price,
-        currency: bestValueFlight.currency || 'INR',
-        duration: bestValueFlight.duration || '2h 50m',
-        flightId: bestValueFlight.id
-      } : null,
-      fastest: fastestFlight ? {
+        flight: bestValueFlight,
+        price: bestValueFlight ? bestValueFlight.price : null,
+        currency: bestValueFlight?.currency || 'INR',
+        duration: bestValueFlight?.duration || null,
+        flightId: bestValueFlight?.id || null,
+        available: Boolean(bestValueFlight && typeof bestValueFlight.price === 'number' && bestValueFlight.price > 0)
+      },
+      fastest: {
         title: 'Fastest',
-        price: fastestFlight.price,
-        currency: fastestFlight.currency || 'INR',
-        duration: fastestFlight.duration || '2h 35m',
-        flightId: fastestFlight.id
-      } : null,
-      cheapest: cheapestFlight ? {
+        flight: fastestFlight,
+        price: (typeof fastestFlight?.price === 'number' && fastestFlight.price > 0) ? fastestFlight.price : null,
+        currency: fastestFlight?.currency || 'INR',
+        duration: fastestFlight?.duration || '—',
+        flightId: fastestFlight?.id || null,
+        available: Boolean(fastestFlight)
+      },
+      cheapest: {
         title: 'Cheapest',
-        price: cheapestFlight.price,
-        currency: cheapestFlight.currency || 'INR',
-        duration: cheapestFlight.duration,
-        flightId: cheapestFlight.id
-      } : null
+        flight: cheapestFlight,
+        price: cheapestFlight ? cheapestFlight.price : null,
+        currency: cheapestFlight?.currency || 'INR',
+        duration: cheapestFlight?.duration || null,
+        flightId: cheapestFlight?.id || null,
+        available: Boolean(cheapestFlight && typeof cheapestFlight.price === 'number' && cheapestFlight.price > 0)
+      }
     };
   }, [flightList, getFlightPrice]);
 
@@ -668,20 +701,31 @@ export default function TravelOptions({
       </div>
 
       {/* 5. Max Price Slider */}
-      {maxRoutePrice > minRoutePrice && (
-        <div className="pt-3 border-t border-[#E7E5DF]">
-          <Slider
-            label="Max price"
-            min={minRoutePrice}
-            max={maxRoutePrice}
-            step={activeCurrency === 'INR' ? 500 : 10}
-            value={effectiveMaxPrice}
-            onChange={(val) => setMaxPriceFilter(val)}
-            formatValue={(val) => formatMoney(val, activeCurrency)}
-            showMinMax={true}
-          />
+      {hasPricedFlights ? (
+        maxRoutePrice > minRoutePrice ? (
+          <div className="pt-3 border-t border-[#E7E5DF]">
+            <Slider
+              label="Max price"
+              min={minRoutePrice}
+              max={maxRoutePrice}
+              step={activeCurrency === 'INR' ? 500 : 10}
+              value={effectiveMaxPrice}
+              onChange={(val) => setMaxPriceFilter(val)}
+              formatValue={(val) => formatMoney(val, activeCurrency)}
+              showMinMax={true}
+            />
+          </div>
+        ) : null
+      ) : flightList.length > 0 ? (
+        <div className="pt-3 border-t border-[#E7E5DF] space-y-1.5 opacity-60 cursor-not-allowed">
+          <label className="block text-xs font-semibold text-[#737885]">
+            Max price
+          </label>
+          <div className="text-[11px] text-slate-500 bg-slate-100/80 p-2.5 rounded-lg border border-slate-200/80">
+            Price filtering unavailable
+          </div>
         </div>
-      )}
+      ) : null}
 
     </div>
   );
@@ -732,26 +776,46 @@ export default function TravelOptions({
             Price insights <span className="sr-only">PRICE INSIGHTS</span>
           </span>
 
-          <div>
-            <div className="text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight">
-              {lowestFareFlight ? formatPrice(lowestFareFlight.price, lowestFareFlight.currency || 'INR') : 'Live fares available'}
-            </div>
-            {priceComparison ? (
-              <div className="flex items-center gap-1.5 text-xs text-[#1E9E6B] font-semibold mt-1">
-                <TrendingDown className="w-3.5 h-3.5 text-[#1E9E6B] shrink-0" />
-                <span>{priceComparison}% lower than the average fare for this route.</span>
+          {hasPricedFlights && lowestFareFlight ? (
+            <>
+              <div>
+                <div className="text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight">
+                  {formatPrice(lowestFareFlight.price, lowestFareFlight.currency || 'INR')}
+                </div>
+                {priceComparison ? (
+                  <div className="flex items-center gap-1.5 text-xs text-[#1E9E6B] font-semibold mt-1">
+                    <TrendingDown className="w-3.5 h-3.5 text-[#1E9E6B] shrink-0" />
+                    <span>{priceComparison}% lower than the average fare for this route.</span>
+                  </div>
+                ) : (
+                  <div className="text-xs text-[#737885] mt-1">
+                    Prices are dynamically queried for this route.
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="text-xs text-[#737885] mt-1">
-                Prices are dynamically queried for this route.
-              </div>
-            )}
-          </div>
 
-          <div className="pt-2 border-t border-[#E7E5DF] flex items-center gap-1.5 text-[11px] text-[#737885]">
-            <span className="w-2 h-2 rounded-full bg-[#1E9E6B] shrink-0" />
-            <span>Prices are currently typical or low for this route.</span>
-          </div>
+              <div className="pt-2 border-t border-[#E7E5DF] flex items-center gap-1.5 text-[11px] text-[#737885]">
+                <span className="w-2 h-2 rounded-full bg-[#1E9E6B] shrink-0" />
+                <span>Prices are currently typical or low for this route.</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <div className="text-sm font-semibold text-[#14171F] tracking-tight">
+                  Fare insights unavailable
+                </div>
+                <div className="text-xs text-[#737885] mt-1 leading-relaxed">
+                  Some airlines haven't provided comparable fares for these results.
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-[#E7E5DF] flex items-center gap-1.5 text-[11px] text-[#737885]">
+                <span className="w-2 h-2 rounded-full bg-slate-300 shrink-0" />
+                <span>Check airline booking links directly for current ticket pricing.</span>
+              </div>
+            </>
+          )}
         </Card>
 
         {/* Card 3: POPULAR TIMES */}
@@ -1051,59 +1115,97 @@ export default function TravelOptions({
                   <span>✨ Smart picks</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  {smartPicks.bestValue && (
-                    <button
-                      type="button"
-                      onClick={() => setSortBy('recommended')}
-                      className="p-3 rounded-lg bg-white border border-[#E7E5DF] border-t-[3px] border-t-[#2453FF] text-left hover:-translate-y-0.5 hover:shadow-xs transition-all duration-150 cursor-pointer"
-                    >
-                      <div className="text-xs font-semibold text-[#2453FF]">
-                        {smartPicks.bestValue.title}
-                      </div>
-                      <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
-                        {formatPrice(smartPicks.bestValue.price, smartPicks.bestValue.currency || 'INR')}
-                      </div>
-                      <div className="text-[10px] text-[#737885] font-mono">
-                        {smartPicks.bestValue.duration}
-                      </div>
-                    </button>
-                  )}
+                  {/* Best Value */}
+                  <div
+                    className={`p-3 rounded-lg bg-white border border-[#E7E5DF] border-t-[3px] border-t-[#2453FF] text-left transition-all duration-150 ${
+                      smartPicks.bestValue.available
+                        ? 'hover:-translate-y-0.5 hover:shadow-xs cursor-pointer'
+                        : 'opacity-85 cursor-default'
+                    }`}
+                    onClick={() => {
+                      if (smartPicks.bestValue.available) setSortBy('recommended');
+                    }}
+                    role={smartPicks.bestValue.available ? 'button' : undefined}
+                    tabIndex={smartPicks.bestValue.available ? 0 : undefined}
+                  >
+                    <div className="text-xs font-semibold text-[#2453FF]">
+                      {smartPicks.bestValue.title}
+                    </div>
+                    {smartPicks.bestValue.available ? (
+                      <>
+                        <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
+                          {formatPrice(smartPicks.bestValue.price, smartPicks.bestValue.currency || 'INR')}
+                        </div>
+                        <div className="text-[10px] text-[#737885] font-mono">
+                          {smartPicks.bestValue.duration || 'Optimal balance'}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-sm font-medium text-slate-500 mt-0.5">
+                          Unavailable
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          —
+                        </div>
+                      </>
+                    )}
+                  </div>
 
-                  {smartPicks.fastest && (
-                    <button
-                      type="button"
-                      onClick={() => setSortBy('duration')}
-                      className="p-3 rounded-lg bg-white border border-[#E7E5DF] border-t-[3px] border-t-[#1E9E6B] text-left hover:-translate-y-0.5 hover:shadow-xs transition-all duration-150 cursor-pointer"
-                    >
-                      <div className="text-xs font-semibold text-[#1E9E6B]">
-                        {smartPicks.fastest.title}
-                      </div>
-                      <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
-                        {formatPrice(smartPicks.fastest.price, smartPicks.fastest.currency || 'INR')}
-                      </div>
-                      <div className="text-[10px] text-[#737885] font-mono">
-                        {smartPicks.fastest.duration}
-                      </div>
-                    </button>
-                  )}
+                  {/* Fastest */}
+                  <div
+                    className="p-3 rounded-lg bg-white border border-[#E7E5DF] border-t-[3px] border-t-[#1E9E6B] text-left hover:-translate-y-0.5 hover:shadow-xs transition-all duration-150 cursor-pointer"
+                    onClick={() => setSortBy('duration')}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="text-xs font-semibold text-[#1E9E6B]">
+                      {smartPicks.fastest.title}
+                    </div>
+                    <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
+                      {smartPicks.fastest.duration}
+                    </div>
+                    <div className="text-[10px] text-[#737885] font-mono">
+                      {smartPicks.fastest.price ? formatPrice(smartPicks.fastest.price, smartPicks.fastest.currency || 'INR') : 'Valid'}
+                    </div>
+                  </div>
 
-                  {smartPicks.cheapest && (
-                    <button
-                      type="button"
-                      onClick={() => setSortBy('price')}
-                      className="p-3 rounded-lg bg-white border border-[#E7E5DF] border-t-[3px] border-t-[#E8A33D] text-left hover:-translate-y-0.5 hover:shadow-xs transition-all duration-150 cursor-pointer"
-                    >
-                      <div className="text-xs font-semibold text-[#E8A33D]">
-                        {smartPicks.cheapest.title}
-                      </div>
-                      <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
-                        {formatPrice(smartPicks.cheapest.price, smartPicks.cheapest.currency || 'INR')}
-                      </div>
-                      <div className="text-[10px] text-[#737885]">
-                        Lowest available
-                      </div>
-                    </button>
-                  )}
+                  {/* Cheapest */}
+                  <div
+                    className={`p-3 rounded-lg bg-white border border-[#E7E5DF] border-t-[3px] border-t-[#E8A33D] text-left transition-all duration-150 ${
+                      smartPicks.cheapest.available
+                        ? 'hover:-translate-y-0.5 hover:shadow-xs cursor-pointer'
+                        : 'opacity-85 cursor-default'
+                    }`}
+                    onClick={() => {
+                      if (smartPicks.cheapest.available) setSortBy('price');
+                    }}
+                    role={smartPicks.cheapest.available ? 'button' : undefined}
+                    tabIndex={smartPicks.cheapest.available ? 0 : undefined}
+                  >
+                    <div className="text-xs font-semibold text-[#E8A33D]">
+                      {smartPicks.cheapest.title}
+                    </div>
+                    {smartPicks.cheapest.available ? (
+                      <>
+                        <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
+                          {formatPrice(smartPicks.cheapest.price, smartPicks.cheapest.currency || 'INR')}
+                        </div>
+                        <div className="text-[10px] text-[#737885]">
+                          Lowest available
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-sm font-medium text-slate-500 mt-0.5">
+                          Fare unavailable
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          —
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -1179,16 +1281,16 @@ export default function TravelOptions({
                   return (
                     <Card
                       key={flight.id || idx}
-                      className={`p-4 sm:p-5 transition-all duration-150 bg-white border rounded-xl relative ${
+                      className={`p-4 sm:p-5 transition-all duration-200 ease-in-out border rounded-xl relative ${
                         isSelected 
-                          ? 'border-[#2453FF] ring-2 ring-[#2453FF]/20 shadow-xs' 
-                          : 'border-[#E7E5DF] hover:border-[#2453FF]/40 hover:shadow-xs'
+                          ? 'border-[#2453FF] ring-2 ring-[#2453FF]/25 bg-blue-50/25 shadow-sm' 
+                          : 'border-[#E7E5DF] bg-white hover:border-[#2453FF]/40 hover:shadow-2xs'
                       }`}
                     >
-                      {/* Top Micro-Badges Bar: Semantic Recommendation + Live Verification (unobtrusive) */}
-                      {(badgeMeta || isLive) && (
+                      {/* Top Micro-Badges Bar: Semantic Recommendation + Selected State + Live Verification */}
+                      {(badgeMeta || isSelected || isLive) && (
                         <div className="flex items-center justify-between gap-2 pb-2.5 mb-3 border-b border-[#E7E5DF]">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {badgeMeta && (
                               <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[10px] font-bold tracking-wide uppercase font-mono border ${
                                 badgeMeta.color === 'emerald'
@@ -1199,6 +1301,13 @@ export default function TravelOptions({
                               }`}>
                                 {badgeMeta.icon && <badgeMeta.icon className="w-3 h-3 shrink-0" />}
                                 <span>{badgeMeta.label}</span>
+                              </span>
+                            )}
+
+                            {isSelected && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[10px] font-bold tracking-wide uppercase font-mono border bg-[#2453FF]/10 text-[#2453FF] border-[#2453FF]/30">
+                                <Check className="w-3 h-3 shrink-0 text-[#2453FF]" />
+                                <span>SELECTED</span>
                               </span>
                             )}
                           </div>
@@ -1310,13 +1419,25 @@ export default function TravelOptions({
 
                         {/* 3. Price Region (sm:col-span-3 text-right) */}
                         <div className="sm:col-span-3 text-left sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-[#E7E5DF]">
-                          <div className="text-xl sm:text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight whitespace-nowrap">
-                            {/* formatPrice(flight.price) source-currency aware */}
-                            {formatPrice(flight.price, flight.currency || 'INR')}
-                          </div>
-                          <span className="text-[10px] text-[#737885] uppercase tracking-wider font-semibold block mt-0.5">
-                            / traveler
-                          </span>
+                          {typeof flight.price === 'number' && flight.price > 0 ? (
+                            <>
+                              <div className="text-xl sm:text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight whitespace-nowrap">
+                                {formatPrice(flight.price, flight.currency || 'INR')}
+                              </div>
+                              <span className="text-[10px] text-[#737885] uppercase tracking-wider font-semibold block mt-0.5">
+                                / traveler
+                              </span>
+                            </>
+                          ) : (
+                            <div className="space-y-0.5">
+                              <div className="text-sm sm:text-base font-semibold text-slate-600 tracking-tight whitespace-nowrap">
+                                Fare unavailable
+                              </div>
+                              <span className="text-[11px] text-slate-400 font-medium block">
+                                Check airline
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                       </div>
@@ -1327,19 +1448,19 @@ export default function TravelOptions({
                           variant={isSelected ? 'primary' : 'outline'}
                           size="md"
                           onClick={() => handleSelectFlight(flight)}
-                          className={`cursor-pointer font-bold px-4 sm:px-5 rounded-lg shadow-xs transition-all whitespace-nowrap shrink-0 min-w-[140px] h-10 inline-flex items-center justify-center ${
+                          className={`cursor-pointer font-bold px-4 sm:px-5 rounded-lg shadow-xs transition-all duration-150 ease-in-out whitespace-nowrap shrink-0 min-w-[140px] h-10 inline-flex items-center justify-center ${
                             isSelected
                               ? 'bg-[#2453FF] hover:bg-[#1A3ECC] text-white border-transparent'
                               : 'border-[#2453FF] text-[#2453FF] hover:bg-[#2453FF]/8'
                           }`}
                         >
                           {isSelected ? (
-                            <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
-                              <Check className="w-4 h-4 shrink-0" />
+                            <span className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
+                              <Check className="w-4 h-4 shrink-0 text-white" />
                               <span>Selected</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center justify-center gap-2 whitespace-nowrap">
+                            <span className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap">
                               <span>Select Flight →</span>
                               <span className="sr-only">Select →</span>
                             </span>

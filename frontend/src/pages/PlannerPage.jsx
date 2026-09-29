@@ -27,10 +27,13 @@ import { searchFlights } from '../services/flightService';
  * Atomically merges live flight offers into a trip object,
  * recalculating flightCost and budgetDetails.
  */
-function mergeFlightOffersIntoTrip(trip, offers) {
+function mergeFlightOffersIntoTrip(trip, offers, selectedOffer = null) {
   if (!trip) return trip;
   const safeOffers = Array.isArray(offers) ? offers : [];
-  const realFlightCost = safeOffers.length > 0 ? safeOffers[0].price : trip.costComponents?.flightCost;
+  const chosenOffer = selectedOffer || trip.selectedFlight || safeOffers[0] || null;
+  const chosenPrice = typeof chosenOffer?.price === 'number' && chosenOffer.price > 0 ? chosenOffer.price : null;
+  const validPricedOffer = safeOffers.find(f => typeof f?.price === 'number' && f.price > 0);
+  const realFlightCost = chosenPrice !== null ? chosenPrice : (validPricedOffer ? validPricedOffer.price : trip.costComponents?.flightCost);
   const updatedCostComponents = trip.costComponents ? {
     ...trip.costComponents,
     flightCost: realFlightCost
@@ -41,6 +44,7 @@ function mergeFlightOffersIntoTrip(trip, offers) {
 
   return {
     ...trip,
+    selectedFlight: chosenOffer,
     costComponents: updatedCostComponents,
     budgetDetails: updatedBudget,
     options: {
@@ -612,42 +616,153 @@ export default function PlannerPage() {
     );
   }
 
-  const handleApplyAIPrompt = (promptText) => {
+  const handleApplyAIPrompt = (payload) => {
+    const promptText = typeof payload === 'string' ? payload : (payload?.promptText || '');
+    const currentValues = (typeof payload === 'object' && payload?.currentValues) ? payload.currentValues : {};
+
     const lower = promptText.toLowerCase();
     const now = new Date();
     const formatYMD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    
-    const dep = new Date(now);
-    dep.setDate(now.getDate() + 7);
-    const ret = new Date(dep);
-    ret.setDate(dep.getDate() + 4);
 
-    let f = 'Bengaluru';
-    let t = 'Goa';
-    let b = 45000;
+    // 1. Route resolution: extract origin and destination
+    let extractedOrigin = '';
+    let extractedDestination = '';
 
-    if (lower.includes('jaipur') || lower.includes('rajasthan')) {
-      f = 'Delhi';
-      t = 'Jaipur';
-      b = 30000;
-    } else if (lower.includes('manali') || lower.includes('himachal')) {
-      f = 'Delhi';
-      t = 'Chandigarh';
-      b = 40000;
-    } else if (lower.includes('kerala') || lower.includes('kochi')) {
-      f = 'Bengaluru';
-      t = 'Kochi';
-      b = 35000;
+    // Check for "from X to Y" (e.g. "from Bangalore to Jaipur")
+    const fromToMatch = promptText.match(/\bfrom\s+([A-Za-z\s]+?)\s+to\s+([A-Za-z\s]+?)(?=\s+(?:for|with|in|on|departing|under|budget|travelers|\d)|$|[.,!?])/i);
+    // Check for "X to Y" (e.g. "Bangalore to Jaipur")
+    const toMatch = promptText.match(/\b([A-Za-z]+)\s+to\s+([A-Za-z]+)\b/i);
+
+    if (fromToMatch && fromToMatch[1] && fromToMatch[2]) {
+      extractedOrigin = fromToMatch[1].trim();
+      extractedDestination = fromToMatch[2].trim();
+    } else if (toMatch && toMatch[1] && toMatch[2]) {
+      const candidateOrigin = toMatch[1].trim();
+      const candidateDest = toMatch[2].trim();
+      const skipWords = ['trip', 'getaway', 'vacation', 'holiday', 'tour', 'welcome', 'go', 'travel', 'plan'];
+      if (!skipWords.includes(candidateOrigin.toLowerCase())) {
+        extractedOrigin = candidateOrigin;
+        extractedDestination = candidateDest;
+      } else {
+        extractedDestination = candidateDest;
+      }
+    }
+
+    // Direct destination keywords check if no destination extracted yet
+    if (!extractedDestination) {
+      const knownDestinations = [
+        { key: 'jaipur', name: 'Jaipur' },
+        { key: 'rajasthan', name: 'Jaipur' },
+        { key: 'goa', name: 'Goa' },
+        { key: 'manali', name: 'Manali' },
+        { key: 'himachal', name: 'Manali' },
+        { key: 'chandigarh', name: 'Chandigarh' },
+        { key: 'kochi', name: 'Kochi' },
+        { key: 'kerala', name: 'Kochi' },
+        { key: 'mumbai', name: 'Mumbai' },
+        { key: 'delhi', name: 'Delhi' },
+        { key: 'bengaluru', name: 'Bengaluru' },
+        { key: 'bangalore', name: 'Bangalore' },
+        { key: 'chennai', name: 'Chennai' },
+        { key: 'kolkata', name: 'Kolkata' },
+        { key: 'hyderabad', name: 'Hyderabad' },
+        { key: 'agra', name: 'Agra' },
+        { key: 'shimla', name: 'Shimla' },
+        { key: 'udaipur', name: 'Udaipur' }
+      ];
+      for (const dest of knownDestinations) {
+        if (lower.includes(dest.key)) {
+          extractedDestination = dest.name;
+          break;
+        }
+      }
+    }
+
+    // Route precedence:
+    // 1. Explicit origin + destination in prompt
+    // 2. Prompt destination + existing structured origin
+    // 3. Prompt is about style/budget only -> preserve existing structured origin/destination
+    // 4. Prompt has destination but no origin and structured origin is empty -> leave origin empty (''), never invent Delhi
+    const existingOrigin = (currentValues.from || activeTrip?.from || '').trim();
+    const existingDest = (currentValues.to || activeTrip?.to || '').trim();
+
+    let finalOrigin = '';
+    let finalDestination = '';
+
+    if (extractedOrigin && extractedDestination) {
+      finalOrigin = extractedOrigin;
+      finalDestination = extractedDestination;
+    } else if (extractedDestination) {
+      finalDestination = extractedDestination;
+      finalOrigin = existingOrigin || '';
+    } else {
+      finalOrigin = existingOrigin || '';
+      finalDestination = existingDest || '';
+    }
+
+    // 2. Budget extraction (preserve existing if not mentioned in prompt)
+    let finalBudget = currentValues.budget || activeTrip?.budget;
+    const budgetMatch = promptText.match(/(?:₹|inr|rs\.?|budget\s*(?:of)?|under)\s*([0-9,]+)/i);
+    if (budgetMatch && budgetMatch[1]) {
+      const parsedBudget = parseInt(budgetMatch[1].replace(/,/g, ''), 10);
+      if (!isNaN(parsedBudget) && parsedBudget > 0) {
+        finalBudget = parsedBudget;
+      }
+    }
+    if (!finalBudget) {
+      finalBudget = 30000;
+    }
+
+    // 3. Travelers extraction (preserve existing if not mentioned in prompt)
+    let finalTravelers = currentValues.travelers || activeTrip?.travelers;
+    const travelersMatch = promptText.match(/(\d+)\s*(?:travelers|traveler|travellers|traveller|people|adults|persons|person)/i);
+    if (travelersMatch && travelersMatch[1]) {
+      finalTravelers = parseInt(travelersMatch[1], 10);
+    } else if (lower.includes('couple')) {
+      finalTravelers = 2;
+    } else if (lower.includes('solo')) {
+      finalTravelers = 1;
+    }
+    if (!finalTravelers) {
+      finalTravelers = 2;
+    }
+
+    // 4. Dates extraction (preserve existing if present)
+    let finalDate = currentValues.date || activeTrip?.date;
+    let finalReturnDate = currentValues.returnDate || activeTrip?.returnDate;
+
+    if (!finalDate) {
+      const dep = new Date(now);
+      dep.setDate(now.getDate() + 7);
+      finalDate = formatYMD(dep);
+
+      const durationMatch = promptText.match(/(\d+)[ -]day/i);
+      const days = durationMatch ? Math.max(1, parseInt(durationMatch[1], 10)) : 4;
+      const ret = new Date(dep);
+      ret.setDate(dep.getDate() + days);
+      finalReturnDate = formatYMD(ret);
+    }
+
+    // 5. Preferred mode extraction (preserve existing if present)
+    let finalMode = currentValues.preferredMode || activeTrip?.transportMode || 'flight';
+    if (lower.includes('road trip') || lower.includes('drive') || lower.includes('car')) {
+      finalMode = 'own';
+    } else if (lower.includes('train')) {
+      finalMode = 'train';
+    } else if (lower.includes('bus')) {
+      finalMode = 'bus';
+    } else if (lower.includes('flight') || lower.includes('fly')) {
+      finalMode = 'flight';
     }
 
     setSuggestedValues({
-      from: f,
-      to: t,
-      date: formatYMD(dep),
-      returnDate: formatYMD(ret),
-      travelers: 2,
-      budget: b,
-      preferredMode: 'flight'
+      from: finalOrigin,
+      to: finalDestination,
+      date: finalDate,
+      returnDate: finalReturnDate || '',
+      travelers: finalTravelers,
+      budget: finalBudget,
+      preferredMode: finalMode
     });
     window.scrollTo({ top: 100, behavior: 'smooth' });
   };
@@ -959,15 +1074,15 @@ export default function PlannerPage() {
                   }
                 }}
                 suggestions={activeTrip.suggestions}
+                selectedFlightOffer={activeTrip?.selectedFlight || null}
                 onSelectFlightOffer={(offer) => {
                   setActiveTrip(prev => {
                     if (!prev) return prev;
-                    const remainingOffers = (prev.options?.flight || []).filter(f => f !== offer);
-                    const updated = mergeFlightOffersIntoTrip(prev, [offer, ...remainingOffers]);
+                    const existingOffers = prev.options?.flight || [];
+                    const updated = mergeFlightOffersIntoTrip(prev, existingOffers, offer);
                     storage.setJSON('activePlan', updated);
                     return updated;
                   });
-                  setActiveView('overview');
                 }}
                 onSelectTrainOffer={(train) => {
                   handleSelectMode('train');
@@ -977,7 +1092,6 @@ export default function PlannerPage() {
                     storage.setJSON('activePlan', updated);
                     return updated;
                   });
-                  setActiveView('overview');
                 }}
                 onSelectBusOffer={(bus) => {
                   handleSelectMode('bus');
@@ -987,7 +1101,6 @@ export default function PlannerPage() {
                     storage.setJSON('activePlan', updated);
                     return updated;
                   });
-                  setActiveView('overview');
                 }}
               >
                 <RoadTripDetails

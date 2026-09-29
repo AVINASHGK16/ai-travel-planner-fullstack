@@ -68,7 +68,7 @@ export default function HomePage() {
       <div className="relative z-10 w-full max-w-[1180px]">
         <TripConfigurationCard 
           onSearch={handleSearch} 
-          onApplyPrompt={handleApplyAIPrompt}
+          onApplyAIPrompt={handleApplyAIPrompt}
           loading={false} 
         />
       </div>

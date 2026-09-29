@@ -84,8 +84,12 @@ export const normalizeDuffelOffer = (offer) => {
     .filter(b => b.type === 'carry_on')
     .reduce((sum, b) => sum + (Number(b.quantity) || 1), 0);
 
-  const priceParsed = parseFloat(offer.total_amount || '0');
-  const price = isNaN(priceParsed) ? 0 : Math.round(priceParsed);
+  const rawAmount = offer.total_amount;
+  let price = null;
+  if (rawAmount !== undefined && rawAmount !== null && rawAmount !== '') {
+    const priceParsed = parseFloat(rawAmount);
+    price = (!isNaN(priceParsed) && priceParsed > 0) ? Math.round(priceParsed) : null;
+  }
 
   const carrierCode = offer.owner?.iata_code || firstSegment?.marketing_carrier?.iata_code || 'ZZ';
   const flightNum = firstSegment?.marketing_carrier_flight_number

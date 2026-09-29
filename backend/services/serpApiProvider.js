@@ -65,12 +65,12 @@ export const normalizeSerpApiOffer = (item, index = 0, cabin = 'economy') => {
   const lastLeg = legs[legs.length - 1] || firstLeg;
 
   const rawPrice = item.price;
-  let price = 0;
-  if (typeof rawPrice === 'number' && !isNaN(rawPrice)) {
+  let price = null;
+  if (typeof rawPrice === 'number' && !isNaN(rawPrice) && rawPrice > 0) {
     price = Math.round(rawPrice);
   } else if (typeof rawPrice === 'string') {
     const parsed = parseInt(rawPrice.replace(/[^\d]/g, ''), 10);
-    price = isNaN(parsed) ? 0 : parsed;
+    price = isNaN(parsed) || parsed <= 0 ? null : parsed;
   }
 
   const durationMinutes = Number(item.total_duration || firstLeg.duration) || 0;
