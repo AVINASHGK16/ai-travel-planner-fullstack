@@ -33,6 +33,24 @@ export const createTrip = async (tripData, token, signal = null) => {
 };
 
 /**
+ * Update an existing saved trip by ID for the authenticated user
+ * @param {string} tripId - The trip ID to update
+ * @param {Object} tripData - Trip payload
+ * @param {string} token - JWT authentication token
+ * @param {AbortSignal} [signal] - Optional cancellation signal
+ * @returns {Promise<{ ok: boolean, status: number, data: any }>}
+ */
+export const updateTrip = async (tripId, tripData, token, signal = null) => {
+  return await request(`/api/trips/${tripId}`, {
+    method: 'PUT',
+    body: tripData,
+    token,
+    signal,
+    timeoutMs: 8000
+  });
+};
+
+/**
  * Delete a trip by ID for the authenticated user
  * @param {string} tripId - The trip ID to delete
  * @param {string} token - JWT authentication token
@@ -57,6 +75,7 @@ export const saveTrip = createTrip;
 const tripService = {
   getTrips,
   createTrip,
+  updateTrip,
   deleteTrip,
   fetchTrips,
   saveTrip

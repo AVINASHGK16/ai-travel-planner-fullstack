@@ -263,25 +263,43 @@ Here is their current trip context:
 
 Answer the user's question accurately, offering safety tips, restaurant choices, budget tips, packing checklists, or route details when relevant. Keep your answer brief, concise, and beautifully formatted in markdown.`;
 
-  const contents = [
-    { parts: [{ text: systemPrompt }] }
-  ];
+  const contents = [];
 
   if (Array.isArray(chatHistory)) {
     chatHistory.slice(-20).forEach(msg => {
-      if (msg.text && msg.sender) {
-        contents.push({
-          role: msg.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: sanitize(msg.text, 2000) }]
-        });
+      if (msg && typeof msg === 'object') {
+        const text = sanitize(msg.text, 2000);
+        if (text) {
+          const role = (msg.sender === 'model' || msg.sender === 'assistant') ? 'model' : 'user';
+          if (contents.length > 0 && contents[contents.length - 1].role === role) {
+            contents[contents.length - 1].parts[0].text += `\n${text}`;
+          } else {
+            contents.push({
+              role,
+              parts: [{ text }]
+            });
+          }
+        }
       }
     });
   }
 
-  contents.push({
-    role: 'user',
-    parts: [{ text: sanitizedMessage }]
-  });
+  // The latest turn must be from the user
+  if (contents.length > 0 && contents[contents.length - 1].role === 'user') {
+    contents[contents.length - 1].parts[0].text += `\n${sanitizedMessage}`;
+  } else {
+    contents.push({
+      role: 'user',
+      parts: [{ text: sanitizedMessage }]
+    });
+  }
+
+  const requestPayload = {
+    system_instruction: {
+      parts: [{ text: systemPrompt }]
+    },
+    contents
+  };
 
   try {
     let lastError = null;
@@ -293,7 +311,7 @@ Answer the user's question accurately, offering safety tips, restaurant choices,
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents }),
+          body: JSON.stringify(requestPayload),
           signal: AbortSignal.timeout(10000)
         });
 

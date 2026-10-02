@@ -19,7 +19,7 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { generateMockData, getAIGeneration, resolveTripGeography, calculateModeBudget } from '../utils/planner';
 import { useAuth } from '../context/AuthContext';
 import { storage, isValidTripsArray } from '../utils/storage';
-import { createTrip } from '../services/tripService';
+import { createTrip, updateTrip } from '../services/tripService';
 import { useTrip } from '../hooks/useTrip';
 import { searchFlights } from '../services/flightService';
 
@@ -30,7 +30,10 @@ import { searchFlights } from '../services/flightService';
 function mergeFlightOffersIntoTrip(trip, offers, selectedOffer = null) {
   if (!trip) return trip;
   const safeOffers = Array.isArray(offers) ? offers : [];
-  const chosenOffer = selectedOffer || trip.selectedFlight || safeOffers[0] || null;
+  const matchedExistingOffer = trip.selectedFlight?.id
+    ? safeOffers.find(f => f.id === trip.selectedFlight.id)
+    : null;
+  const chosenOffer = selectedOffer || matchedExistingOffer || safeOffers[0] || null;
   const chosenPrice = typeof chosenOffer?.price === 'number' && chosenOffer.price > 0 ? chosenOffer.price : null;
   const validPricedOffer = safeOffers.find(f => typeof f?.price === 'number' && f.price > 0);
   const realFlightCost = chosenPrice !== null ? chosenPrice : (validPricedOffer ? validPricedOffer.price : trip.costComponents?.flightCost);
@@ -124,7 +127,7 @@ export default function PlannerPage() {
 
   const searchControllerRef = useRef(null);
   const flightControllerRef = useRef(null);
-  const flightRequestIdRef = useRef(0);
+  const activeSearchIdRef = useRef(0);
   const latestFlightResultRef = useRef({ requestId: 0, offers: null, status: null, provider: null });
 
   // Sync resolved trip from route parameter /plan/:tripId
@@ -143,16 +146,26 @@ export default function PlannerPage() {
   useEffect(() => {
     const searchParams = location.state?.searchParams;
     if (!tripId && searchParams) {
-      handleSearch(searchParams);
+      const searchController = new AbortController();
+      const flightController = new AbortController();
+
+      handleSearch(searchParams, { searchController, flightController });
+
+      return () => {
+        // Abort ONLY the controllers owned by this specific effect invocation
+        searchController.abort();
+        flightController.abort();
+
+        // Safely clear refs ONLY if they still point to this specific effect's controllers
+        if (searchControllerRef.current === searchController) {
+          searchControllerRef.current = null;
+        }
+        if (flightControllerRef.current === flightController) {
+          flightControllerRef.current = null;
+        }
+      };
     }
-    return () => {
-      if (searchControllerRef.current) {
-        searchControllerRef.current.abort();
-      }
-      if (flightControllerRef.current) {
-        flightControllerRef.current.abort();
-      }
-    };
+    return undefined;
   }, [location.state, tripId]);
 
   const handleSelectMode = (newMode) => {
@@ -170,15 +183,28 @@ export default function PlannerPage() {
     });
   };
 
-  const handleSearch = async (params) => {
+  const handleSearch = async (params, customControllers = null) => {
+    // If user begins a new search while on a saved-trip route (/plan/:tripId),
+    // detach from the old saved trip and transition route to /plan
+    if (tripId) {
+      navigate('/plan', { replace: true, state: { searchParams: params } });
+      return;
+    }
+
+    const currentSearchId = ++activeSearchIdRef.current;
+
     if (searchControllerRef.current) {
       searchControllerRef.current.abort();
     }
     if (flightControllerRef.current) {
       flightControllerRef.current.abort();
     }
-    const controller = new AbortController();
-    searchControllerRef.current = controller;
+
+    const searchController = customControllers?.searchController || new AbortController();
+    const flightController = customControllers?.flightController || new AbortController();
+
+    searchControllerRef.current = searchController;
+    flightControllerRef.current = flightController;
 
     setLoading(true);
     setFlightStatus('loading');
@@ -191,9 +217,14 @@ export default function PlannerPage() {
       // 1. Authoritative Geocoding & Route Calculation
       let geoData = null;
       try {
-        geoData = await resolveTripGeography(params.from, params.to, controller.signal);
+        geoData = await resolveTripGeography(params.from, params.to, searchController.signal);
       } catch (geoErr) {
-        if (controller.signal.aborted) return;
+        if (activeSearchIdRef.current !== currentSearchId) return;
+        if (searchController.signal.aborted) {
+          setFlightLoading(false);
+          setFlightStatus('idle');
+          return;
+        }
         setSearchError(geoErr.message || 'Geographic location could not be resolved. Please verify city spelling.');
         setLoading(false);
         setFlightLoading(false);
@@ -201,7 +232,12 @@ export default function PlannerPage() {
         return;
       }
 
-      if (controller.signal.aborted) return;
+      if (activeSearchIdRef.current !== currentSearchId) return;
+      if (searchController.signal.aborted) {
+        setFlightLoading(false);
+        setFlightStatus('idle');
+        return;
+      }
 
       const { routeDetails } = geoData;
       const canFly = (routeDetails?.distanceKm || 0) >= 200;
@@ -225,17 +261,16 @@ export default function PlannerPage() {
         geoData
       );
 
+      if (activeSearchIdRef.current !== currentSearchId) return;
+
       // Initialize the baseline trip with baselineMock before launching asynchronous flight/AI requests
       setActiveTrip(baselineMock);
       storage.setJSON('activePlan', baselineMock);
 
       // 3. Initiate provider-backed flight search if corridor supports commercial flights (>= 200 km)
-      const currentFlightRequestId = ++flightRequestIdRef.current;
-      latestFlightResultRef.current = { requestId: currentFlightRequestId, offers: null, status: null, provider: null };
+      latestFlightResultRef.current = { requestId: currentSearchId, offers: null, status: null, provider: null };
 
       if (canFly) {
-        const flightController = new AbortController();
-        flightControllerRef.current = flightController;
         setFlightLoading(true);
         setFlightStatus('loading');
         setFlightError(null);
@@ -254,19 +289,21 @@ export default function PlannerPage() {
           allowEstimate: false
         }, flightController.signal)
           .then(res => {
+            if (activeSearchIdRef.current !== currentSearchId) return;
             if (flightController.signal.aborted) return;
-            if (flightRequestIdRef.current !== currentFlightRequestId) return;
+
             const offers = Array.isArray(res?.offers) ? res.offers : [];
             const newStatus = offers.length > 0 ? 'success' : 'empty';
+
             latestFlightResultRef.current = {
-              requestId: currentFlightRequestId,
+              requestId: currentSearchId,
               offers,
               status: res?.status || (offers.length > 0 ? 'CONFIRMED_OFFERS' : 'NO_FLIGHTS_FOUND'),
               provider: res?.provider || 'SerpApi'
             };
 
             setActiveTrip(prev => {
-              if (flightRequestIdRef.current !== currentFlightRequestId) return prev;
+              if (activeSearchIdRef.current !== currentSearchId) return prev;
               const targetTrip = prev || baselineMock;
               const updated = mergeFlightOffersIntoTrip(targetTrip, offers);
               storage.setJSON('activePlan', updated);
@@ -276,16 +313,20 @@ export default function PlannerPage() {
             setFlightStatus(newStatus);
           })
           .catch(err => {
-            if (flightController.signal.aborted) return;
-            if (flightRequestIdRef.current !== currentFlightRequestId) return;
+            if (activeSearchIdRef.current !== currentSearchId) return;
+            if (flightController.signal.aborted) {
+              setFlightLoading(false);
+              setFlightStatus('idle');
+              return;
+            }
+
             console.warn('Flight provider query warning:', err?.message || err);
             setFlightError(err?.message || 'Could not retrieve live flight offers.');
             setFlightLoading(false);
             setFlightStatus('error');
 
-            // Explicitly mark provider-error state
             latestFlightResultRef.current = {
-              requestId: currentFlightRequestId,
+              requestId: currentSearchId,
               offers: [],
               status: 'PROVIDER_ERROR',
               provider: 'SerpApi'
@@ -298,7 +339,7 @@ export default function PlannerPage() {
 
             // Ensure activeTrip does not retain generated flight offers
             setActiveTrip(prev => {
-              if (!prev || flightRequestIdRef.current !== currentFlightRequestId) return prev;
+              if (!prev || activeSearchIdRef.current !== currentSearchId) return prev;
               const updated = {
                 ...prev,
                 options: {
@@ -335,9 +376,11 @@ export default function PlannerPage() {
           travelers: params.travelers,
           budget: params.budget,
           preferredMode: effectiveMode
-        }, controller.signal);
+        }, searchController.signal);
 
-        if (!controller.signal.aborted && aiResult && Array.isArray(aiResult.itinerary) && aiResult.itinerary.length > 0) {
+        if (activeSearchIdRef.current !== currentSearchId) return;
+
+        if (!searchController.signal.aborted && aiResult && Array.isArray(aiResult.itinerary) && aiResult.itinerary.length > 0) {
           console.log('[Roamly Planner] AI generation successful. Source:', aiResult.source || 'ai', 'Days:', aiResult.itinerary.length);
           aiEnrichedTrip = {
             ...baselineMock,
@@ -347,7 +390,7 @@ export default function PlannerPage() {
             source: 'ai',
             generationNotice: null
           };
-        } else if (!controller.signal.aborted && aiResult?.isFallback) {
+        } else if (!searchController.signal.aborted && aiResult?.isFallback) {
           console.warn('[Roamly Planner] AI returned fallback flag:', aiResult.message);
           aiEnrichedTrip = {
             ...baselineMock,
@@ -357,7 +400,8 @@ export default function PlannerPage() {
           };
         }
       } catch (aiErr) {
-        if (controller.signal.aborted) return;
+        if (activeSearchIdRef.current !== currentSearchId) return;
+        if (searchController.signal.aborted) return;
         console.warn('[Roamly Planner] AI Itinerary enrichment unavailable:', aiErr.message);
 
         let notice = 'AI service temporarily unavailable';
@@ -382,7 +426,8 @@ export default function PlannerPage() {
         };
       }
 
-      if (controller.signal.aborted) return;
+      if (activeSearchIdRef.current !== currentSearchId) return;
+      if (searchController.signal.aborted) return;
 
       // Attach any resolved flight results if already arrived
       if (latestFlightResultRef.current.offers && latestFlightResultRef.current.status !== 'PROVIDER_ERROR') {
@@ -402,10 +447,17 @@ export default function PlannerPage() {
       setLoading(false);
 
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (activeSearchIdRef.current !== currentSearchId) return;
+      if (searchController.signal.aborted) {
+        setFlightLoading(false);
+        setFlightStatus('idle');
+        return;
+      }
       console.error('Plan calculation error:', err);
       setSearchError('An unexpected error occurred while calculating your itinerary. Please try again.');
       setLoading(false);
+      setFlightLoading(false);
+      setFlightStatus('idle');
     }
   };
 
@@ -436,35 +488,42 @@ export default function PlannerPage() {
     }
 
     const localTrips = storage.getJSON('savedTrips', [], isValidTripsArray);
-    const alreadySaved = localTrips.some(
-      t => t?.from === activeTrip.from && t?.to === activeTrip.to && t?.date === activeTrip.date
-    );
-
-    if (alreadySaved) {
-      showNotification('info', 'This trip plan is already saved in your dashboard history.');
-      return;
-    }
-
     const tripToSave = {
       ...activeTrip,
       transportMode: activeMode,
       userEmail: activeUser.email
     };
 
+    const isServerTrip = Boolean(activeTrip._id && !String(activeTrip._id).startsWith('local_'));
+
     setSavingTrip(true);
     try {
-      const response = await createTrip(tripToSave, activeToken);
+      let response;
+      if (isServerTrip) {
+        response = await updateTrip(activeTrip._id, tripToSave, activeToken);
+      } else {
+        response = await createTrip(tripToSave, activeToken);
+      }
 
       if (response.ok) {
         const savedData = response.data;
-        const effectiveTrip = savedData || { ...tripToSave, _id: `trip_${Date.now()}` };
-        storage.setJSON('savedTrips', [effectiveTrip, ...localTrips]);
-        setActiveTrip(prev => {
-          const updated = { ...prev, _id: effectiveTrip._id };
-          storage.setJSON('activePlan', updated);
-          return updated;
-        });
-        showNotification('success', 'Trip itinerary successfully saved to your dashboard!');
+        if (isServerTrip) {
+          const effectiveTrip = savedData || tripToSave;
+          const updatedTrips = localTrips.map(t => (t?._id === activeTrip._id || t?.id === activeTrip._id ? effectiveTrip : t));
+          storage.setJSON('savedTrips', updatedTrips);
+          setActiveTrip(effectiveTrip);
+          storage.setJSON('activePlan', effectiveTrip);
+          showNotification('success', 'Trip itinerary successfully updated!');
+        } else {
+          const effectiveTrip = savedData || { ...tripToSave, _id: `trip_${Date.now()}` };
+          storage.setJSON('savedTrips', [effectiveTrip, ...localTrips]);
+          setActiveTrip(prev => {
+            const updated = { ...prev, _id: effectiveTrip._id };
+            storage.setJSON('activePlan', updated);
+            return updated;
+          });
+          showNotification('success', 'Trip itinerary successfully saved to your dashboard!');
+        }
         return;
       }
 
@@ -493,18 +552,32 @@ export default function PlannerPage() {
       throw new Error(`Server returned status ${response.status}`);
     } catch (err) {
       console.warn('Backend unavailable, saving trip locally:', err.message);
-      const localSavedTrip = {
-        ...tripToSave,
-        _id: `local_${Date.now()}`,
-        createdAt: new Date().toISOString()
-      };
-      storage.setJSON('savedTrips', [localSavedTrip, ...localTrips]);
-      setActiveTrip(prev => {
-        const updated = { ...prev, _id: localSavedTrip._id };
-        storage.setJSON('activePlan', updated);
-        return updated;
-      });
-      showNotification('info', 'Trip itinerary saved locally (Offline Mode).');
+      if (activeTrip._id) {
+        // Update existing trip locally
+        const localSavedTrip = {
+          ...tripToSave,
+          _id: activeTrip._id,
+          updatedAt: new Date().toISOString()
+        };
+        const updatedTrips = localTrips.map(t => (t?._id === activeTrip._id || t?.id === activeTrip._id ? localSavedTrip : t));
+        storage.setJSON('savedTrips', updatedTrips);
+        setActiveTrip(localSavedTrip);
+        storage.setJSON('activePlan', localSavedTrip);
+        showNotification('info', 'Trip itinerary updated locally (Offline Mode).');
+      } else {
+        const localSavedTrip = {
+          ...tripToSave,
+          _id: `local_${Date.now()}`,
+          createdAt: new Date().toISOString()
+        };
+        storage.setJSON('savedTrips', [localSavedTrip, ...localTrips]);
+        setActiveTrip(prev => {
+          const updated = { ...prev, _id: localSavedTrip._id };
+          storage.setJSON('activePlan', updated);
+          return updated;
+        });
+        showNotification('info', 'Trip itinerary saved locally (Offline Mode).');
+      }
     } finally {
       setSavingTrip(false);
     }
@@ -519,7 +592,7 @@ export default function PlannerPage() {
       flightControllerRef.current.abort();
       flightControllerRef.current = null;
     }
-    flightRequestIdRef.current++;
+    activeSearchIdRef.current++;
     setFlightLoading(false);
     setFlightStatus('idle');
     setFlightError(null);
@@ -802,7 +875,7 @@ export default function PlannerPage() {
             Unifies previously separate PlanWithAICallout card into a single cohesive SaaS entry */}
         <TripConfigurationCard
           onSearch={handleSearch}
-          onApplyPrompt={handleApplyAIPrompt}
+          onApplyAIPrompt={handleApplyAIPrompt}
           loading={loading}
           initialValues={suggestedValues}
         />

@@ -11,6 +11,12 @@ router.post('/', tripsLimiter, authenticateToken, validateBody(saveTripSchema), 
   res.status(201).json(savedTrip);
 }));
 
+// Update saved trip itinerary
+router.put('/:id', tripsLimiter, authenticateToken, validateParams(tripIdParamSchema), validateBody(saveTripSchema), asyncHandler(async (req, res) => {
+  const updatedTrip = await tripService.updateTrip(req.validatedParams.id, req.validatedBody, req.user.email);
+  res.json(updatedTrip);
+}));
+
 // Retrieve saved trips for authenticated user
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const trips = await tripService.getUserTrips(req.user.email);

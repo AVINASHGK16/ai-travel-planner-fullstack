@@ -30,6 +30,7 @@ import { Skeleton } from './ui/Skeleton';
 import { Modal } from './ui/Modal';
 import { Slider } from './ui/Slider';
 import { usePreferences } from '../context/PreferencesContext';
+import { getRedBusUrl as getRedBusUrlUtil, getConfirmTktUrl as getConfirmTktUrlUtil } from '../utils/transportLinks.js';
 
 /**
  * Roamly TravelOptions Component — UI-3.2
@@ -93,6 +94,12 @@ export default function TravelOptions({
 
   const { currency: activeCurrency, convertAndFormat, convertCurrency, formatMoney } = usePreferences();
 
+  // Canonical traveler count for per-traveler fare derivation
+  const safeTravelers = useMemo(() => {
+    const parsed = parseInt(travelers, 10);
+    return !isNaN(parsed) && parsed > 0 ? parsed : 1;
+  }, [travelers]);
+
   // Handle currency changes for maxPriceFilter
   const prevCurrencyRef = useRef(activeCurrency);
   useEffect(() => {
@@ -112,25 +119,29 @@ export default function TravelOptions({
     return typeof converted === 'number' && converted > 0 ? converted : flight.price;
   }, [convertCurrency, activeCurrency]);
 
+  // Derive per-traveler fare when valid (flight.price / safeTravelers)
+  const getPricePerTraveler = useCallback((price) => {
+    if (typeof price !== 'number' || price <= 0) return null;
+    return Math.round(price / safeTravelers);
+  }, [safeTravelers]);
+
   // Safe currency / price formatter using global currency preferences
   const formatPrice = (p, sourceCurrency = 'INR') => {
     return convertAndFormat(p, sourceCurrency || 'INR');
   };
 
   // Safe city name extractor
-  const getSearchCity = (name) => {
+  const _getSearchCity = (name) => {
     if (typeof name !== 'string') return '';
     return encodeURIComponent(name.split(',')[0]?.trim() || '');
   };
 
-  const getRedBusUrl = () => {
-    return `https://www.redbus.in/bus-tickets/search?fromCityName=${getSearchCity(from)}&toCityName=${getSearchCity(to)}&onDate=${date || ''}`;
+  const getRedBusUrl = (origin = from, destination = to) => {
+    return getRedBusUrlUtil(origin, destination, date);
   };
 
-  const getConfirmTktUrl = (trainNo) => {
-    return trainNo 
-      ? `https://www.confirmtkt.com/train-schedule/${trainNo}`
-      : `https://www.confirmtkt.com/`;
+  const getConfirmTktUrl = (_trainNo = null, origin = from, destination = to) => {
+    return getConfirmTktUrlUtil(origin, destination, date);
   };
 
   // Extract raw lists
@@ -304,6 +315,9 @@ export default function TravelOptions({
         title: 'Best value',
         flight: bestValueFlight,
         price: bestValueFlight ? bestValueFlight.price : null,
+        pricePerTraveler: bestValueFlight && typeof bestValueFlight.price === 'number' && bestValueFlight.price > 0
+          ? Math.round(bestValueFlight.price / safeTravelers)
+          : null,
         currency: bestValueFlight?.currency || 'INR',
         duration: bestValueFlight?.duration || null,
         flightId: bestValueFlight?.id || null,
@@ -313,6 +327,9 @@ export default function TravelOptions({
         title: 'Fastest',
         flight: fastestFlight,
         price: (typeof fastestFlight?.price === 'number' && fastestFlight.price > 0) ? fastestFlight.price : null,
+        pricePerTraveler: (typeof fastestFlight?.price === 'number' && fastestFlight.price > 0)
+          ? Math.round(fastestFlight.price / safeTravelers)
+          : null,
         currency: fastestFlight?.currency || 'INR',
         duration: fastestFlight?.duration || '—',
         flightId: fastestFlight?.id || null,
@@ -322,13 +339,16 @@ export default function TravelOptions({
         title: 'Cheapest',
         flight: cheapestFlight,
         price: cheapestFlight ? cheapestFlight.price : null,
+        pricePerTraveler: cheapestFlight && typeof cheapestFlight.price === 'number' && cheapestFlight.price > 0
+          ? Math.round(cheapestFlight.price / safeTravelers)
+          : null,
         currency: cheapestFlight?.currency || 'INR',
         duration: cheapestFlight?.duration || null,
         flightId: cheapestFlight?.id || null,
         available: Boolean(cheapestFlight && typeof cheapestFlight.price === 'number' && cheapestFlight.price > 0)
       }
     };
-  }, [flightList, getFlightPrice]);
+  }, [flightList, getFlightPrice, safeTravelers]);
 
   // Lowest fare flight and comparative calculation for Price Insights
   const lowestFareFlight = useMemo(() => {
@@ -779,9 +799,23 @@ export default function TravelOptions({
           {hasPricedFlights && lowestFareFlight ? (
             <>
               <div>
-                <div className="text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight">
-                  {formatPrice(lowestFareFlight.price, lowestFareFlight.currency || 'INR')}
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight">
+                    {formatPrice(Math.round(lowestFareFlight.price / safeTravelers), lowestFareFlight.currency || 'INR')}
+                  </span>
+                  <span className="text-xs text-[#737885] font-semibold uppercase tracking-wider">
+                    / traveler
+                  </span>
                 </div>
+                {safeTravelers > 1 ? (
+                  <div className="text-[11px] text-[#737885] font-mono mt-0.5">
+                    Total: {formatPrice(lowestFareFlight.price, lowestFareFlight.currency || 'INR')} ({safeTravelers} travelers)
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-[#737885] font-mono mt-0.5">
+                    Total fare: {formatPrice(lowestFareFlight.price, lowestFareFlight.currency || 'INR')}
+                  </div>
+                )}
                 {priceComparison ? (
                   <div className="flex items-center gap-1.5 text-xs text-[#1E9E6B] font-semibold mt-1">
                     <TrendingDown className="w-3.5 h-3.5 text-[#1E9E6B] shrink-0" />
@@ -914,8 +948,8 @@ export default function TravelOptions({
   // ── Render: Flight Tab (3-Column Layout) ──────────────────────────────────────────
   const renderFlightTab = () => {
     // 1. Loading State (Multi-line Skeletons, No giant spinner)
-    // Render skeleton UI when loading OR when in initial/idle state with no offers yet
-    if (effectiveFlightStatus === 'loading' || (effectiveFlightStatus === 'idle' && flightList.length === 0)) {
+    // Render skeleton UI ONLY when status is actively loading
+    if (effectiveFlightStatus === 'loading') {
       return renderSkeletonList();
     }
 
@@ -961,8 +995,8 @@ export default function TravelOptions({
     }
 
     // 3. Empty State (Clean, helpful, no scary error styling)
-    // Only rendered if search explicitly completed with zero offers
-    if (effectiveFlightStatus === 'empty' || (effectiveFlightStatus === 'success' && flightList.length === 0)) {
+    // Rendered when empty, idle with no offers, or when search completed with zero offers
+    if (effectiveFlightStatus === 'empty' || effectiveFlightStatus === 'idle' || flightList.length === 0) {
       return (
         <Card className="p-8 sm:p-12 text-center border border-slate-200/90 shadow-xs bg-white space-y-4 animate-fade-in">
           <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 mx-auto">
@@ -1134,10 +1168,16 @@ export default function TravelOptions({
                     {smartPicks.bestValue.available ? (
                       <>
                         <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
-                          {formatPrice(smartPicks.bestValue.price, smartPicks.bestValue.currency || 'INR')}
+                          {formatPrice(smartPicks.bestValue.pricePerTraveler, smartPicks.bestValue.currency || 'INR')}
+                          <span className="text-[10px] font-normal text-[#737885] ml-1">/ traveler</span>
                         </div>
-                        <div className="text-[10px] text-[#737885] font-mono">
-                          {smartPicks.bestValue.duration || 'Optimal balance'}
+                        <div className="text-[10px] text-[#737885] font-mono flex items-center justify-between mt-0.5">
+                          <span>{smartPicks.bestValue.duration || 'Optimal balance'}</span>
+                          {safeTravelers > 1 && (
+                            <span title={`Total fare: ${formatPrice(smartPicks.bestValue.price, smartPicks.bestValue.currency || 'INR')}`}>
+                              Total: {formatPrice(smartPicks.bestValue.price, smartPicks.bestValue.currency || 'INR')}
+                            </span>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -1165,8 +1205,19 @@ export default function TravelOptions({
                     <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
                       {smartPicks.fastest.duration}
                     </div>
-                    <div className="text-[10px] text-[#737885] font-mono">
-                      {smartPicks.fastest.price ? formatPrice(smartPicks.fastest.price, smartPicks.fastest.currency || 'INR') : 'Valid'}
+                    <div className="text-[10px] text-[#737885] font-mono mt-0.5">
+                      {smartPicks.fastest.pricePerTraveler ? (
+                        <>
+                          <span>{formatPrice(smartPicks.fastest.pricePerTraveler, smartPicks.fastest.currency || 'INR')} / traveler</span>
+                          {safeTravelers > 1 && (
+                            <span className="block text-[9px] text-[#737885]">
+                              Total: {formatPrice(smartPicks.fastest.price, smartPicks.fastest.currency || 'INR')}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        'Fare unavailable'
+                      )}
                     </div>
                   </div>
 
@@ -1189,10 +1240,16 @@ export default function TravelOptions({
                     {smartPicks.cheapest.available ? (
                       <>
                         <div className="text-sm font-bold text-[#14171F] font-mono tabular-nums mt-0.5">
-                          {formatPrice(smartPicks.cheapest.price, smartPicks.cheapest.currency || 'INR')}
+                          {formatPrice(smartPicks.cheapest.pricePerTraveler, smartPicks.cheapest.currency || 'INR')}
+                          <span className="text-[10px] font-normal text-[#737885] ml-1">/ traveler</span>
                         </div>
-                        <div className="text-[10px] text-[#737885]">
-                          Lowest available
+                        <div className="text-[10px] text-[#737885] flex items-center justify-between mt-0.5">
+                          <span>Lowest available</span>
+                          {safeTravelers > 1 && (
+                            <span className="font-mono" title={`Total fare: ${formatPrice(smartPicks.cheapest.price, smartPicks.cheapest.currency || 'INR')}`}>
+                              Total: {formatPrice(smartPicks.cheapest.price, smartPicks.cheapest.currency || 'INR')}
+                            </span>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -1422,11 +1479,20 @@ export default function TravelOptions({
                           {typeof flight.price === 'number' && flight.price > 0 ? (
                             <>
                               <div className="text-xl sm:text-2xl font-black text-[#14171F] font-mono tabular-nums tracking-tight whitespace-nowrap">
-                                {formatPrice(flight.price, flight.currency || 'INR')}
+                                {formatPrice(Math.round(flight.price / safeTravelers), flight.currency || 'INR')}
                               </div>
                               <span className="text-[10px] text-[#737885] uppercase tracking-wider font-semibold block mt-0.5">
                                 / traveler
                               </span>
+                              {safeTravelers > 1 ? (
+                                <span className="text-[11px] text-[#737885] font-mono block mt-0.5" title={`Total booking fare for ${safeTravelers} travelers`}>
+                                  Total: {formatPrice(flight.price, flight.currency || 'INR')}
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-[#737885] font-mono block mt-0.5">
+                                  Total fare: {formatPrice(flight.price, flight.currency || 'INR')}
+                                </span>
+                              )}
                             </>
                           ) : (
                             <div className="space-y-0.5">
@@ -1502,6 +1568,14 @@ export default function TravelOptions({
   // ── Render: Other Modes ──────────────────────────────────────────────────────────
   const renderTrainsTab = () => (
     <div className="space-y-4 animate-fade-in">
+      {/* Route estimate disclaimer */}
+      <div className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-50/80 border border-amber-200/90 rounded-lg text-xs text-amber-800">
+        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+        <span>
+          Train schedules and fares shown are route estimates. Use ConfirmTkt to search live IRCTC inventory and confirmed availability.
+        </span>
+      </div>
+
       {trainList.length === 0 ? (
         <Card className="p-8 text-center text-slate-500 border border-slate-200 bg-white">
           No trains scheduled for this corridor.
@@ -1528,11 +1602,6 @@ export default function TravelOptions({
                   <h4 className="font-semibold text-sm text-slate-900">
                     {train.name || 'Express Train'}
                   </h4>
-                  {train.number && (
-                    <span className="text-xs text-slate-400 font-mono">
-                      #{train.number}
-                    </span>
-                  )}
                   <Badge variant="warning" size="sm">Estimated</Badge>
                 </div>
 
@@ -1548,7 +1617,7 @@ export default function TravelOptions({
                   )}
                   {train.avail && (
                     <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
-                      Available: {train.avail} seats
+                      Est. Availability: ~{train.avail} seats
                     </span>
                   )}
                 </div>
@@ -1584,11 +1653,11 @@ export default function TravelOptions({
                   </Button>
 
                   <a
-                    href={getConfirmTktUrl(train.number)}
+                    href={getConfirmTktUrl(from, to, date)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors shadow-xs shrink-0"
-                    title="Open live ticket booking on ConfirmTkt"
+                    title="Search live trains on ConfirmTkt"
                   >
                     <span>ConfirmTkt</span>
                     <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
@@ -1604,6 +1673,14 @@ export default function TravelOptions({
 
   const renderBusesTab = () => (
     <div className="space-y-4 animate-fade-in">
+      {/* Route estimate disclaimer */}
+      <div className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-50/80 border border-amber-200/90 rounded-lg text-xs text-amber-800">
+        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+        <span>
+          Bus services and fares shown are route estimates. Use redBus to view live seat charts and confirmed bookings.
+        </span>
+      </div>
+
       {busList.length === 0 ? (
         <Card className="p-8 text-center text-slate-500 border border-slate-200 bg-white">
           No buses scheduled for this corridor.
@@ -1640,7 +1717,7 @@ export default function TravelOptions({
                   </span>
                   {bus.seats !== undefined && (
                     <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px] text-slate-700">
-                      {bus.seats} seats left
+                      Est. Seats: ~{bus.seats}
                     </span>
                   )}
                   {bus.rating && (
@@ -1657,7 +1734,7 @@ export default function TravelOptions({
                   <span className="text-lg font-bold text-slate-900 font-mono block">
                     {formatPrice(bus.price)}
                   </span>
-                  <span className="text-[10px] text-slate-500 uppercase">Per Ticket</span>
+                  <span className="text-[10px] text-slate-500 uppercase">Estimated Fare</span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1682,11 +1759,11 @@ export default function TravelOptions({
                   </Button>
 
                   <a
-                    href={getRedBusUrl()}
+                    href={getRedBusUrl(from, to, date)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors shadow-xs shrink-0"
-                    title="Open live ticket booking on redBus"
+                    title="Search live buses on redBus"
                   >
                     <span>redBus</span>
                     <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
@@ -1720,7 +1797,7 @@ export default function TravelOptions({
         >
           <Plane className="w-4 h-4" />
           <span>Flights</span>
-          {effectiveFlightStatus !== 'loading' && !(effectiveFlightStatus === 'idle' && flightList.length === 0) && flightList.length > 0 && (
+          {effectiveFlightStatus !== 'loading' && flightList.length > 0 && (
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
               activeMode === 'flight' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
             }`}>

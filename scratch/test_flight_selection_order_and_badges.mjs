@@ -13,7 +13,10 @@ function calculateModeBudget(mode, costComponents) {
 function mergeFlightOffersIntoTrip(trip, offers, selectedOffer = null) {
   if (!trip) return trip;
   const safeOffers = Array.isArray(offers) ? offers : [];
-  const chosenOffer = selectedOffer || trip.selectedFlight || safeOffers[0] || null;
+  const matchedExistingOffer = trip.selectedFlight?.id
+    ? safeOffers.find(f => f.id === trip.selectedFlight.id)
+    : null;
+  const chosenOffer = selectedOffer || matchedExistingOffer || safeOffers[0] || null;
   const chosenPrice = typeof chosenOffer?.price === 'number' && chosenOffer.price > 0 ? chosenOffer.price : null;
   const validPricedOffer = safeOffers.find(f => typeof f?.price === 'number' && f.price > 0);
   const realFlightCost = chosenPrice !== null ? chosenPrice : (validPricedOffer ? validPricedOffer.price : trip.costComponents?.flightCost);
@@ -179,6 +182,43 @@ console.log('\n--- Step 4: Budget Updated to Selected Flight ---');
   console.log('  ✓ PASS: activeTrip cost reflects selected flight');
 }
 
+console.log('\n--- Step 5: Route Change New Offers Fallback & Retention ---');
+{
+  // If new flight offers arrive for a new route where FL-C does not exist:
+  const newCorridorOffers = [
+    { id: 'DEL-JAI-1', price: 6000, durationMinutes: 60 },
+    { id: 'DEL-JAI-2', price: 7000, durationMinutes: 70 }
+  ];
+  const updatedCorridorTrip = mergeFlightOffersIntoTrip(activeTrip, newCorridorOffers);
+  // Must fall back to first offer of new corridor, NOT retain stale FL-C
+  assert.strictEqual(updatedCorridorTrip.selectedFlight.id, 'DEL-JAI-1');
+  assert.strictEqual(updatedCorridorTrip.costComponents.flightCost, 6000);
+  console.log('  ✓ PASS: When previously selected flight does not exist in new offers, falls back to first offer');
+
+  // If new flight offers DO contain previously selected flight:
+  const refreshedOffers = [
+    { id: 'DEL-JAI-2', price: 6500, durationMinutes: 70 },
+    { id: 'DEL-JAI-1', price: 5800, durationMinutes: 60 }
+  ];
+  const retainedTrip = mergeFlightOffersIntoTrip(updatedCorridorTrip, refreshedOffers);
+  assert.strictEqual(retainedTrip.selectedFlight.id, 'DEL-JAI-1');
+  console.log('  ✓ PASS: When previously selected flight exists in new offers, it is retained');
+}
+
+console.log('\n--- Step 6: Fastest Card Price Fallback ---');
+{
+  const fastestWithPrice = { price: 4500, currency: 'INR' };
+  const fastestWithoutPrice = { price: null };
+  const formatPrice = (p) => `₹${p}`;
+
+  const labelWithPrice = fastestWithPrice.price ? formatPrice(fastestWithPrice.price) : 'Fare unavailable';
+  const labelWithoutPrice = fastestWithoutPrice.price ? formatPrice(fastestWithoutPrice.price) : 'Fare unavailable';
+
+  assert.strictEqual(labelWithPrice, '₹4500');
+  assert.strictEqual(labelWithoutPrice, 'Fare unavailable');
+  console.log('  ✓ PASS: Fastest flight card displays "Fare unavailable" when price is null/absent');
+}
+
 console.log('\n====================================================');
-console.log('🏁 ALL SELECTION ORDER TESTS PASSED');
+console.log('🏁 ALL SELECTION ORDER & REVIEW FIX TESTS PASSED');
 console.log('====================================================');

@@ -187,3 +187,124 @@ export const deleteTrip = async (tripId, userEmail) => {
 
 /** @alias deleteTrip */
 export const deleteUserTrip = deleteTrip;
+
+/**
+ * Update an existing trip by ID, only if owned by the authenticated user.
+ */
+export const updateTrip = async (tripId, tripData, userEmail) => {
+  assertDatabaseAvailable();
+
+  const data = { ...tripData };
+  // Authoritative ownership: never let client alter userEmail, _id, or timestamps
+  data.userEmail = userEmail;
+  delete data._id;
+  delete data.createdAt;
+  delete data.updatedAt;
+
+  // Validate and canonicalize origin and destination coordinates authoritatively if from/to are modified
+  if (data.from) {
+    const fromGeo = await geocodeLocation(data.from);
+    if (fromGeo.status === 'GEOCODED') {
+      data.coordinates = data.coordinates || {};
+      data.coordinates.from = [fromGeo.latitude, fromGeo.longitude];
+      data.canonicalLocations = data.canonicalLocations || {};
+      data.canonicalLocations.from = fromGeo;
+    } else if (data.coordinates?.from) {
+      const [lat, lon] = data.coordinates.from;
+      if (!isValidCoordinate(lat, lon)) {
+        const err = new Error(`Invalid geographic coordinates provided for origin "${data.from}".`);
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+  }
+
+  if (data.to) {
+    const toGeo = await geocodeLocation(data.to);
+    if (toGeo.status === 'GEOCODED') {
+      data.coordinates = data.coordinates || {};
+      data.coordinates.to = [toGeo.latitude, toGeo.longitude];
+      data.canonicalLocations = data.canonicalLocations || {};
+      data.canonicalLocations.to = toGeo;
+    } else if (data.coordinates?.to) {
+      const [lat, lon] = data.coordinates.to;
+      if (!isValidCoordinate(lat, lon)) {
+        const err = new Error(`Invalid geographic coordinates provided for destination "${data.to}".`);
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+  }
+
+  if (data.coordinates?.from && data.coordinates?.to) {
+    data.coordinates.mid = [
+      (data.coordinates.from[0] + data.coordinates.to[0]) / 2,
+      (data.coordinates.from[1] + data.coordinates.to[1]) / 2
+    ];
+  }
+
+  if (isMongoConnected()) {
+    if (!mongoose.Types.ObjectId.isValid(tripId)) {
+      const err = new Error('Invalid trip ID format.');
+      err.statusCode = 400;
+      throw err;
+    }
+    const trip = await Trip.findById(tripId);
+    if (!trip) {
+      const err = new Error('Trip not found.');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (trip.userEmail !== userEmail) {
+      const err = new Error('You are not authorized to modify this trip.');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const allowedFields = [
+      'from', 'to', 'date', 'returnDate', 'travelers', 'budget', 'distance',
+      'coordinates', 'options', 'suggestions', 'itinerary', 'budgetDetails',
+      'roadTripDetails', 'weather', 'tripDays', 'transportMode',
+      'canonicalLocations', 'routeDetails', 'isAIGenerated',
+      'generationSource', 'generationNotice'
+    ];
+
+    allowedFields.forEach(field => {
+      if (data[field] !== undefined) {
+        trip[field] = data[field];
+      }
+    });
+
+    await trip.save();
+    return normalizeTrip(trip);
+  } else {
+    assertDatabaseAvailable();
+    const trips = loadLocalTrips();
+    const tripIndex = trips.findIndex(t => t._id === tripId || t.id === tripId);
+    if (tripIndex === -1) {
+      const err = new Error('Trip not found.');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (trips[tripIndex].userEmail !== userEmail) {
+      const err = new Error('You are not authorized to modify this trip.');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    const existingTrip = trips[tripIndex];
+    const updatedTrip = {
+      ...existingTrip,
+      ...data,
+      _id: existingTrip._id,
+      createdAt: existingTrip.createdAt,
+      updatedAt: new Date().toISOString(),
+      userEmail
+    };
+
+    trips[tripIndex] = updatedTrip;
+    saveLocalTrips(trips);
+    return normalizeTrip(updatedTrip);
+  }
+};
+

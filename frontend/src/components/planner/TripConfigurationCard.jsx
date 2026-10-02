@@ -30,6 +30,7 @@ import { usePreferences } from '../../context/PreferencesContext';
  */
 export function TripConfigurationCard({
   onSearch,
+  onApplyAIPrompt,
   onApplyPrompt,
   loading = false,
   initialValues = null,
@@ -211,11 +212,34 @@ export function TripConfigurationCard({
     });
   };
 
-  const handleApplyAIPrompt = (text) => {
-    const promptToUse = text || aiPromptText;
-    if (!promptToUse.trim()) return;
-    if (onApplyPrompt) {
-      onApplyPrompt(promptToUse.trim());
+  const handleApplyAIPrompt = (payload) => {
+    const applyFn = onApplyAIPrompt || onApplyPrompt;
+    if (!applyFn) return;
+
+    if (payload && typeof payload === 'object') {
+      const rawText = payload.promptText || aiPromptText || '';
+      const normalizedPromptText = rawText.trim();
+      if (!normalizedPromptText) return;
+      applyFn({
+        ...payload,
+        promptText: normalizedPromptText
+      });
+    } else {
+      const rawText = typeof payload === 'string' ? payload : aiPromptText || '';
+      const normalizedPromptText = rawText.trim();
+      if (!normalizedPromptText) return;
+      applyFn({
+        promptText: normalizedPromptText,
+        currentValues: {
+          from,
+          to,
+          date,
+          returnDate,
+          travelers,
+          budget,
+          preferredMode
+        }
+      });
     }
   };
 
