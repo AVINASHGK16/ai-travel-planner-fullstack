@@ -203,11 +203,20 @@ export const generateTrip = async ({ from, to, date, returnDate, travelers, budg
       throw err;
     }
 
-    // Boundaries: AI provides narrative itinerary, but cannot fabricate or overwrite coordinates or distance
+    // Boundaries: AI provides narrative itinerary, but cannot fabricate or overwrite coordinates, distance, or route parameters
     delete parsed.coordinates;
     delete parsed.distance;
     delete parsed.canonicalLocations;
     delete parsed.routeDetails;
+    delete parsed.from;
+    delete parsed.to;
+    delete parsed.origin;
+    delete parsed.destination;
+    delete parsed.date;
+    delete parsed.returnDate;
+    delete parsed.travelers;
+    delete parsed.budget;
+    delete parsed.preferredMode;
 
     if (fromGeo.status === 'GEOCODED' && toGeo.status === 'GEOCODED') {
       parsed.canonicalLocations = {
@@ -223,6 +232,13 @@ export const generateTrip = async ({ from, to, date, returnDate, travelers, budg
 
     return {
       ...parsed,
+      from,
+      to,
+      date,
+      returnDate: returnDate || null,
+      travelers,
+      budget,
+      preferredMode,
       isAIGenerated: true,
       source: 'ai'
     };

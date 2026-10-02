@@ -18,8 +18,8 @@ export function TripSummaryBar({
 }) {
   if (!activeTrip) return null;
 
-  const originName = typeof activeTrip.from === 'string' ? activeTrip.from.split(',')[0].trim() : 'Bengaluru';
-  const destinationName = typeof activeTrip.to === 'string' ? activeTrip.to.split(',')[0].trim() : 'Goa';
+  const originName = (typeof activeTrip.from === 'string' && activeTrip.from.trim()) ? activeTrip.from.split(',')[0].trim() : (activeTrip.from || '');
+  const destinationName = (typeof activeTrip.to === 'string' && activeTrip.to.trim()) ? activeTrip.to.split(',')[0].trim() : (activeTrip.to || '');
   const isRoundTrip = Boolean(activeTrip.returnDate);
   const tripTypeLabel = isRoundTrip ? 'Round Trip' : 'One Way';
 

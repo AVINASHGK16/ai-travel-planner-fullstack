@@ -45,19 +45,115 @@ export const formatTime = (timeStr) => {
 };
 
 /**
+ * Constructs an authoritative Google Flights destination URL.
+ * Preserves route, departure date, return date (round-trip), passenger count, and cabin class.
+ */
+export const buildGoogleFlightsUrl = ({
+  origin,
+  destination,
+  departureDate = null,
+  returnDate = null,
+  passengers = 1,
+  cabin = 'economy'
+} = {}) => {
+  const cleanCode = (val) => {
+    if (!val || typeof val !== 'string') return '';
+    const trimmed = val.trim();
+    if (/^[A-Za-z]{3}$/.test(trimmed)) return trimmed.toUpperCase();
+    const paren = trimmed.match(/\(([A-Za-z]{3})\)/);
+    if (paren) return paren[1].toUpperCase();
+    return trimmed.replace(/\([^)]*\)/g, ' ').split(',')[0].trim();
+  };
+
+  const cleanDate = (val) => {
+    if (!val) return null;
+    if (typeof val === 'string') {
+      const match = val.trim().match(/(\d{4}-\d{2}-\d{2})/);
+      if (match) return match[1];
+    }
+    if (val instanceof Date && !isNaN(val.getTime())) {
+      const y = val.getFullYear();
+      const m = String(val.getMonth() + 1).padStart(2, '0');
+      const d = String(val.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    return null;
+  };
+
+  const fromCode = cleanCode(origin);
+  const toCode = cleanCode(destination);
+
+  if (!fromCode && !toCode) {
+    return 'https://www.google.com/travel/flights';
+  }
+
+  const depDate = cleanDate(departureDate);
+  const retDate = cleanDate(returnDate);
+
+  const parts = [];
+  if (fromCode && toCode) {
+    parts.push(`Flights from ${fromCode} to ${toCode}`);
+  } else if (toCode) {
+    parts.push(`Flights to ${toCode}`);
+  } else {
+    parts.push(`Flights from ${fromCode}`);
+  }
+
+  if (depDate) {
+    parts.push(`on ${depDate}`);
+    if (retDate) {
+      parts.push(`returning ${retDate}`);
+    } else {
+      parts.push('one way');
+    }
+  }
+
+  const numPax = parseInt(passengers, 10);
+  if (!isNaN(numPax) && numPax > 1) {
+    parts.push(`for ${numPax} adults`);
+  }
+
+  const cabinStr = String(cabin || '').toLowerCase();
+  if (cabinStr.includes('business')) {
+    parts.push('business class');
+  } else if (cabinStr.includes('first')) {
+    parts.push('first class');
+  } else if (cabinStr.includes('premium')) {
+    parts.push('premium economy');
+  }
+
+  const query = parts.join(' ');
+  return `https://www.google.com/travel/flights?q=${encodeURIComponent(query)}`;
+};
+
+/**
  * Normalizes a single SerpApi flight itinerary item into the application's FlightOffer domain model.
  * @param {Object} item - SerpApi flight item from best_flights or other_flights
  * @param {number} index - Index for unique identification
- * @param {string} cabin - Cabin class requested
+ * @param {string|Object} cabinOrContext - Cabin class requested or context object
  * @returns {Object} Normalized FlightOffer
  */
-export const normalizeSerpApiOffer = (item, index = 0, cabin = 'economy') => {
+export const normalizeSerpApiOffer = (item, index = 0, cabinOrContext = 'economy') => {
   if (!item || typeof item !== 'object') {
     throw new FlightProviderError(
       'Malformed offer object received from flight provider.',
       502,
       'FLIGHT_PROVIDER_MALFORMED_RESPONSE'
     );
+  }
+
+  let cabin = 'economy';
+  let departureDate = null;
+  let returnDate = null;
+  let passengers = 1;
+
+  if (typeof cabinOrContext === 'string') {
+    cabin = cabinOrContext;
+  } else if (cabinOrContext && typeof cabinOrContext === 'object') {
+    cabin = cabinOrContext.cabin || 'economy';
+    departureDate = cabinOrContext.departureDate || null;
+    returnDate = cabinOrContext.returnDate || null;
+    passengers = cabinOrContext.passengers || 1;
   }
 
   const legs = Array.isArray(item.flights) ? item.flights : [];
@@ -91,6 +187,8 @@ export const normalizeSerpApiOffer = (item, index = 0, cabin = 'economy') => {
   // Safe unique ID
   const bookingTokenSnippet = item.booking_token ? item.booking_token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) : '';
   const offerId = `serp_${carrierCode}_${index}_${bookingTokenSnippet || Date.now()}`;
+
+  const resolvedDepDate = departureDate || (depTimeStr ? depTimeStr.slice(0, 10) : null);
 
   return {
     id: offerId,
@@ -128,7 +226,14 @@ export const normalizeSerpApiOffer = (item, index = 0, cabin = 'economy') => {
     status: 'live',
     isEstimated: false,
     provider: 'SerpApi',
-    bookingUrl: `https://www.google.com/travel/flights?q=Flights%20to%20${encodeURIComponent(lastLeg.arrival_airport?.id || '')}%20from%20${encodeURIComponent(firstLeg.departure_airport?.id || '')}`,
+    bookingUrl: buildGoogleFlightsUrl({
+      origin: firstLeg.departure_airport?.id || '',
+      destination: lastLeg.arrival_airport?.id || '',
+      departureDate: resolvedDepDate,
+      returnDate: returnDate || null,
+      passengers,
+      cabin: firstLeg.travel_class ? firstLeg.travel_class.toLowerCase().replace(/\s+/g, '_') : cabin
+    }),
     fetchedAt: new Date().toISOString(),
     expiresAt: null
   };
@@ -317,7 +422,14 @@ export const createSerpApiProvider = (options = {}) => {
       };
     }
 
-    const normalizedOffers = rawAll.map((item, idx) => normalizeSerpApiOffer(item, idx, cabin));
+    const normalizedOffers = rawAll.map((item, idx) =>
+      normalizeSerpApiOffer(item, idx, {
+        cabin,
+        departureDate,
+        returnDate,
+        passengers
+      })
+    );
 
     return {
       offers: normalizedOffers,

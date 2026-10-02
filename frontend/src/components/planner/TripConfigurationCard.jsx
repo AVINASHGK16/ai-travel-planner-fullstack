@@ -216,13 +216,24 @@ export function TripConfigurationCard({
     const applyFn = onApplyAIPrompt || onApplyPrompt;
     if (!applyFn) return;
 
+    const currentFormValues = {
+      from,
+      to,
+      date,
+      returnDate,
+      travelers,
+      budget,
+      preferredMode
+    };
+
     if (payload && typeof payload === 'object') {
       const rawText = payload.promptText || aiPromptText || '';
       const normalizedPromptText = rawText.trim();
       if (!normalizedPromptText) return;
       applyFn({
         ...payload,
-        promptText: normalizedPromptText
+        promptText: normalizedPromptText,
+        currentValues: payload.currentValues || currentFormValues
       });
     } else {
       const rawText = typeof payload === 'string' ? payload : aiPromptText || '';
@@ -230,15 +241,7 @@ export function TripConfigurationCard({
       if (!normalizedPromptText) return;
       applyFn({
         promptText: normalizedPromptText,
-        currentValues: {
-          from,
-          to,
-          date,
-          returnDate,
-          travelers,
-          budget,
-          preferredMode
-        }
+        currentValues: currentFormValues
       });
     }
   };

@@ -59,3 +59,142 @@ export function getRedBusUrl(origin, destination, _date = null) {
 export function getConfirmTktUrl(_origin = null, _destination = null, _date = null) {
   return 'https://www.confirmtkt.com/';
 }
+
+/**
+ * Normalizes an airport code or location name for Google Flights search queries.
+ * Extracts 3-letter IATA codes from strings like "Hyderabad (HYD)" or "HYD".
+ * If no code is present, falls back to the clean city name before any comma.
+ *
+ * @param {string|Object} location - Airport code string, city string, or object with code/city
+ * @returns {string} - Clean IATA code or city name, or empty string
+ */
+export function getFlightLocationQuery(location) {
+  if (!location) return '';
+  if (typeof location === 'object') {
+    if (location.code && typeof location.code === 'string' && /^[A-Za-z]{3}$/.test(location.code.trim())) {
+      return location.code.trim().toUpperCase();
+    }
+    if (location.city && typeof location.city === 'string' && location.city.trim()) {
+      return location.city.trim();
+    }
+    if (location.name && typeof location.name === 'string' && location.name.trim()) {
+      return location.name.trim();
+    }
+  }
+  if (typeof location !== 'string') return '';
+  const trimmed = location.trim();
+  if (!trimmed) return '';
+
+  // Direct 3-letter IATA code
+  if (/^[A-Za-z]{3}$/.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+
+  // Parenthetical 3-letter IATA code (e.g. "Hyderabad (HYD)", "Bengaluru (BLR)")
+  const parenMatch = trimmed.match(/\(([A-Za-z]{3})\)/);
+  if (parenMatch) {
+    return parenMatch[1].toUpperCase();
+  }
+
+  // Strip parentheticals and take first part before comma
+  const withoutParen = trimmed.replace(/\([^)]*\)/g, ' ').trim();
+  const primaryCity = withoutParen.split(',')[0].trim();
+  return primaryCity;
+}
+
+/**
+ * Extracts a strict date-only YYYY-MM-DD string without timezone shifting.
+ * Avoids any Date.prototype.toISOString() or new Date(str) parsing in non-UTC zones.
+ *
+ * @param {string|Date} dateVal - Input date string or Date instance
+ * @returns {string|null} - YYYY-MM-DD string or null if unresolvable
+ */
+export function extractDateOnly(dateVal) {
+  if (!dateVal) return null;
+  if (typeof dateVal === 'string') {
+    const match = dateVal.trim().match(/(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+  }
+  if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+    const y = dateVal.getFullYear();
+    const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+    const d = String(dateVal.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return null;
+}
+
+/**
+ * Constructs an authoritative Google Flights destination URL.
+ * Preserves route, departure date, return date (round-trip), passenger count, and cabin class.
+ *
+ * Supported format:
+ * - Round-trip: "Flights from {ORIGIN} to {DESTINATION} on {YYYY-MM-DD} returning {YYYY-MM-DD}"
+ * - One-way:    "Flights from {ORIGIN} to {DESTINATION} on {YYYY-MM-DD} one way"
+ * - Extras:     "for {passengers} adults {cabin class}"
+ *
+ * Missing dates are handled explicitly instead of silently fabricated.
+ *
+ * @param {Object} params
+ * @param {string|Object} params.origin - Origin airport code or city
+ * @param {string|Object} params.destination - Destination airport code or city
+ * @param {string|Date} [params.departureDate] - Departure date
+ * @param {string|Date} [params.returnDate] - Return date (for round trips)
+ * @param {number} [params.passengers=1] - Number of passengers/travelers
+ * @param {string} [params.cabin='economy'] - Cabin class
+ * @returns {string} - Google Flights URL or fallback homepage
+ */
+export function getGoogleFlightsUrl({
+  origin,
+  destination,
+  departureDate = null,
+  returnDate = null,
+  passengers = 1,
+  cabin = 'economy'
+} = {}) {
+  const fromCode = getFlightLocationQuery(origin);
+  const toCode = getFlightLocationQuery(destination);
+
+  if (!fromCode && !toCode) {
+    return 'https://www.google.com/travel/flights';
+  }
+
+  const depDate = extractDateOnly(departureDate);
+  const retDate = extractDateOnly(returnDate);
+
+  const parts = [];
+  if (fromCode && toCode) {
+    parts.push(`Flights from ${fromCode} to ${toCode}`);
+  } else if (toCode) {
+    parts.push(`Flights to ${toCode}`);
+  } else {
+    parts.push(`Flights from ${fromCode}`);
+  }
+
+  if (depDate) {
+    parts.push(`on ${depDate}`);
+    if (retDate) {
+      parts.push(`returning ${retDate}`);
+    } else {
+      parts.push('one way');
+    }
+  }
+
+  const numPax = parseInt(passengers, 10);
+  if (!isNaN(numPax) && numPax > 1) {
+    parts.push(`for ${numPax} adults`);
+  }
+
+  const cabinStr = String(cabin || '').toLowerCase();
+  if (cabinStr.includes('business')) {
+    parts.push('business class');
+  } else if (cabinStr.includes('first')) {
+    parts.push('first class');
+  } else if (cabinStr.includes('premium')) {
+    parts.push('premium economy');
+  }
+
+  const query = parts.join(' ');
+  return `https://www.google.com/travel/flights?q=${encodeURIComponent(query)}`;
+}
+

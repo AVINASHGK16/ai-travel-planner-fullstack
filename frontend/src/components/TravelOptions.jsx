@@ -30,7 +30,7 @@ import { Skeleton } from './ui/Skeleton';
 import { Modal } from './ui/Modal';
 import { Slider } from './ui/Slider';
 import { usePreferences } from '../context/PreferencesContext';
-import { getRedBusUrl as getRedBusUrlUtil, getConfirmTktUrl as getConfirmTktUrlUtil } from '../utils/transportLinks.js';
+import { getRedBusUrl as getRedBusUrlUtil, getConfirmTktUrl as getConfirmTktUrlUtil, getGoogleFlightsUrl } from '../utils/transportLinks.js';
 
 /**
  * Roamly TravelOptions Component — UI-3.2
@@ -752,8 +752,8 @@ export default function TravelOptions({
 
   // ── Render: Contextual Right Sidebar ────────────────────────────────────────────────
   const renderRightSidebar = () => {
-    const originCity = typeof from === 'string' ? from.split(',')[0].trim() : 'Bengaluru';
-    const destCity = typeof to === 'string' ? to.split(',')[0].trim() : 'Goa';
+    const originCity = (typeof from === 'string' && from.trim()) ? from.split(',')[0].trim() : (from || '');
+    const destCity = (typeof to === 'string' && to.trim()) ? to.split(',')[0].trim() : (to || '');
 
     return (
       <div className="space-y-4">
@@ -994,9 +994,10 @@ export default function TravelOptions({
       );
     }
 
-    // 3. Empty State (Clean, helpful, no scary error styling)
+    // 3. Empty State / Idle Prompt (Clean, helpful, no scary error styling)
     // Rendered when empty, idle with no offers, or when search completed with zero offers
     if (effectiveFlightStatus === 'empty' || effectiveFlightStatus === 'idle' || flightList.length === 0) {
+      const isIdle = effectiveFlightStatus === 'idle';
       return (
         <Card className="p-8 sm:p-12 text-center border border-slate-200/90 shadow-xs bg-white space-y-4 animate-fade-in">
           <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 mx-auto">
@@ -1004,13 +1005,17 @@ export default function TravelOptions({
           </div>
           <div className="space-y-1.5 max-w-md mx-auto">
             <h4 className="font-semibold text-lg text-slate-900 tracking-tight">
-              No transport options found
+              {isIdle ? 'Search for transport options' : 'No transport options found'}
             </h4>
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              We couldn't find routes matching your search.
+              {isIdle
+                ? 'Enter your trip details to search and compare live flight schedules and fares.'
+                : "We couldn't find routes matching your search."}
             </p>
             <p className="text-xs text-slate-400">
-              Try changing your dates or travel preferences.
+              {isIdle
+                ? 'Choose your departure dates and traveler count above.'
+                : 'Try changing your dates or travel preferences.'}
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
@@ -1021,7 +1026,7 @@ export default function TravelOptions({
                 onClick={onModifySearch}
                 className="cursor-pointer font-semibold px-6 shadow-xs"
               >
-                Modify Search
+                {isIdle ? 'Search Flights' : 'Modify Search'}
               </Button>
             )}
             <Button
@@ -1490,7 +1495,7 @@ export default function TravelOptions({
                                 </span>
                               ) : (
                                 <span className="text-[11px] text-[#737885] font-mono block mt-0.5">
-                                  Total fare: {formatPrice(flight.price, flight.currency || 'INR')}
+                                  Total fare: {formatPrice(flight.price, flight.currency || 'INR')} {/* formatPrice(flight.price) */}
                                 </span>
                               )}
                             </>
@@ -1533,18 +1538,31 @@ export default function TravelOptions({
                           )}
                         </Button>
 
-                        {flight.bookingUrl && (
-                          <a
-                            href={flight.bookingUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors inline-flex items-center justify-center shrink-0"
-                            title="View on Google Flights"
-                            aria-label="View on Google Flights"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        )}
+                        {(() => {
+                          const flightUrl = (flight.bookingUrl && (flight.bookingUrl.includes('on%20') || flight.bookingUrl.includes('+on+')))
+                            ? flight.bookingUrl
+                            : getGoogleFlightsUrl({
+                                origin: flight.origin?.code || from,
+                                destination: flight.destination?.code || to,
+                                departureDate: flight.departure || date,
+                                returnDate,
+                                passengers: travelers,
+                                cabin: flight.cabin || 'economy'
+                              });
+
+                          return flightUrl ? (
+                            <a
+                              href={flightUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors inline-flex items-center justify-center shrink-0"
+                              title="View on Google Flights"
+                              aria-label="View on Google Flights"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          ) : null;
+                        })()}
                       </div>
                     </Card>
                   );

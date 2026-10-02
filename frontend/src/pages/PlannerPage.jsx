@@ -142,9 +142,11 @@ export default function PlannerPage() {
     }
   }, [tripId, routeTrip]);
 
-  // Handle new search parameters from route state (/plan)
+  // Handle new search parameters or AI prompt from route state (/plan)
   useEffect(() => {
     const searchParams = location.state?.searchParams;
+    const aiPrompt = location.state?.aiPrompt;
+
     if (!tripId && searchParams) {
       const searchController = new AbortController();
       const flightController = new AbortController();
@@ -165,8 +167,29 @@ export default function PlannerPage() {
         }
       };
     }
+
+    if (!tripId && aiPrompt) {
+      // Starting a new AI plan from navigation state detaches any old plan in storage/state
+      setActiveTrip(null);
+      storage.remove('activePlan');
+      handleApplyAIPrompt(aiPrompt);
+    }
+
     return undefined;
   }, [location.state, tripId]);
+
+  // Unmount-only cleanup to abort in-flight search & flight controllers and mark callbacks stale
+  useEffect(() => {
+    return () => {
+      activeSearchIdRef.current += 1;
+      if (searchControllerRef.current) {
+        searchControllerRef.current.abort();
+      }
+      if (flightControllerRef.current) {
+        flightControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleSelectMode = (newMode) => {
     setActiveMode(newMode);
@@ -221,6 +244,7 @@ export default function PlannerPage() {
       } catch (geoErr) {
         if (activeSearchIdRef.current !== currentSearchId) return;
         if (searchController.signal.aborted) {
+          setLoading(false);
           setFlightLoading(false);
           setFlightStatus('idle');
           return;
@@ -234,6 +258,7 @@ export default function PlannerPage() {
 
       if (activeSearchIdRef.current !== currentSearchId) return;
       if (searchController.signal.aborted) {
+        setLoading(false);
         setFlightLoading(false);
         setFlightStatus('idle');
         return;
@@ -304,6 +329,7 @@ export default function PlannerPage() {
 
             setActiveTrip(prev => {
               if (activeSearchIdRef.current !== currentSearchId) return prev;
+              // Safe target: mergeFlightOffersIntoTrip(prev, offers) with null-prev baseline fallback
               const targetTrip = prev || baselineMock;
               const updated = mergeFlightOffersIntoTrip(targetTrip, offers);
               storage.setJSON('activePlan', updated);
@@ -401,7 +427,10 @@ export default function PlannerPage() {
         }
       } catch (aiErr) {
         if (activeSearchIdRef.current !== currentSearchId) return;
-        if (searchController.signal.aborted) return;
+        if (searchController.signal.aborted) {
+          setLoading(false);
+          return;
+        }
         console.warn('[Roamly Planner] AI Itinerary enrichment unavailable:', aiErr.message);
 
         let notice = 'AI service temporarily unavailable';
@@ -427,7 +456,10 @@ export default function PlannerPage() {
       }
 
       if (activeSearchIdRef.current !== currentSearchId) return;
-      if (searchController.signal.aborted) return;
+      if (searchController.signal.aborted) {
+        setLoading(false);
+        return;
+      }
 
       // Attach any resolved flight results if already arrived
       if (latestFlightResultRef.current.offers && latestFlightResultRef.current.status !== 'PROVIDER_ERROR') {
@@ -449,6 +481,7 @@ export default function PlannerPage() {
     } catch (err) {
       if (activeSearchIdRef.current !== currentSearchId) return;
       if (searchController.signal.aborted) {
+        setLoading(false);
         setFlightLoading(false);
         setFlightStatus('idle');
         return;
@@ -516,7 +549,10 @@ export default function PlannerPage() {
           showNotification('success', 'Trip itinerary successfully updated!');
         } else {
           const effectiveTrip = savedData || { ...tripToSave, _id: `trip_${Date.now()}` };
-          storage.setJSON('savedTrips', [effectiveTrip, ...localTrips]);
+          const remainingTrips = activeTrip?._id
+            ? localTrips.filter(t => t?._id !== activeTrip._id && t?.id !== activeTrip._id)
+            : localTrips;
+          storage.setJSON('savedTrips', [effectiveTrip, ...remainingTrips]);
           setActiveTrip(prev => {
             const updated = { ...prev, _id: effectiveTrip._id };
             storage.setJSON('activePlan', updated);
@@ -559,7 +595,10 @@ export default function PlannerPage() {
           _id: activeTrip._id,
           updatedAt: new Date().toISOString()
         };
-        const updatedTrips = localTrips.map(t => (t?._id === activeTrip._id || t?.id === activeTrip._id ? localSavedTrip : t));
+        const hasExisting = localTrips.some(t => t?._id === activeTrip._id || t?.id === activeTrip._id);
+        const updatedTrips = hasExisting
+          ? localTrips.map(t => (t?._id === activeTrip._id || t?.id === activeTrip._id ? localSavedTrip : t))
+          : [localSavedTrip, ...localTrips];
         storage.setJSON('savedTrips', updatedTrips);
         setActiveTrip(localSavedTrip);
         storage.setJSON('activePlan', localSavedTrip);
@@ -649,7 +688,7 @@ export default function PlannerPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => navigate('/plan')}
+              onClick={handleBackToSearch}
               className="w-full sm:w-auto cursor-pointer"
             >
               Create New Plan
@@ -752,12 +791,12 @@ export default function PlannerPage() {
     }
 
     // Route precedence:
-    // 1. Explicit origin + destination in prompt
-    // 2. Prompt destination + existing structured origin
-    // 3. Prompt is about style/budget only -> preserve existing structured origin/destination
-    // 4. Prompt has destination but no origin and structured origin is empty -> leave origin empty (''), never invent Delhi
-    const existingOrigin = (currentValues.from || activeTrip?.from || '').trim();
-    const existingDest = (currentValues.to || activeTrip?.to || '').trim();
+    // 1. Explicit origin + destination in prompt takes highest precedence.
+    // 2. Prompt specifies destination only: retain current configured form origin when available.
+    // 3. Prompt is about style/budget only: preserve existing configured form origin & destination.
+    // 4. If origin is genuinely missing in both prompt and form, preserve as missing (''). Never invent Delhi, Bengaluru, or fall back to old activeTrip.
+    const existingOrigin = (typeof currentValues.from === 'string' ? currentValues.from : '').trim();
+    const existingDest = (typeof currentValues.to === 'string' ? currentValues.to : '').trim();
 
     let finalOrigin = '';
     let finalDestination = '';
@@ -767,14 +806,16 @@ export default function PlannerPage() {
       finalDestination = extractedDestination;
     } else if (extractedDestination) {
       finalDestination = extractedDestination;
-      finalOrigin = existingOrigin || '';
+      finalOrigin = existingOrigin;
     } else {
-      finalOrigin = existingOrigin || '';
-      finalDestination = existingDest || '';
+      finalOrigin = existingOrigin;
+      finalDestination = existingDest;
     }
 
-    // 2. Budget extraction (preserve existing if not mentioned in prompt)
-    let finalBudget = currentValues.budget || activeTrip?.budget;
+    // 2. Budget extraction (preserve current configured form value if not mentioned in prompt)
+    let finalBudget = (typeof currentValues.budget === 'number' && currentValues.budget > 0)
+      ? currentValues.budget
+      : (parseInt(currentValues.budget, 10) || 50000);
     const budgetMatch = promptText.match(/(?:₹|inr|rs\.?|budget\s*(?:of)?|under)\s*([0-9,]+)/i);
     if (budgetMatch && budgetMatch[1]) {
       const parsedBudget = parseInt(budgetMatch[1].replace(/,/g, ''), 10);
@@ -782,12 +823,11 @@ export default function PlannerPage() {
         finalBudget = parsedBudget;
       }
     }
-    if (!finalBudget) {
-      finalBudget = 30000;
-    }
 
-    // 3. Travelers extraction (preserve existing if not mentioned in prompt)
-    let finalTravelers = currentValues.travelers || activeTrip?.travelers;
+    // 3. Travelers extraction (preserve current configured form value if not mentioned in prompt)
+    let finalTravelers = (typeof currentValues.travelers === 'number' && currentValues.travelers > 0)
+      ? currentValues.travelers
+      : (parseInt(currentValues.travelers, 10) || 2);
     const travelersMatch = promptText.match(/(\d+)\s*(?:travelers|traveler|travellers|traveller|people|adults|persons|person)/i);
     if (travelersMatch && travelersMatch[1]) {
       finalTravelers = parseInt(travelersMatch[1], 10);
@@ -796,13 +836,10 @@ export default function PlannerPage() {
     } else if (lower.includes('solo')) {
       finalTravelers = 1;
     }
-    if (!finalTravelers) {
-      finalTravelers = 2;
-    }
 
-    // 4. Dates extraction (preserve existing if present)
-    let finalDate = currentValues.date || activeTrip?.date;
-    let finalReturnDate = currentValues.returnDate || activeTrip?.returnDate;
+    // 4. Dates extraction (preserve current configured form values if present)
+    let finalDate = (typeof currentValues.date === 'string' && currentValues.date.trim()) ? currentValues.date.trim() : '';
+    let finalReturnDate = (typeof currentValues.returnDate === 'string' && currentValues.returnDate.trim()) ? currentValues.returnDate.trim() : '';
 
     if (!finalDate) {
       const dep = new Date(now);
@@ -816,8 +853,8 @@ export default function PlannerPage() {
       finalReturnDate = formatYMD(ret);
     }
 
-    // 5. Preferred mode extraction (preserve existing if present)
-    let finalMode = currentValues.preferredMode || activeTrip?.transportMode || 'flight';
+    // 5. Preferred mode extraction (preserve current configured form value if not mentioned in prompt)
+    let finalMode = currentValues.preferredMode || 'any';
     if (lower.includes('road trip') || lower.includes('drive') || lower.includes('car')) {
       finalMode = 'own';
     } else if (lower.includes('train')) {
@@ -1023,6 +1060,7 @@ export default function PlannerPage() {
           <div className="animate-fade-in pt-1">
             <TripConfigurationCard
               onSearch={handleSearch}
+              onApplyAIPrompt={handleApplyAIPrompt}
               loading={loading}
               initialValues={modifyInitialValues}
             />
