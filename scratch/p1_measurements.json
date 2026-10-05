@@ -1,0 +1,735 @@
+{
+  "coldResults": {
+    "label": "Cold Load (Cache Disabled)",
+    "cacheDisabled": true,
+    "fcp": 2044,
+    "lcp": 2044,
+    "dcl": 1346,
+    "load": 1966,
+    "ttfb": 208,
+    "jsTransferSize": 5700673,
+    "jsDecodedSize": 5683873,
+    "jsCount": 56,
+    "totalResources": 64,
+    "jsResourcesList": [
+      {
+        "url": "client",
+        "transferSize": 138025,
+        "decodedSize": 137725,
+        "duration": 103
+      },
+      {
+        "url": "main.jsx",
+        "transferSize": 2877,
+        "decodedSize": 2577,
+        "duration": 89
+      },
+      {
+        "url": "@react-refresh",
+        "transferSize": 116566,
+        "decodedSize": 116266,
+        "duration": 70
+      },
+      {
+        "url": "react_jsx-dev-runtime.js",
+        "transferSize": 12806,
+        "decodedSize": 12506,
+        "duration": 21
+      },
+      {
+        "url": "react.js",
+        "transferSize": 519,
+        "decodedSize": 219,
+        "duration": 22
+      },
+      {
+        "url": "react-dom_client.js",
+        "transferSize": 1005905,
+        "decodedSize": 1005605,
+        "duration": 78
+      },
+      {
+        "url": "index.css",
+        "transferSize": 125465,
+        "decodedSize": 125165,
+        "duration": 58
+      },
+      {
+        "url": "App.jsx",
+        "transferSize": 18531,
+        "decodedSize": 18231,
+        "duration": 60
+      },
+      {
+        "url": "ErrorBoundary.jsx",
+        "transferSize": 21992,
+        "decodedSize": 21692,
+        "duration": 71
+      },
+      {
+        "url": "env.mjs",
+        "transferSize": 4321,
+        "decodedSize": 4021,
+        "duration": 67
+      },
+      {
+        "url": "chunk-3YAUSPWS.js",
+        "transferSize": 45963,
+        "decodedSize": 45663,
+        "duration": 51
+      },
+      {
+        "url": "chunk-DC5AMYBS.js",
+        "transferSize": 2130,
+        "decodedSize": 1830,
+        "duration": 51
+      },
+      {
+        "url": "react-router-dom.js",
+        "transferSize": 478449,
+        "decodedSize": 478149,
+        "duration": 19
+      },
+      {
+        "url": "lucide-react.js",
+        "transferSize": 1419594,
+        "decodedSize": 1419294,
+        "duration": 118
+      },
+      {
+        "url": "SettingsPanel.jsx",
+        "transferSize": 4874,
+        "decodedSize": 4574,
+        "duration": 69
+      },
+      {
+        "url": "AuthModal.jsx",
+        "transferSize": 45122,
+        "decodedSize": 44822,
+        "duration": 67
+      },
+      {
+        "url": "HomePage.jsx",
+        "transferSize": 18149,
+        "decodedSize": 17849,
+        "duration": 77
+      },
+      {
+        "url": "AuthContext.jsx",
+        "transferSize": 17850,
+        "decodedSize": 17550,
+        "duration": 84
+      },
+      {
+        "url": "storage.js",
+        "transferSize": 13495,
+        "decodedSize": 13195,
+        "duration": 85
+      },
+      {
+        "url": "PreferencesContext.jsx",
+        "transferSize": 24037,
+        "decodedSize": 23737,
+        "duration": 106
+      },
+      {
+        "url": "index.js",
+        "transferSize": 1731,
+        "decodedSize": 1431,
+        "duration": 114
+      },
+      {
+        "url": "chunk-CUP3OPA6.js",
+        "transferSize": 16833,
+        "decodedSize": 16533,
+        "duration": 61
+      },
+      {
+        "url": "Modal.jsx",
+        "transferSize": 22019,
+        "decodedSize": 21719,
+        "duration": 30
+      },
+      {
+        "url": "SettingsForm.jsx",
+        "transferSize": 80158,
+        "decodedSize": 79858,
+        "duration": 47
+      },
+      {
+        "url": "index.js",
+        "transferSize": 4213,
+        "decodedSize": 3913,
+        "duration": 40
+      },
+      {
+        "url": "authService.js",
+        "transferSize": 12401,
+        "decodedSize": 12101,
+        "duration": 43
+      },
+      {
+        "url": "index.js",
+        "transferSize": 3110,
+        "decodedSize": 2810,
+        "duration": 45
+      },
+      {
+        "url": "AppHeader.jsx",
+        "transferSize": 29588,
+        "decodedSize": 29288,
+        "duration": 11
+      },
+      {
+        "url": "AppSidebar.jsx",
+        "transferSize": 27387,
+        "decodedSize": 27087,
+        "duration": 24
+      },
+      {
+        "url": "AppShell.jsx",
+        "transferSize": 23832,
+        "decodedSize": 23532,
+        "duration": 28
+      },
+      {
+        "url": "HelpModal.jsx",
+        "transferSize": 54741,
+        "decodedSize": 54441,
+        "duration": 32
+      },
+      {
+        "url": "apiClient.js",
+        "transferSize": 23317,
+        "decodedSize": 23017,
+        "duration": 34
+      },
+      {
+        "url": "currency.js",
+        "transferSize": 29217,
+        "decodedSize": 28917,
+        "duration": 37
+      },
+      {
+        "url": "Button.jsx",
+        "transferSize": 11087,
+        "decodedSize": 10787,
+        "duration": 36
+      },
+      {
+        "url": "Input.jsx",
+        "transferSize": 11219,
+        "decodedSize": 10919,
+        "duration": 40
+      },
+      {
+        "url": "Select.jsx",
+        "transferSize": 12000,
+        "decodedSize": 11700,
+        "duration": 41
+      },
+      {
+        "url": "Card.jsx",
+        "transferSize": 8724,
+        "decodedSize": 8424,
+        "duration": 43
+      },
+      {
+        "url": "Badge.jsx",
+        "transferSize": 6470,
+        "decodedSize": 6170,
+        "duration": 45
+      },
+      {
+        "url": "Tabs.jsx",
+        "transferSize": 10191,
+        "decodedSize": 9891,
+        "duration": 48
+      },
+      {
+        "url": "Dropdown.jsx",
+        "transferSize": 11872,
+        "decodedSize": 11572,
+        "duration": 52
+      },
+      {
+        "url": "Skeleton.jsx",
+        "transferSize": 3586,
+        "decodedSize": 3286,
+        "duration": 52
+      },
+      {
+        "url": "Switch.jsx",
+        "transferSize": 12189,
+        "decodedSize": 11889,
+        "duration": 57
+      },
+      {
+        "url": "Slider.jsx",
+        "transferSize": 15631,
+        "decodedSize": 15331,
+        "duration": 63
+      },
+      {
+        "url": "PlannerHeader.jsx",
+        "transferSize": 6071,
+        "decodedSize": 5771,
+        "duration": 57
+      },
+      {
+        "url": "TripConfigurationCard.jsx",
+        "transferSize": 115102,
+        "decodedSize": 114802,
+        "duration": 60
+      },
+      {
+        "url": "QuickStartSuggestions.jsx",
+        "transferSize": 29880,
+        "decodedSize": 29580,
+        "duration": 68
+      },
+      {
+        "url": "TripSummaryBar.jsx",
+        "transferSize": 34938,
+        "decodedSize": 34638,
+        "duration": 68
+      },
+      {
+        "url": "PlanWithAICallout.jsx",
+        "transferSize": 28557,
+        "decodedSize": 28257,
+        "duration": 75
+      },
+      {
+        "url": "TravelFeatureStrip.jsx",
+        "transferSize": 8666,
+        "decodedSize": 8366,
+        "duration": 79
+      },
+      {
+        "url": "TripOverview.jsx",
+        "transferSize": 285183,
+        "decodedSize": 284883,
+        "duration": 88
+      },
+      {
+        "url": "react-leaflet.js",
+        "transferSize": 31980,
+        "decodedSize": 31680,
+        "duration": 12
+      },
+      {
+        "url": "leaflet.js",
+        "transferSize": 533,
+        "decodedSize": 233,
+        "duration": 14
+      },
+      {
+        "url": "RoadTripDetails.jsx",
+        "transferSize": 127934,
+        "decodedSize": 127634,
+        "duration": 45
+      },
+      {
+        "url": "jspdf.js",
+        "transferSize": 695261,
+        "decodedSize": 694961,
+        "duration": 62
+      },
+      {
+        "url": "chunk-74OVJCVR.js",
+        "transferSize": 387623,
+        "decodedSize": 387323,
+        "duration": 50
+      },
+      {
+        "url": "chunk-D7ZASVPN.js",
+        "transferSize": 759,
+        "decodedSize": 459,
+        "duration": 4
+      }
+    ]
+  },
+  "warmResults": {
+    "label": "Warm Load (Cache Enabled)",
+    "cacheDisabled": false,
+    "fcp": 404,
+    "lcp": 404,
+    "dcl": 175,
+    "load": 179,
+    "ttfb": 6,
+    "jsTransferSize": 12900,
+    "jsDecodedSize": 4094455,
+    "jsCount": 56,
+    "totalResources": 65,
+    "jsResourcesList": [
+      {
+        "url": "client",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 4
+      },
+      {
+        "url": "main.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 3
+      },
+      {
+        "url": "@react-refresh",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 5
+      },
+      {
+        "url": "env.mjs",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 5
+      },
+      {
+        "url": "react_jsx-dev-runtime.js",
+        "transferSize": 0,
+        "decodedSize": 12506,
+        "duration": 0
+      },
+      {
+        "url": "react.js",
+        "transferSize": 0,
+        "decodedSize": 219,
+        "duration": 0
+      },
+      {
+        "url": "react-dom_client.js",
+        "transferSize": 0,
+        "decodedSize": 1005605,
+        "duration": 0
+      },
+      {
+        "url": "index.css",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 9
+      },
+      {
+        "url": "App.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 10
+      },
+      {
+        "url": "ErrorBoundary.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 11
+      },
+      {
+        "url": "chunk-3YAUSPWS.js",
+        "transferSize": 0,
+        "decodedSize": 45663,
+        "duration": 0
+      },
+      {
+        "url": "chunk-DC5AMYBS.js",
+        "transferSize": 0,
+        "decodedSize": 1830,
+        "duration": 0
+      },
+      {
+        "url": "chunk-CUP3OPA6.js",
+        "transferSize": 0,
+        "decodedSize": 16533,
+        "duration": 0
+      },
+      {
+        "url": "react-router-dom.js",
+        "transferSize": 0,
+        "decodedSize": 478149,
+        "duration": 0
+      },
+      {
+        "url": "lucide-react.js",
+        "transferSize": 0,
+        "decodedSize": 1419294,
+        "duration": 0
+      },
+      {
+        "url": "AuthModal.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 4
+      },
+      {
+        "url": "SettingsPanel.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 8
+      },
+      {
+        "url": "HomePage.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 10
+      },
+      {
+        "url": "AuthContext.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 11
+      },
+      {
+        "url": "storage.js",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 12
+      },
+      {
+        "url": "PreferencesContext.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 13
+      },
+      {
+        "url": "index.js",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 13
+      },
+      {
+        "url": "index.js",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 5
+      },
+      {
+        "url": "authService.js",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 6
+      },
+      {
+        "url": "Modal.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 6
+      },
+      {
+        "url": "SettingsForm.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 7
+      },
+      {
+        "url": "index.js",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 6
+      },
+      {
+        "url": "apiClient.js",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 7
+      },
+      {
+        "url": "currency.js",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 9
+      },
+      {
+        "url": "AppHeader.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 15
+      },
+      {
+        "url": "AppSidebar.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 16
+      },
+      {
+        "url": "AppShell.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 17
+      },
+      {
+        "url": "HelpModal.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 18
+      },
+      {
+        "url": "Button.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 11
+      },
+      {
+        "url": "Input.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 11
+      },
+      {
+        "url": "Select.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 11
+      },
+      {
+        "url": "Card.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 11
+      },
+      {
+        "url": "Badge.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 12
+      },
+      {
+        "url": "Tabs.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 12
+      },
+      {
+        "url": "Dropdown.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 15
+      },
+      {
+        "url": "Skeleton.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 17
+      },
+      {
+        "url": "Switch.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 17
+      },
+      {
+        "url": "Slider.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 18
+      },
+      {
+        "url": "PlannerHeader.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 16
+      },
+      {
+        "url": "TripConfigurationCard.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 21
+      },
+      {
+        "url": "QuickStartSuggestions.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 21
+      },
+      {
+        "url": "TripSummaryBar.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 21
+      },
+      {
+        "url": "PlanWithAICallout.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 21
+      },
+      {
+        "url": "TravelFeatureStrip.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 22
+      },
+      {
+        "url": "TripOverview.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 23
+      },
+      {
+        "url": "react-leaflet.js",
+        "transferSize": 0,
+        "decodedSize": 31680,
+        "duration": 0
+      },
+      {
+        "url": "leaflet.js",
+        "transferSize": 0,
+        "decodedSize": 233,
+        "duration": 0
+      },
+      {
+        "url": "jspdf.js",
+        "transferSize": 0,
+        "decodedSize": 694961,
+        "duration": 0
+      },
+      {
+        "url": "RoadTripDetails.jsx",
+        "transferSize": 300,
+        "decodedSize": 0,
+        "duration": 4
+      },
+      {
+        "url": "chunk-74OVJCVR.js",
+        "transferSize": 0,
+        "decodedSize": 387323,
+        "duration": 0
+      },
+      {
+        "url": "chunk-D7ZASVPN.js",
+        "transferSize": 0,
+        "decodedSize": 459,
+        "duration": 0
+      }
+    ]
+  },
+  "apiResults": [
+    {
+      "name": "Health / Root",
+      "url": "http://localhost:5000/",
+      "avgLatencyMs": 38,
+      "minLatencyMs": 6,
+      "status": 200
+    },
+    {
+      "name": "Trips GET (MongoDB query)",
+      "url": "http://localhost:5000/api/trips",
+      "avgLatencyMs": 23,
+      "minLatencyMs": 18,
+      "status": 401
+    },
+    {
+      "name": "Currency Rates GET",
+      "url": "http://localhost:5000/api/currency/rates",
+      "avgLatencyMs": 20,
+      "minLatencyMs": 18,
+      "status": 200
+    },
+    {
+      "name": "Geo Autocomplete GET",
+      "url": "http://localhost:5000/api/geo/search?q=Tokyo",
+      "avgLatencyMs": 32,
+      "minLatencyMs": 18,
+      "status": 404
+    }
+  ],
+  "timestamp": "2026-10-05T16:02:44.677Z"
+}

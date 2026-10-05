@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { jsPDF } from 'jspdf';
 import { Download, Share2, Trash2, Calendar, Users, Compass, ArrowRight, Loader2, Plus, Check } from 'lucide-react';
 import { Button, Badge, Modal } from './ui';
 import { usePreferences } from '../context/PreferencesContext';
@@ -74,10 +73,11 @@ export default function Dashboard({
     : categorizedTrips.saved;
 
   // Download Trip plan as PDF using jsPDF
-  const handleDownloadPDF = (e, trip) => {
+  const handleDownloadPDF = async (e, trip) => {
     e.stopPropagation();
 
     try {
+      const { jsPDF } = await import('jspdf');
       const doc = new jsPDF();
 
       // Theme colors

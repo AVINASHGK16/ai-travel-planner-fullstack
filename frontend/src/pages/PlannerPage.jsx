@@ -642,92 +642,6 @@ export default function PlannerPage() {
     navigate('/plan');
   };
 
-  // State: Loading saved trip from URL
-  if (tripId && resolvingTrip) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-12 space-y-6 animate-fade-in">
-        <div className="text-center space-y-3 py-6">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
-          <h2 className="font-display font-bold text-xl text-slate-900">Loading Travel Plan...</h2>
-          <p className="text-sm text-slate-500">Resolving itinerary details for trip #{tripId}</p>
-        </div>
-        <Card className="p-6 space-y-4">
-          <Skeleton className="h-6 w-1/3" />
-          <Skeleton className="h-4 w-1/2" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-full" />
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  // State: Saved trip not found
-  if (tripId && tripNotFound) {
-    return (
-      <div className="max-w-lg mx-auto px-4 py-20 text-center animate-fade-in">
-        <Card className="p-8 space-y-5 border-slate-200 shadow-sm">
-          <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mx-auto">
-            <AlertTriangle className="w-7 h-7" />
-          </div>
-          <div className="space-y-2">
-            <h2 className="font-display font-bold text-2xl text-slate-900">Trip Not Found</h2>
-            <p className="text-sm text-slate-500 leading-relaxed">
-              We couldn't find a saved travel plan matching ID <code className="px-1.5 py-0.5 rounded bg-slate-100 text-blue-600 font-mono text-xs font-semibold">{tripId}</code>. It may have been deleted, or the URL might be incorrect.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Button
-              variant="primary"
-              onClick={() => navigate('/dashboard')}
-              className="w-full sm:w-auto cursor-pointer"
-            >
-              View Saved Trips
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleBackToSearch}
-              className="w-full sm:w-auto cursor-pointer"
-            >
-              Create New Plan
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  // State: Calculating / Generating Plan
-  if (loading) {
-    return (
-      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-6 animate-fade-in">
-        <Card className="p-8 space-y-6 border-slate-200 shadow-sm bg-white">
-          <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-            <Compass className="w-14 h-14 text-blue-600 animate-spin-slow" />
-            <Sparkles className="w-5 h-5 text-purple-600 absolute -top-1 -right-1 animate-bounce" />
-          </div>
-          <div className="space-y-1.5">
-            <h2 className="font-display font-bold text-xl text-slate-900">
-              Generating Authentic Itinerary
-            </h2>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-              Resolving canonical coordinates, calculating real highway routes, and fetching mode-aware budgets...
-            </p>
-          </div>
-          <div className="space-y-2 pt-2 text-left">
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-              <span>Querying transport options & live routes...</span>
-            </div>
-            <Skeleton className="h-2 w-full rounded" />
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
   const handleApplyAIPrompt = (payload) => {
     const promptText = typeof payload === 'string' ? payload : (payload?.promptText || '');
     const currentValues = (typeof payload === 'object' && payload?.currentValues) ? payload.currentValues : {};
@@ -876,6 +790,92 @@ export default function PlannerPage() {
     });
     window.scrollTo({ top: 100, behavior: 'smooth' });
   };
+
+  // State: Loading saved trip from URL
+  if (tripId && resolvingTrip) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12 space-y-6 animate-fade-in">
+        <div className="text-center space-y-3 py-6">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+          <h2 className="font-display font-bold text-xl text-slate-900">Loading Travel Plan...</h2>
+          <p className="text-sm text-slate-500">Resolving itinerary details for trip #{tripId}</p>
+        </div>
+        <Card className="p-6 space-y-4">
+          <Skeleton className="h-6 w-1/3" />
+          <Skeleton className="h-4 w-1/2" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // State: Saved trip not found
+  if (tripId && tripNotFound) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-20 text-center animate-fade-in">
+        <Card className="p-8 space-y-5 border-slate-200 shadow-sm">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mx-auto">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="font-display font-bold text-2xl text-slate-900">Trip Not Found</h2>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              We couldn't find a saved travel plan matching ID <code className="px-1.5 py-0.5 rounded bg-slate-100 text-blue-600 font-mono text-xs font-semibold">{tripId}</code>. It may have been deleted, or the URL might be incorrect.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <Button
+              variant="primary"
+              onClick={() => navigate('/dashboard')}
+              className="w-full sm:w-auto cursor-pointer"
+            >
+              View Saved Trips
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleBackToSearch}
+              className="w-full sm:w-auto cursor-pointer"
+            >
+              Create New Plan
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // State: Calculating / Generating Plan
+  if (loading) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-6 animate-fade-in">
+        <Card className="p-8 space-y-6 border-slate-200 shadow-sm bg-white">
+          <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+            <Compass className="w-14 h-14 text-blue-600 animate-spin-slow" />
+            <Sparkles className="w-5 h-5 text-purple-600 absolute -top-1 -right-1 animate-bounce" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="font-display font-bold text-xl text-slate-900">
+              Generating Authentic Itinerary
+            </h2>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+              Resolving canonical coordinates, calculating real highway routes, and fetching mode-aware budgets...
+            </p>
+          </div>
+          <div className="space-y-2 pt-2 text-left">
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+              <span>Querying transport options & live routes...</span>
+            </div>
+            <Skeleton className="h-2 w-full rounded" />
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   // State: Empty Planner / Fresh search
   if (!activeTrip) {
@@ -1186,29 +1186,61 @@ export default function PlannerPage() {
                 }}
                 suggestions={activeTrip.suggestions}
                 selectedFlightOffer={activeTrip?.selectedFlight || null}
+                selectedTrainOffer={activeTrip?.selectedTrain || null}
+                selectedBusOffer={activeTrip?.selectedBus || null}
                 onSelectFlightOffer={(offer) => {
+                  setActiveMode('flight');
                   setActiveTrip(prev => {
                     if (!prev) return prev;
                     const existingOffers = prev.options?.flight || [];
-                    const updated = mergeFlightOffersIntoTrip(prev, existingOffers, offer);
+                    const tripWithMode = { ...prev, transportMode: 'flight' };
+                    const updated = mergeFlightOffersIntoTrip(tripWithMode, existingOffers, offer);
                     storage.setJSON('activePlan', updated);
                     return updated;
                   });
                 }}
                 onSelectTrainOffer={(train) => {
-                  handleSelectMode('train');
+                  setActiveMode('train');
                   setActiveTrip(prev => {
                     if (!prev) return prev;
-                    const updated = { ...prev, selectedTrain: train };
+                    const price = typeof train?.price === 'number' && train.price > 0 ? train.price : prev.costComponents?.trainCost;
+                    const updatedCostComponents = prev.costComponents ? {
+                      ...prev.costComponents,
+                      ...(price !== undefined ? { trainCost: price } : {})
+                    } : prev.costComponents;
+                    const updatedBudget = updatedCostComponents
+                      ? calculateModeBudget('train', updatedCostComponents)
+                      : prev.budgetDetails;
+                    const updated = {
+                      ...prev,
+                      transportMode: 'train',
+                      selectedTrain: train,
+                      costComponents: updatedCostComponents,
+                      budgetDetails: updatedBudget
+                    };
                     storage.setJSON('activePlan', updated);
                     return updated;
                   });
                 }}
                 onSelectBusOffer={(bus) => {
-                  handleSelectMode('bus');
+                  setActiveMode('bus');
                   setActiveTrip(prev => {
                     if (!prev) return prev;
-                    const updated = { ...prev, selectedBus: bus };
+                    const price = typeof bus?.price === 'number' && bus.price > 0 ? bus.price : prev.costComponents?.busCost;
+                    const updatedCostComponents = prev.costComponents ? {
+                      ...prev.costComponents,
+                      ...(price !== undefined ? { busCost: price } : {})
+                    } : prev.costComponents;
+                    const updatedBudget = updatedCostComponents
+                      ? calculateModeBudget('bus', updatedCostComponents)
+                      : prev.budgetDetails;
+                    const updated = {
+                      ...prev,
+                      transportMode: 'bus',
+                      selectedBus: bus,
+                      costComponents: updatedCostComponents,
+                      budgetDetails: updatedBudget
+                    };
                     storage.setJSON('activePlan', updated);
                     return updated;
                   });
@@ -1217,7 +1249,7 @@ export default function PlannerPage() {
                 <RoadTripDetails
                   tripData={activeTrip}
                   onSelectRoadRoute={(routeIndexOrObj) => {
-                    handleSelectMode('own');
+                    setActiveMode('own');
                     setActiveTrip(prev => {
                       if (!prev) return prev;
                       const routes = prev.options?.own?.routes || [];
@@ -1231,10 +1263,21 @@ export default function PlannerPage() {
                         resolvedIndex = foundIdx >= 0 ? foundIdx : 0;
                         resolvedRoute = routeIndexOrObj;
                       }
+                      const toll = typeof resolvedRoute?.tolls === 'number' ? resolvedRoute.tolls : prev.costComponents?.tollCost;
+                      const updatedCostComponents = prev.costComponents ? {
+                        ...prev.costComponents,
+                        ...(toll !== undefined ? { tollCost: toll } : {})
+                      } : prev.costComponents;
+                      const updatedBudget = updatedCostComponents
+                        ? calculateModeBudget('own', updatedCostComponents)
+                        : prev.budgetDetails;
                       const updated = {
                         ...prev,
+                        transportMode: 'own',
                         selectedRoute: resolvedRoute,
-                        selectedRouteIndex: resolvedIndex
+                        selectedRouteIndex: resolvedIndex,
+                        costComponents: updatedCostComponents,
+                        budgetDetails: updatedBudget
                       };
                       storage.setJSON('activePlan', updated);
                       return updated;

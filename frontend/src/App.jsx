@@ -1,18 +1,18 @@
 import React, { useState, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import AuthModal from './components/AuthModal';
-import SettingsPanel from './components/SettingsPanel';
 import HomePage from './pages/HomePage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { storage } from './utils/storage';
 
 export { storage };
 
-// Technically justified code splitting for heavy page-level modules
+// Technically justified code splitting for heavy page-level modules and overlay dialogs
 const PlannerPage = lazy(() => import('./pages/PlannerPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AuthModal = lazy(() => import('./components/AuthModal'));
+const SettingsPanel = lazy(() => import('./components/SettingsPanel'));
 
 import { PreferencesProvider, usePreferences } from './context/PreferencesContext';
 import { AppShell } from './components/shell';
@@ -53,19 +53,27 @@ function AppLayout({ settingsOpen, setSettingsOpen }) {
       </Suspense>
 
       {/* Global Auth Modal */}
-      <AuthModal
-        isOpen={modalOpen}
-        onClose={closeAuthModal}
-        onLoginSuccess={login}
-      />
+      {modalOpen && (
+        <Suspense fallback={null}>
+          <AuthModal
+            isOpen={modalOpen}
+            onClose={closeAuthModal}
+            onLoginSuccess={login}
+          />
+        </Suspense>
+      )}
 
       {/* Global Settings Modal */}
-      <SettingsPanel
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        settings={preferences}
-        onSaveSettings={handleSaveSettings}
-      />
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsPanel
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            settings={preferences}
+            onSaveSettings={handleSaveSettings}
+          />
+        </Suspense>
+      )}
     </AppShell>
   );
 }

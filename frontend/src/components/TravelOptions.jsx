@@ -62,6 +62,8 @@ export default function TravelOptions({
   onRetrySearch = null,
   _suggestions = null,
   selectedFlightOffer = null,
+  selectedTrainOffer = null,
+  selectedBusOffer = null,
   onSelectFlightOffer = null,
   onSelectTrainOffer = null,
   onSelectBusOffer = null
@@ -81,9 +83,13 @@ export default function TravelOptions({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const showMobileFilterModal = mobileFiltersOpen;
   const setShowMobileFilterModal = setMobileFiltersOpen;
+
+  const getTrainId = useCallback((t) => (t ? (t.number || t.id || t.name || null) : null), []);
+  const getBusId = useCallback((b) => (b ? (b.id || b.name || null) : null), []);
+
   const [activeFlightId, setActiveFlightId] = useState(() => selectedFlightOffer?.id || null);
-  const [activeTrainId, setActiveTrainId] = useState(null);
-  const [activeBusId, setActiveBusId] = useState(null);
+  const [activeTrainId, setActiveTrainId] = useState(() => getTrainId(selectedTrainOffer));
+  const [activeBusId, setActiveBusId] = useState(() => getBusId(selectedBusOffer));
 
   // Sync activeFlightId when selectedFlightOffer prop changes
   useEffect(() => {
@@ -91,6 +97,22 @@ export default function TravelOptions({
       setActiveFlightId(selectedFlightOffer.id);
     }
   }, [selectedFlightOffer?.id]);
+
+  // Sync activeTrainId when selectedTrainOffer prop changes
+  useEffect(() => {
+    const tid = getTrainId(selectedTrainOffer);
+    if (tid) {
+      setActiveTrainId(tid);
+    }
+  }, [selectedTrainOffer, getTrainId]);
+
+  // Sync activeBusId when selectedBusOffer prop changes
+  useEffect(() => {
+    const bid = getBusId(selectedBusOffer);
+    if (bid) {
+      setActiveBusId(bid);
+    }
+  }, [selectedBusOffer, getBusId]);
 
   const { currency: activeCurrency, convertAndFormat, convertCurrency, formatMoney } = usePreferences();
 
@@ -136,12 +158,12 @@ export default function TravelOptions({
     return encodeURIComponent(name.split(',')[0]?.trim() || '');
   };
 
-  const getRedBusUrl = (origin = from, destination = to) => {
-    return getRedBusUrlUtil(origin, destination, date);
+  const getRedBusUrl = (origin = from, destination = to, travelDate = date) => {
+    return getRedBusUrlUtil(origin, destination, travelDate);
   };
 
-  const getConfirmTktUrl = (_trainNo = null, origin = from, destination = to) => {
-    return getConfirmTktUrlUtil(origin, destination, date);
+  const getConfirmTktUrl = (origin = from, destination = to, travelDate = date) => {
+    return getConfirmTktUrlUtil(origin, destination, travelDate);
   };
 
   // Extract raw lists
@@ -378,21 +400,23 @@ export default function TravelOptions({
 
   // Handle selecting a train
   const handleSelectTrain = (train) => {
-    const id = train.number || train.id || train.name;
+    const id = getTrainId(train) || train.number || train.id || train.name;
     setActiveTrainId(id);
-    setActiveMode('train');
     if (onSelectTrainOffer) {
       onSelectTrainOffer(train);
+    } else {
+      setActiveMode('train');
     }
   };
 
   // Handle selecting a bus
   const handleSelectBus = (bus) => {
-    const id = bus.id || bus.name;
+    const id = getBusId(bus) || bus.id || bus.name;
     setActiveBusId(id);
-    setActiveMode('bus');
     if (onSelectBusOffer) {
       onSelectBusOffer(bus);
+    } else {
+      setActiveMode('bus');
     }
   };
 
@@ -1590,7 +1614,7 @@ export default function TravelOptions({
       <div className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-50/80 border border-amber-200/90 rounded-lg text-xs text-amber-800">
         <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
         <span>
-          Train schedules and fares shown are route estimates. Use ConfirmTkt to search live IRCTC inventory and confirmed availability.
+          Train schedules and fares shown are route estimates. ConfirmTkt opens the live booking portal—enter your stations and travel date ({date || 'selected date'}) to view confirmed IRCTC availability.
         </span>
       </div>
 
@@ -1601,7 +1625,11 @@ export default function TravelOptions({
       ) : (
         trainList.map((train, idx) => {
           const trainKey = train.number || train.id || train.name || idx;
-          const isSelected = activeMode === 'train' && (activeTrainId === trainKey || (!activeTrainId && idx === 0));
+          const isSelected = activeMode === 'train' && (
+            activeTrainId
+              ? (activeTrainId === train.number || activeTrainId === train.id || activeTrainId === train.name || activeTrainId === trainKey)
+              : idx === 0
+          );
 
           return (
             <Card
@@ -1675,7 +1703,7 @@ export default function TravelOptions({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors shadow-xs shrink-0"
-                    title="Search live trains on ConfirmTkt"
+                    title={`Open ConfirmTkt live train search portal (enter ${from || 'origin'} to ${to || 'destination'})`}
                   >
                     <span>ConfirmTkt</span>
                     <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
@@ -1695,7 +1723,7 @@ export default function TravelOptions({
       <div className="flex items-center gap-2 px-3.5 py-2.5 bg-amber-50/80 border border-amber-200/90 rounded-lg text-xs text-amber-800">
         <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
         <span>
-          Bus services and fares shown are route estimates. Use redBus to view live seat charts and confirmed bookings.
+          Bus services and fares shown are route estimates. redBus opens the {from && to ? `${from} to ${to}` : 'live'} route—select your travel date ({date || 'selected date'}) to view live seat charts and confirmed bookings.
         </span>
       </div>
 
@@ -1706,7 +1734,11 @@ export default function TravelOptions({
       ) : (
         busList.map((bus, idx) => {
           const busKey = bus.id || bus.name || idx;
-          const isSelected = activeMode === 'bus' && (activeBusId === busKey || (!activeBusId && idx === 0));
+          const isSelected = activeMode === 'bus' && (
+            activeBusId
+              ? (activeBusId === bus.id || activeBusId === bus.name || activeBusId === busKey)
+              : idx === 0
+          );
 
           return (
             <Card
@@ -1781,7 +1813,7 @@ export default function TravelOptions({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition-colors shadow-xs shrink-0"
-                    title="Search live buses on redBus"
+                    title={`View live buses and seat charts on redBus for ${from || 'origin'} to ${to || 'destination'}`}
                   >
                     <span>redBus</span>
                     <ExternalLink className="w-3.5 h-3.5 text-slate-400" />

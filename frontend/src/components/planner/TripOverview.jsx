@@ -37,10 +37,9 @@ import {
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { jsPDF } from 'jspdf';
 import { usePreferences } from '../../context/PreferencesContext';
 import { Card, Button, Skeleton, Modal, Dropdown, Input, Select } from '../ui';
-import { isValidCoord, sanitizeCoord, MapErrorBoundary } from '../RoadTripDetails';
+import { isValidCoord, sanitizeCoord, MapErrorBoundary } from '../../utils/mapUtils';
 
 // Custom SVG DivIcon generator for itinerary markers
 const createTimelineMarkerIcon = (number, color = '#2563eb') => {
@@ -540,8 +539,9 @@ export default function TripOverview({
   }, [selectedDay, totalDays, currentDayPlan]);
 
   // PDF Export
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     try {
+      const { jsPDF } = await import('jspdf');
       const doc = new jsPDF();
       doc.setFillColor(15, 23, 42); // slate-900
       doc.rect(0, 0, 210, 40, 'F');

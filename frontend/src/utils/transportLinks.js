@@ -17,8 +17,10 @@ export function getRedBusCitySlug(name) {
   // Remove parenthetical abbreviations (e.g. "(BLR)")
   const clean = firstPart.replace(/\s*\([^)]*\)/g, '').trim();
   if (!clean) return '';
+  // Normalize unicode diacritics (e.g. "São Paulo" -> "Sao Paulo")
+  const normalized = clean.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   // Replace non-alphanumeric chars with hyphens and trim boundary hyphens
-  return clean.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 /**
@@ -29,14 +31,15 @@ export function getRedBusCitySlug(name) {
  *
  * @param {string} origin - Origin city or location
  * @param {string} destination - Destination city or location
- * @param {string} [date] - Optional travel date
+ * @param {string|Date} [date] - Optional travel date (validated via extractDateOnly)
  * @returns {string} - Route-aware URL or safe fallback
  */
-export function getRedBusUrl(origin, destination, _date = null) {
+export function getRedBusUrl(origin, destination, date = null) {
   const fromSlug = getRedBusCitySlug(origin);
   const toSlug = getRedBusCitySlug(destination);
 
   if (fromSlug && toSlug) {
+    // redBus canonical public route destination
     return `https://www.redbus.in/bus-tickets/${fromSlug}-to-${toSlug}`;
   }
 
@@ -49,14 +52,14 @@ export function getRedBusUrl(origin, destination, _date = null) {
  * ConfirmTkt requires IRCTC 3-4 letter station codes (e.g. SBC, NDLS) for station-to-station deep links;
  * arbitrary city names or fake train numbers (e.g. /train-schedule/15042) result in 404s or wrong trains.
  * This helper avoids inventing fake train identities and safely routes users to the official ConfirmTkt
- * train booking and search page.
+ * train booking and search page where users input their stations and desired date.
  *
- * @param {string} [_origin] - Origin city or location
- * @param {string} [_destination] - Destination city or location
- * @param {string} [_date] - Optional travel date
+ * @param {string} [origin] - Origin city or location
+ * @param {string} [destination] - Destination city or location
+ * @param {string|Date} [date] - Optional travel date
  * @returns {string} - Safe ConfirmTkt search portal URL
  */
-export function getConfirmTktUrl(_origin = null, _destination = null, _date = null) {
+export function getConfirmTktUrl(origin = null, destination = null, date = null) {
   return 'https://www.confirmtkt.com/';
 }
 

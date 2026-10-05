@@ -111,7 +111,20 @@ const createCustomIcon = (iconHtml, color) => {
 export default function RoadTripDetails({ tripData, onSelectRoadRoute }) {
   const { convertAndFormat } = usePreferences();
   // ── ALL HOOKS BEFORE ANY CONDITIONAL RETURNS ──────────────────
-  const [activeRoute, setActiveRoute] = useState(0);
+  const initialRouteIndex = typeof tripData?.selectedRouteIndex === 'number'
+    ? tripData.selectedRouteIndex
+    : (typeof tripData?.options?.own?.selectedRouteIndex === 'number' ? tripData.options.own.selectedRouteIndex : 0);
+  const [activeRoute, setActiveRoute] = useState(initialRouteIndex);
+
+  useEffect(() => {
+    const currentIdx = typeof tripData?.selectedRouteIndex === 'number'
+      ? tripData.selectedRouteIndex
+      : (typeof tripData?.options?.own?.selectedRouteIndex === 'number' ? tripData.options.own.selectedRouteIndex : null);
+    if (typeof currentIdx === 'number' && currentIdx >= 0) {
+      setActiveRoute(currentIdx);
+    }
+  }, [tripData?.selectedRouteIndex, tripData?.options?.own?.selectedRouteIndex]);
+
   const [selectedLayer, setSelectedLayer] = useState('all');
   const [markers, setMarkers] = useState([]);
 

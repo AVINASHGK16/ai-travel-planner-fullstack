@@ -1,7 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plane, MapPin, Wallet, Fuel, CloudSun } from 'lucide-react';
-import { QuickStartSuggestions, PlannerHeader, TripConfigurationCard } from '../components/planner';
+import { PlannerHeader } from '../components/planner/PlannerHeader';
+import { TripConfigurationCard } from '../components/planner/TripConfigurationCard';
+import { QuickStartSuggestions } from '../components/planner/QuickStartSuggestions';
 
 export default function HomePage() {
   const navigate = useNavigate();
