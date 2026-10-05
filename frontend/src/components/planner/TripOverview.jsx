@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -179,6 +179,40 @@ export default function TripOverview({
   const [selectedDay, setSelectedDay] = useState(1);
   const [fullMapOpen, setFullMapOpen] = useState(false);
   const [shareSuccess, setShareSuccess] = useState(false);
+  const dayListRef = useRef(null);
+
+  // Auto-scroll the selected day pill into view within the day navigation container
+  useEffect(() => {
+    const scrollToActive = (smooth = true) => {
+      if (!dayListRef.current) return;
+      const activeBtn = dayListRef.current.querySelector(`[data-day="${selectedDay}"]`);
+      if (!activeBtn) return;
+
+      const container = dayListRef.current;
+      const cRect = container.getBoundingClientRect();
+      const bRect = activeBtn.getBoundingClientRect();
+
+      if (bRect.left < cRect.left) {
+        container.scrollTo({
+          left: Math.max(0, container.scrollLeft + (bRect.left - cRect.left) - 12),
+          behavior: smooth ? 'smooth' : 'auto'
+        });
+      } else if (bRect.right > cRect.right) {
+        container.scrollTo({
+          left: container.scrollLeft + (bRect.right - cRect.right) + 12,
+          behavior: smooth ? 'smooth' : 'auto'
+        });
+      }
+    };
+
+    scrollToActive(true);
+
+    if (typeof ResizeObserver !== 'undefined' && dayListRef.current) {
+      const ro = new ResizeObserver(() => scrollToActive(false));
+      ro.observe(dayListRef.current);
+      return () => ro.disconnect();
+    }
+  }, [selectedDay]);
 
   // UI-3.4 Itinerary Customization state
   const [localItinerary, setLocalItinerary] = useState(() => Array.isArray(trip?.itinerary) ? trip.itinerary : []);
@@ -876,7 +910,7 @@ export default function TripOverview({
               </div>
 
               {/* Day Navigation: ‹ Day 1   Day 2   Day 3 ... › */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              <div className="flex items-center gap-1.5 w-full min-w-0">
                 <button
                   type="button"
                   onClick={() => setSelectedDay(prev => Math.max(1, prev - 1))}
@@ -887,16 +921,20 @@ export default function TripOverview({
                   <ChevronLeft className="w-4 h-4" />
                 </button>
 
-                <div className="flex items-center gap-1.5 flex-1">
+                <div
+                  ref={dayListRef}
+                  className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none flex-1 min-w-0 scroll-smooth"
+                >
                   {rawItinerary.map((d, i) => {
                     const dayNum = d.day ?? (i + 1);
                     const isActive = selectedDay === dayNum;
                     return (
                       <button
                         key={dayNum}
+                        data-day={dayNum}
                         type="button"
                         onClick={() => setSelectedDay(dayNum)}
-                        className={`min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer select-none ${
+                        className={`min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer select-none shrink-0 ${
                           isActive
                             ? 'bg-blue-600 text-white shadow-xs'
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
